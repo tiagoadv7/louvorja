@@ -10,7 +10,8 @@
         :key="theme_id"
         icon
         density="compact"
-        :variant="current == theme_id ? 'outlined' : 'text'"
+        :variant="current == theme_id ? 'outlined' : 'plain'"
+        :color="theme.colors.primary"
         class="mx-1"
         @click="setTheme(theme_id)"
       >
@@ -52,6 +53,7 @@ function setTheme(theme_id) {
   proxy.$vuetify.theme.change(current.value);
   proxy.$userdata.set("theme", current.value);
   proxy.$appdata.set("is_dark", proxy.$vuetify.theme.global.current.dark);
+  moduleContainer.value.close();
 }
 
 /* ########################################################### */

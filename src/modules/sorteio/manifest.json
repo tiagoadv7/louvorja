@@ -1,0 +1,54 @@
+{
+  "id": "sorteio",
+  "name": "Sorteio",
+  "description": "Sorteio de números",
+  "category": "utilities",
+  "icon": "mdi-dice-multiple-outline",
+  "customization": {
+    "initial": { "default": 1 },
+    "final": { "default": 100 },
+    "animation_time": { "default": 1.5 },
+    "font_size": {
+      "type": "font-size",
+      "label": "customization.size",
+      "default": 30
+    },
+    "show_numbers": { "default": true },
+    "show_drawn": { "default": true },
+    "font": {
+      "type": "font",
+      "label": "customization.font",
+      "default": "Arial, sans-serif"
+    },
+    "font_color": {
+      "type": "color",
+      "label": "customization.color",
+      "default": "#FFFFFF"
+    },
+    "background_color": {
+      "type": "color",
+      "label": "customization.color",
+      "default": "#0d1b2a"
+    },
+    "border_spacing": {
+      "type": "border-spacing",
+      "label": "customization.border",
+      "default": 10
+    },
+    "image": {
+      "type": "image",
+      "label": "customization.image",
+      "default": ""
+    },
+    "image_opacity": {
+      "type": "opacity",
+      "label": "customization.transparency",
+      "default": 100
+    },
+    "image_fit": {
+      "type": "object-fit",
+      "label": "customization.adjust",
+      "default": "cover"
+    }
+  }
+}
