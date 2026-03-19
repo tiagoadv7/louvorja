@@ -25,7 +25,7 @@
           },
           {
             name: t('customization.text'),
-            items: [['font', 'font_size', 'font_color']],
+            items: [['font', 'font_size', 'font_color'], 'panel_font_size'],
           },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
@@ -57,7 +57,7 @@
             color="green"
             size="small"
             variant="tonal"
-            :disabled="isAnimating || availableList.length === 0"
+            :disabled="isAnimating"
             @click="draw()"
           >
             <v-icon left>mdi-play</v-icon>
@@ -161,7 +161,7 @@
             color="green"
             size="small"
             variant="tonal"
-            :disabled="isAnimating || namesAvailableList.length === 0"
+            :disabled="isAnimating"
             @click="draw()"
           >
             <v-icon left>mdi-play</v-icon>
@@ -267,7 +267,7 @@
   </l-window>
 
   <!-- Dialog importar lista -->
-  <v-dialog v-model="showImportDialog" width="500">
+  <v-dialog v-model="showImportDialog" width="500" scrollable>
     <v-card>
       <v-card-title>{{ t("import_list") }}</v-card-title>
       <v-card-text>
@@ -292,7 +292,7 @@
         <v-textarea
           v-model="importText"
           :label="activeTab === 'names' ? t('import_hint_names') : t('import_hint_numbers')"
-          rows="7"
+          rows="5"
           variant="outlined"
           hide-details
         />
@@ -303,7 +303,6 @@
         <v-btn
           color="primary"
           variant="tonal"
-          :disabled="!importText.trim()"
           @click="importData()"
         >{{ t("import") }}</v-btn>
       </v-card-actions>
@@ -493,48 +492,55 @@ export default {
     draw() {
       const isNames = this.activeTab === "names";
       const pool = [...(isNames ? this.namesAvailableList : this.availableList)];
-      if (this.isAnimating || pool.length === 0) return;
+      if (this.isAnimating) return;
+      if (pool.length === 0) {
+        this.appdata.fim = true;
+        return;
+      }
 
       const winner = pool[Math.floor(Math.random() * pool.length)];
       this.appdata.animating = true;
 
-      this.animTimer = setInterval(() => {
+      const totalMs = (this.animationTime || 1.5) * 1000;
+      const startTime = Date.now();
+
+      const tick = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / totalMs, 1);
+        const interval = 12 + 100 * (progress * progress);
         const rnd = pool[Math.floor(Math.random() * pool.length)];
         if (isNames) {
           this.appdata.names_current = rnd;
         } else {
           this.appdata.current = this.padNumber(rnd);
         }
-      }, 60);
-
-      setTimeout(() => {
-        this._stopAnimation();
-        const remaining = pool.filter((n) => n !== winner);
-        if (isNames) {
-          this.appdata.names_current = winner;
-          this.appdata.names_available = remaining;
-          this.appdata.names_drawn = [winner, ...(this.appdata.names_drawn || [])];
+        if (elapsed < totalMs) {
+          this.animTimer = setTimeout(tick, interval);
         } else {
-          this.appdata.current = this.padNumber(winner);
-          this.appdata.available = remaining;
-          this.appdata.drawn = [winner, ...(this.appdata.drawn || [])];
+          this.animTimer = null;
+          const remaining = pool.filter((n) => n !== winner);
+          if (isNames) {
+            this.appdata.names_current = winner;
+            this.appdata.names_available = remaining;
+            this.appdata.names_drawn = [winner, ...(this.appdata.names_drawn || [])];
+          } else {
+            this.appdata.current = this.padNumber(winner);
+            this.appdata.available = remaining;
+            this.appdata.drawn = [winner, ...(this.appdata.drawn || [])];
+          }
+          this.appdata.animating = false;
+          this.appdata.reveal_id = (this.appdata.reveal_id || 0) + 1;
         }
-        this.appdata.animating = false;
-        if (remaining.length === 0) {
-          setTimeout(() => {
-            if (isNames) {
-              this.appdata.names_current = "Fim!";
-            } else {
-              this.appdata.current = "Fim!";
-            }
-          }, 1500);
-        }
-      }, (this.animationTime || 1.5) * 1000);
+      };
+
+      this.animTimer = setTimeout(tick, 12);
     },
 
     reiniciar() {
       this._stopAnimation();
       this.appdata.animating = false;
+      this.appdata.fim = false;
+      this.appdata.reveal_id = 0;
       if (this.activeTab === "names") {
         const all = [...this.namesAvailableList, ...this.namesDrawnList];
         this.appdata.names_available = all;
@@ -551,6 +557,8 @@ export default {
     clearAll() {
       this._stopAnimation();
       this.appdata.animating = false;
+      this.appdata.fim = false;
+      this.appdata.reveal_id = 0;
       if (this.activeTab === "names") {
         this.appdata.names_available = [];
         this.appdata.names_drawn = [];
@@ -580,7 +588,7 @@ export default {
 
     _stopAnimation() {
       if (this.animTimer) {
-        clearInterval(this.animTimer);
+        clearTimeout(this.animTimer);
         this.animTimer = null;
       }
     },
@@ -594,6 +602,9 @@ export default {
   },
   mounted() {
     window.addEventListener("keydown", this.handleKeydown);
+    // Migração: limpa cores hardcoded antigas para que o tema da aplicação seja usado
+    if (this.userdata.background_color === "#0d1b2a") this.userdata.background_color = null;
+    if (this.userdata.font_color === "#FFFFFF") this.userdata.font_color = null;
     if (this.appdata.available === null) {
       this.appdata.available = [];
       this.appdata.drawn = [];
@@ -602,6 +613,8 @@ export default {
       this.appdata.names_drawn = [];
       this.appdata.names_current = "";
       this.appdata.animating = false;
+      this.appdata.reveal_id = 0;
+      this.appdata.fim = false;
     }
   },
   unmounted() {

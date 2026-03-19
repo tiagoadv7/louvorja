@@ -18,11 +18,11 @@
 
     <!-- Painel esquerdo -->
     <div v-if="showLeftPanel" class="sorteio-panel" :style="panelBorderStyle">
-      <div class="sorteio-panel__header">
-        <v-icon size="14" class="mr-1">{{ isNamesMode ? "mdi-format-text" : "mdi-pound" }}</v-icon>
+      <div class="sorteio-panel__header" :style="panelHeaderStyle">
+        <v-icon size="14" class="mr-1" :color="fontColor">{{ isNamesMode ? "mdi-format-text" : "mdi-pound" }}</v-icon>
         {{ leftPanelTitle }}
       </div>
-      <div class="sorteio-panel__content">
+      <div class="sorteio-panel__content sorteio-panel__content--column">
         <span
           v-for="(item, i) in leftPanelItems"
           :key="i"
@@ -37,8 +37,13 @@
     <!-- Centro: display do sorteado atual -->
     <div class="sorteio-center" :style="{ padding: `${borderSpacing}px` }">
       <span
+        :key="showFim ? 'fim' : revealId"
         :style="numberStyle"
-        :class="{ 'sorteio-animating': isAnimating }"
+        :class="{
+          'sorteio-animating': isAnimating,
+          'sorteio-reveal-anim': !isAnimating && !showFim && revealId > 0,
+          'sorteio-fim-anim': showFim,
+        }"
       >
         {{ displayCurrent }}
       </span>
@@ -46,8 +51,8 @@
 
     <!-- Painel direito -->
     <div v-if="showRightPanel" class="sorteio-panel sorteio-panel--right" :style="panelBorderStyle">
-      <div class="sorteio-panel__header">
-        <v-icon size="14" class="mr-1">mdi-history</v-icon>
+      <div class="sorteio-panel__header" :style="panelHeaderStyle">
+        <v-icon size="14" class="mr-1" :color="fontColor">mdi-history</v-icon>
         {{ rightPanelTitle }}
       </div>
       <div class="sorteio-panel__content sorteio-panel__content--column">
@@ -156,6 +161,7 @@ export default {
       return Math.max(4, (this.userdata.final || 100).toString().length);
     },
     displayCurrent() {
+      if (this.showFim) return "Fim!";
       if (this.isNamesMode) {
         return this.appdata.names_current || "-------";
       }
@@ -164,9 +170,13 @@ export default {
       return val;
     },
 
+    revealId() { return this.appdata.reveal_id || 0; },
+
     // Estilos
-    bgColor() { return this.userdata.background_color || "#0d1b2a"; },
-    fontColor() { return this.userdata.font_color || "#FFFFFF"; },
+    bgColor() {
+      return this.userdata.background_color || this.$vuetify.theme.global.current.colors.primary;
+    },
+    fontColor() { return this.userdata.font_color || this.$vuetify.theme.global.current.colors["on-primary"] || "#FFFFFF"; },
     font() { return this.userdata.font || "Arial, sans-serif"; },
     fontSizePx() {
       const pc = this.userdata.font_size || 30;
@@ -174,6 +184,7 @@ export default {
       return (pc * v) / 100 / 2;
     },
     borderSpacing() { return this.userdata.border_spacing || 10; },
+    panelFontSizePx() { return this.userdata.panel_font_size || 14; },
 
     containerStyle() {
       return {
@@ -188,6 +199,9 @@ export default {
     },
     panelBorderStyle() {
       return { borderColor: `${this.fontColor}33`, zIndex: 1 };
+    },
+    panelHeaderStyle() {
+      return { color: this.fontColor };
     },
     numberStyle() {
       return {
@@ -205,10 +219,13 @@ export default {
       };
     },
     chipStyle() {
-      return { background: `${this.fontColor}18`, color: this.fontColor };
+      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px` };
     },
     chipLatestStyle() {
-      return { background: `${this.fontColor}40`, color: this.fontColor, fontWeight: "bold" };
+      return { background: `${this.fontColor}40`, color: this.fontColor, fontWeight: "bold", fontSize: `${this.panelFontSizePx}px` };
+    },
+    showFim() {
+      return this.appdata.fim === true;
     },
   },
   methods: {
@@ -299,7 +316,6 @@ export default {
   display: inline-block;
   padding: 2px 7px;
   border-radius: 4px;
-  font-size: 12px;
   font-family: monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -309,5 +325,28 @@ export default {
 
 .sorteio-animating {
   opacity: 0.85;
+}
+
+.sorteio-reveal-anim {
+  animation: sorteio-reveal 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes sorteio-reveal {
+  0%   { transform: scale(0.6) translateY(12px); opacity: 0.2; }
+  65%  { transform: scale(1.06) translateY(-3px); opacity: 1; }
+  82%  { transform: scale(0.98) translateY(0); }
+  100% { transform: scale(1)    translateY(0); opacity: 1; }
+}
+
+.sorteio-fim-anim {
+  animation: sorteio-fim 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes sorteio-fim {
+  0%   { transform: scale(0.2); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  78%  { transform: scale(0.96); }
+  90%  { transform: scale(1.04); }
+  100% { transform: scale(1);    opacity: 1; }
 }
 </style>

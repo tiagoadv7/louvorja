@@ -39,6 +39,7 @@
     "text": "Texto",
     "window": "Ventana",
     "border": "Borde",
-    "size": "Tamaño"
+    "size": "Tamaño",
+    "panel_size": "Tamaño lateral"
   }
 }

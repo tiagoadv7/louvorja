@@ -13,6 +13,11 @@
       "label": "customization.size",
       "default": 30
     },
+    "panel_font_size": {
+      "type": "font-size",
+      "label": "customization.panel_size",
+      "default": 14
+    },
     "show_numbers": { "default": true },
     "show_drawn": { "default": true },
     "font": {
@@ -23,12 +28,12 @@
     "font_color": {
       "type": "color",
       "label": "customization.color",
-      "default": "#FFFFFF"
+      "default": null
     },
     "background_color": {
       "type": "color",
       "label": "customization.color",
-      "default": "#0d1b2a"
+      "default": null
     },
     "border_spacing": {
       "type": "border-spacing",

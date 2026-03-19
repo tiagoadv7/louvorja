@@ -46,6 +46,9 @@ export default {
         this.message = event.data;
         if (event.data.param) {
           this.$appdata.set(event.data.param, event.data.value);
+          if (event.data.param === "theme" && event.data.value) {
+            this.$vuetify.theme.change(event.data.value);
+          }
         }
       }
     });

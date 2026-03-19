@@ -53,6 +53,7 @@ function setTheme(theme_id) {
   proxy.$vuetify.theme.change(current.value);
   proxy.$userdata.set("theme", current.value);
   proxy.$appdata.set("is_dark", proxy.$vuetify.theme.global.current.dark);
+  proxy.$appdata.set("theme", current.value);
   moduleContainer.value.close();
 }
 

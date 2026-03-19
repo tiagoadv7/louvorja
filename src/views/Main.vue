@@ -59,6 +59,7 @@ export default {
     let theme = this.$userdata.get("theme");
     if (theme != "") {
       this.$vuetify.theme.change(theme);
+      this.$appdata.set("theme", theme);
     }
     this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
 

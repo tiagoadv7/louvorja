@@ -39,6 +39,7 @@
     "text": "Texto",
     "window": "Janela",
     "border": "Borda",
-    "size": "Tamanho"
+    "size": "Tamanho",
+    "panel_size": "Tamanho lateral"
   }
 }
