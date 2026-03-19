@@ -4,7 +4,7 @@
     :location="$vuetify.display.width < 600 ? 'bottom' : undefined"
     temporary
   >
-    <v-list :baseColor="$theme.primary()" nav>
+    <v-list :baseColor="$appdata.get('is_dark') ? undefined : $theme.primary()" nav>
       <template
         v-for="(module, module_key) in sortModules(menu_modules)"
         :key="module_key"
