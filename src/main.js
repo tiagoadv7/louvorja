@@ -1,4 +1,4 @@
-import { createApp } from "vue";
+import { createApp, nextTick } from "vue";
 import App from "./App.vue";
 import router from "./router";
 import vuetify from "./plugins/vuetify";
@@ -31,6 +31,8 @@ import Media from "@/helpers/Media";
 import Alert from "@/helpers/Alert";
 import Popup from "@/helpers/Popup";
 import Database from "@/helpers/Database";
+import Electron from "@/helpers/Electron";
+
 app.mixin({
   beforeCreate() {
     this.$userdata = UserData;
@@ -45,8 +47,10 @@ app.mixin({
     this.$alert = Alert;
     this.$popup = Popup;
     this.$database = Database;
+    this.$electron = Electron;
   },
 });
+
 
 app.use(router);
 app.use(vuetify);
@@ -54,8 +58,10 @@ app.use(store);
 app.use(shortkey, { prevent: ["input", "textarea"] });
 app.use(VueFullscreen);
 
-createI18nInstance().then((i18n) => {
+createI18nInstance().then(async (i18n) => {
   app.use(i18n);
-  ModuleManager.init(i18n);
+  await ModuleManager.init(i18n);
   app.mount("#app");
+  await nextTick();
+  window.electron?.appLoaded?.();
 });

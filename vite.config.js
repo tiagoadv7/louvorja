@@ -10,18 +10,22 @@ export default ({ mode }) => {
   // Load app-level env vars to node-level env vars.
   process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
 
+  const isElectronBuild = process.env.ELECTRON_BUILD === "true";
+
   return defineConfig({
-    base: process.env.VITE_BASE_URL ?? "/",
+    // Em builds para Electron, usa caminhos relativos (file://)
+    base: isElectronBuild ? "./" : (process.env.VITE_BASE_URL ?? "/"),
     plugins: [
       vue(),
       // https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vite-plugin
       vuetify({
         autoImport: true,
       }),
-      VitePWA({
-        registerType: "autoUpdate", // Registra o Service Worker para atualizar automaticamente
+      // PWA desativado em builds Electron (service workers não funcionam com file://)
+      !isElectronBuild && VitePWA({
+        registerType: "autoUpdate",
         devOptions: {
-          enabled: true, // Ativa o PWA também durante o desenvolvimento
+          enabled: true,
         },
         workbox: {
           globPatterns: ["**/*.{html,js,css,svg,png}"], // Arquivos que o Service Worker deve cachear
@@ -66,10 +70,11 @@ export default ({ mode }) => {
           ],
         },
       }),
-    ],
+    ].filter(Boolean),
     define: {
       "process.env": {},
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "true",
+      __IS_ELECTRON__: JSON.stringify(isElectronBuild),
     },
     resolve: {
       alias: {

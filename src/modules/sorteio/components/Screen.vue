@@ -72,6 +72,7 @@
 
 <script>
 import manifest from "../manifest.json";
+import pt from "../lang/pt.json";
 
 export default {
   name: "SorteioScreen",
@@ -149,11 +150,15 @@ export default {
     // Títulos dos painéis
     leftPanelTitle() {
       const key = this.isNamesMode ? "names_title" : "numbers_title";
-      try { return this.$t(`modules.${this.module_id}.${key}`); } catch { return key; }
+      const i18nKey = `modules.${this.module_id}.${key}`;
+      const result = this.$t(i18nKey);
+      return result !== i18nKey ? result : (pt[key] || key);
     },
     rightPanelTitle() {
       const key = this.isNamesMode ? "names_drawn_title" : "drawn_title";
-      try { return this.$t(`modules.${this.module_id}.${key}`); } catch { return key; }
+      const i18nKey = `modules.${this.module_id}.${key}`;
+      const result = this.$t(i18nKey);
+      return result !== i18nKey ? result : (pt[key] || key);
     },
 
     // Valor exibido no centro
@@ -174,9 +179,9 @@ export default {
 
     // Estilos
     bgColor() {
-      return this.userdata.background_color || this.$vuetify.theme.global.current.colors.primary;
+      return this.userdata.background_color || this.$vuetify.theme.global.current?.colors?.primary || '#1b2a41';
     },
-    fontColor() { return this.userdata.font_color || this.$vuetify.theme.global.current.colors["on-primary"] || "#FFFFFF"; },
+    fontColor() { return this.userdata.font_color || this.$vuetify.theme.global.current?.colors?.['on-primary'] || '#FFFFFF'; },
     font() { return this.userdata.font || "Arial, sans-serif"; },
     fontSizePx() {
       const pc = this.userdata.font_size || 30;

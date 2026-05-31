@@ -1,0 +1,30 @@
+{
+  "title": "Fondo Personalizado",
+  "bg_type_label": "Tipo de fondo",
+  "type_none": "Sin fondo",
+  "type_image": "Imagen",
+  "type_video": "Video",
+  "type_none_desc": "Las diapositivas usan fondo negro predeterminado con efecto de texto.",
+  "pick_image": "Cargar imagen",
+  "pick_video": "Cargar video",
+  "opacity_label": "Opacidad",
+  "text_section":   "Personalización del Texto",
+  "text_font":      "Fuente",
+  "text_size":      "Tamaño",
+  "text_color":     "Color del texto",
+  "text_aux_size":  "Tamaño texto auxiliar",
+  "customization": {
+    "background": "Fondo",
+    "text": "Texto",
+    "window": "Ventana",
+    "color": "Color de fondo",
+    "image": "URL de imagen",
+    "transparency": "Transparencia",
+    "adjust": "Ajuste",
+    "font": "Fuente",
+    "size": "Tamaño",
+    "font_color": "Color",
+    "panel_size": "Tamaño lateral",
+    "border": "Borde"
+  }
+}

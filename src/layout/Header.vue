@@ -3,7 +3,7 @@
     <template v-slot:prepend>
       <v-app-bar-nav-icon @click="$appdata.toogle('menu.show')" />
     </template>
-    <v-app-bar-title>{{ $t("app.name") }}</v-app-bar-title>
+    <v-app-bar-title v-if="!$appdata.get('is_desktop')">{{ $t("app.name") }}</v-app-bar-title>
     <v-spacer />
 
     <v-bottom-sheet v-if="remote">
@@ -27,10 +27,11 @@
       </v-card>
     </v-bottom-sheet>
 
-    <v-tooltip v-if="remote" :text="remote_url">
+    <v-tooltip v-if="remote" location="bottom">
       <template v-slot:activator="{ props }">
         <v-btn v-bind="props" icon="mdi-remote" @click="openRemote()" />
       </template>
+      {{ remote_url }}
     </v-tooltip>
 
     <v-divider v-if="remote" vertical />
@@ -39,21 +40,40 @@
       :icon="layout == 'apps' ? 'mdi-tab' : 'mdi-apps'"
       @click="changeLayout()"
     />
+
+    <v-btn
+      icon="mdi-download-box-outline"
+      @click="downloadDialog = true"
+    />
+    <DownloadCenter v-model="downloadDialog" />
+
+    <MonitorSelector />
+
     <LanguageSelector />
   </v-app-bar>
 </template>
 
 <script>
 import LanguageSelector from "@/components/LanguageSelector.vue";
+import MonitorSelector from "@/components/MonitorSelector.vue";
+import DownloadCenter from "@/components/DownloadCenter.vue";
 
 export default {
   name: "HeaderLayout",
   components: {
     LanguageSelector,
+    MonitorSelector,
+    DownloadCenter,
   },
+  data: () => ({
+    downloadDialog: false,
+  }),
   computed: {
     layout() {
       return this.$userdata.get("layout");
+    },
+    is_desktop() {
+      return this.$appdata.get("is_desktop");
     },
     remote() {
       return this.$userdata.get("remote.is_connected");

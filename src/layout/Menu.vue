@@ -21,7 +21,7 @@
             $modules.open(module_key);
           "
         >
-          <v-list-item-title>{{ $t(module.title) }}</v-list-item-title>
+          <v-list-item-title>{{ moduleTitle(module) }}</v-list-item-title>
         </v-list-item>
       </template>
     </v-list>
@@ -70,8 +70,16 @@ export default {
     },
   },
   methods: {
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      if (translated !== module.title) return translated;
+      if (module.manifest?.name) return module.manifest.name;
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+      const translations = module.manifest?.translations?.[locale] || module.manifest?.translations?.['pt'];
+      return translations?.title || translated;
+    },
     sortModules(modules) {
-      //Ordena pelo idioma selecionado
       return this.$modules.sort(modules, this.$t);
     },
   },

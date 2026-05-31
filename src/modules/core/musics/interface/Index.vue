@@ -148,7 +148,16 @@ import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 const moduleContainer = ref(null);
 const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+  if (!moduleContainer.value) {
+    const tr = manifest.translations?.['pt'];
+    if (tr) {
+      const val = key.split('.').reduce((obj, k) => obj?.[k], tr);
+      if (typeof val === 'string') return val;
+    }
+    return key;
+  }
+  const result = moduleContainer.value.t(key);
+  return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
 const userdata = computed(() => {
   return moduleContainer.value?.userdata;

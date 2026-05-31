@@ -237,7 +237,19 @@ export default {
   },
   methods: {
     t(text) {
-      return this.$t(`modules.${this.module.id}.${text}`);
+      if (!text) return '';
+      const key = `modules.${this.module.id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const manifest = this.$appdata.get(`modules.${this.module.id}.manifest`);
+        const translations = manifest?.translations?.[locale] || manifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     toBlock(item) {
       /* Blocos */

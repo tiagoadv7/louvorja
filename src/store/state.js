@@ -1,10 +1,13 @@
+// Detecta Electron na inicialização do store (antes de qualquer render)
+const _isElectron = typeof navigator !== 'undefined' && /Electron\//.test(navigator.userAgent);
+
 export default {
   is_dev: false,
   is_dark: false,
   is_popup: false,
   is_mobile: false,
-  is_desktop: false,
-  is_online: false,
+  is_desktop: _isElectron,
+  is_online: !_isElectron,
   popup: null,
   popup_module: null,
   import_modules: false,

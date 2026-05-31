@@ -48,6 +48,10 @@
           <v-icon start size="15">mdi-format-text</v-icon>
           {{ t("tab_names") }}
         </v-tab>
+        <v-tab value="roulette">
+          <v-icon start size="15">mdi-ferris-wheel</v-icon>
+          {{ t("tab_roulette") }}
+        </v-tab>
       </v-tabs>
 
       <!-- Toolbar NÚMEROS -->
@@ -75,6 +79,7 @@
             density="compact"
             hide-details
             style="width: 75px"
+            @keyup.enter="addNumbers()"
           />
         </l-toolbar-item>
 
@@ -87,6 +92,7 @@
             density="compact"
             hide-details
             style="width: 75px"
+            @keyup.enter="addNumbers()"
           />
         </l-toolbar-item>
 
@@ -245,10 +251,171 @@
           <v-checkbox v-model="showDrawn" :label="t('show_drawn')" density="compact" hide-details />
         </l-toolbar-item>
       </l-toolbar>
+      <!-- Toolbar ROLETA -->
+      <l-toolbar v-show="activeTab === 'roulette'">
+        <l-toolbar-item>
+          <v-btn
+            icon
+            color="green"
+            size="36"
+            variant="tonal"
+            :disabled="rouletteSpinning || rouletteItems.length === 0"
+            @click="rouletteSpin()"
+          >
+            <v-icon size="20">mdi-ferris-wheel</v-icon>
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-text-field
+            v-model="rouletteInput"
+            :label="t('roulette_item_input')"
+            variant="outlined"
+            density="compact"
+            hide-details
+            style="width:160px"
+            @keyup.enter="rouletteAdd()"
+          />
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn size="small" variant="tonal" @click="rouletteAdd()">
+            <v-icon left>mdi-plus</v-icon>
+            {{ t("roulette_add") }}
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn size="small" variant="tonal" @click="showRouletteImport = true">
+            <v-icon left>mdi-import</v-icon>
+            {{ t("roulette_import") }}
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn size="small" variant="tonal" @click="showFormsDialog = true">
+            <v-icon left>mdi-google</v-icon>
+            {{ t("roulette_forms") }}
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn
+            :color="regRunning ? 'success' : 'default'"
+            size="small"
+            variant="tonal"
+            @click="toggleRegServer()"
+          >
+            <v-icon left>mdi-qrcode</v-icon>
+            {{ t("roulette_qr") }}
+            <v-badge v-if="regCount > 0" :content="regCount" color="primary" inline />
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-checkbox v-model="rouletteRemoveDrawn" :label="t('roulette_remove_drawn')" density="compact" hide-details />
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-checkbox v-model="rouletteShowParticipants" :label="t('roulette_participants')" density="compact" hide-details />
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-checkbox v-model="rouletteShowHistory" :label="t('roulette_history')" density="compact" hide-details />
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn color="orange" size="small" icon variant="tonal" :title="t('roulette_reset')" @click="rouletteReset()">
+            <v-icon size="18">mdi-restore</v-icon>
+          </v-btn>
+        </l-toolbar-item>
+        <l-toolbar-item>
+          <v-btn color="red" size="small" variant="tonal" @click="rouletteClear()">
+            <v-icon left>mdi-delete</v-icon>
+            {{ t("roulette_clear") }}
+          </v-btn>
+        </l-toolbar-item>
+      </l-toolbar>
     </template>
 
     <!-- ===== TELA PRINCIPAL ===== -->
-    <Screen ref="screen" :override-panels="true" />
+    <Screen v-show="activeTab !== 'roulette'" ref="screen" :override-panels="true" />
+
+    <!-- ===== ABA ROLETA ===== -->
+    <div v-show="activeTab === 'roulette'" class="roulette-screen">
+
+      <!-- Painel esquerdo: participantes -->
+      <div class="roulette-panel">
+        <div class="roulette-panel__header">
+          <v-icon size="14" class="mr-1">mdi-account-group-outline</v-icon>
+          {{ t("roulette_participants") }}
+          <span class="roulette-panel__count">{{ rouletteItems.length }}</span>
+        </div>
+        <div class="roulette-panel__content">
+          <div
+            v-for="(item, idx) in rouletteItems"
+            :key="idx"
+            class="roulette-item-row"
+            :class="{ 'roulette-item-drawn': rouletteDrawn.includes(item) }"
+          >
+            <span class="roulette-item-text">{{ item }}</span>
+            <v-btn icon size="x-small" variant="text" color="error" @click="rouletteRemoveItem(idx)">
+              <v-icon size="14">mdi-close</v-icon>
+            </v-btn>
+          </div>
+          <div v-if="rouletteItems.length === 0" class="roulette-panel__empty">{{ t("roulette_empty") }}</div>
+        </div>
+        <!-- QR mini quando ativo -->
+        <div v-if="regRunning" class="roulette-qr-mini">
+          <img v-if="qrDataUrl" :src="qrDataUrl" class="roulette-qr-mini__img" @click="openRegUrl" style="cursor:pointer" />
+          <div v-else class="d-flex justify-center py-2"><v-progress-circular size="20" indeterminate /></div>
+          <div class="roulette-qr-mini__url">
+            <span>{{ regUrl }}</span>
+            <v-btn icon size="x-small" variant="text" @click="copyRegUrl"><v-icon size="11">mdi-content-copy</v-icon></v-btn>
+            <v-btn icon size="x-small" variant="text" @click="openRegUrl"><v-icon size="11">mdi-open-in-new</v-icon></v-btn>
+          </div>
+          <div v-if="regIps.length > 1" class="roulette-qr-mini__ips">
+            <span
+              v-for="ip in regIps"
+              :key="ip"
+              class="roulette-qr-mini__ip"
+              :class="{ 'roulette-qr-mini__ip--active': regUrl.includes(ip) }"
+              @click="changeRegIp(ip)"
+            >{{ ip }}</span>
+          </div>
+          <div v-if="regCount > 0" class="roulette-qr-mini__count">{{ regCount }} {{ t("roulette_registrations") }}</div>
+        </div>
+      </div>
+
+      <!-- Centro: roleta -->
+      <div class="roulette-center">
+        <div class="roulette-wheel-wrap">
+          <RouletteWheel
+            ref="rouletteWheel"
+            :items="rouletteActiveItems"
+            :disabled="rouletteSpinning"
+            :show-winner-card="false"
+            @spin-start="onRouletteSpinStart"
+            @winner="onRouletteWinner"
+          />
+          <transition name="rw-top">
+            <div v-if="rouletteCurrentWinner" class="rw-top-winner" :style="winnerTopStyle">
+              {{ rouletteCurrentWinner }}
+            </div>
+          </transition>
+        </div>
+      </div>
+
+      <!-- Painel direito: histórico -->
+      <div class="roulette-panel roulette-panel--right">
+        <div class="roulette-panel__header">
+          <v-icon size="14" class="mr-1">mdi-history</v-icon>
+          {{ t("roulette_history") }}
+        </div>
+        <div class="roulette-panel__content">
+          <div
+            v-for="(item, idx) in rouletteDrawn"
+            :key="'d' + idx"
+            class="roulette-item-row roulette-item-history"
+          >
+            <span class="roulette-item-num">{{ idx + 1 }}.</span>
+            <span class="roulette-item-text">{{ item }}</span>
+          </div>
+          <div v-if="rouletteDrawn.length === 0" class="roulette-panel__empty">-</div>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== RODAPÉ ===== -->
     <template v-slot:footer>
@@ -265,6 +432,92 @@
       </div>
     </template>
   </l-window>
+
+  <!-- Dialog importar lista roleta -->
+  <v-dialog v-model="showRouletteImport" width="480" scrollable>
+    <v-card>
+      <v-card-title>{{ t("roulette_import") }}</v-card-title>
+      <v-card-text>
+        <input ref="rouletteFileInput" type="file" accept=".txt,.csv" style="display:none" @change="rouletteReadFile" />
+        <v-btn block variant="tonal" class="mb-4" @click="$refs.rouletteFileInput.click()">
+          <v-icon left>mdi-file-upload-outline</v-icon>
+          {{ t("import_file") }}
+        </v-btn>
+        <v-divider class="mb-4" />
+        <v-textarea
+          v-model="rouletteImportText"
+          :label="t('import_hint_names')"
+          rows="6"
+          variant="outlined"
+          hide-details
+        />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="showRouletteImport = false">{{ t("cancel") }}</v-btn>
+        <v-btn color="primary" variant="tonal" @click="rouletteImportFromText()">{{ t("import") }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Dialog Google Forms -->
+  <v-dialog v-model="showFormsDialog" width="560" scrollable>
+    <v-card>
+      <v-card-title>
+        <v-icon start>mdi-google</v-icon>
+        {{ t("roulette_forms") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="text-caption text-medium-emphasis mb-3">{{ t("roulette_forms_hint") }}</div>
+        <v-textarea
+          v-model="formsCsvText"
+          label="CSV"
+          rows="6"
+          variant="outlined"
+          hide-details
+          class="mb-3"
+          @update:model-value="parseForms"
+        />
+        <v-select
+          v-if="formsCols.length > 0"
+          v-model="formsSelectedCol"
+          :items="formsCols"
+          :label="t('roulette_forms_col')"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="mb-3"
+          @update:model-value="parseForms"
+        />
+        <div v-if="formsPreview.length > 0" class="text-caption mb-1 text-medium-emphasis">
+          {{ t("roulette_forms_preview") }} ({{ formsPreview.length }})
+        </div>
+        <v-chip v-for="n in formsPreview.slice(0,12)" :key="n" size="small" class="mr-1 mb-1">{{ n }}</v-chip>
+        <div v-if="formsPreview.length > 12" class="text-caption text-medium-emphasis">
+          +{{ formsPreview.length - 12 }} mais…
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="showFormsDialog = false">{{ t("cancel") }}</v-btn>
+        <v-btn color="primary" variant="tonal" :disabled="formsPreview.length === 0" @click="rouletteImportForms()">
+          {{ t("roulette_forms_import") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Snackbar: sem itens disponíveis -->
+  <v-snackbar
+    v-model="noMoreSnack"
+    color="warning"
+    location="top"
+    timeout="3000"
+    rounded="pill"
+  >
+    <v-icon start>mdi-alert-circle-outline</v-icon>
+    {{ noMoreMessage }}
+  </v-snackbar>
 
   <!-- Dialog importar lista -->
   <v-dialog v-model="showImportDialog" width="500" scrollable>
@@ -314,6 +567,7 @@
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
+import RouletteWheel from "../components/RouletteWheel.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -324,16 +578,43 @@ export default {
   components: {
     LWindow,
     Screen,
+    RouletteWheel,
     LScreenBtn,
     LCustomizationTools,
     LToolbar,
     LToolbarItem,
   },
   data: () => ({
-    animTimer: null,
-    nameInput: "",
-    importText: "",
+    // sorteio clássico
+    animTimer:       null,
+    nameInput:       "",
+    importText:      "",
     showImportDialog: false,
+    noMoreSnack:     false,
+    noMoreMessage:   "",
+    initialVal:      null,
+    finalVal:        null,
+    // roleta
+    rouletteInput:        "",
+    rouletteImportText:   "",
+    showRouletteImport:   false,
+    rouletteSpinning:     false,
+    rouletteCurrentWinner: null,
+    _winnerTimer:         null,
+    // Google Forms
+    showFormsDialog:    false,
+    formsCsvText:       "",
+    formsCols:          [],
+    formsSelectedCol:   null,
+    formsPreview:       [],
+    // QR / registro
+    regRunning: false,
+    regUrl:     "",
+    regPort:    0,
+    regIps:     [],
+    regCount:   0,
+    qrDataUrl:  null,
+    _regHandler: null,
   }),
   computed: {
     /* COMPUTEDS OBRIGATÓRIAS - INÍCIO */
@@ -393,14 +674,6 @@ export default {
     isAnimating() { return this.appdata.animating || false; },
 
     // Userdata bindings
-    initialVal: {
-      get() { return this.userdata.initial ?? 1; },
-      set(v) { this.userdata.initial = v; },
-    },
-    finalVal: {
-      get() { return this.userdata.final ?? 100; },
-      set(v) { this.userdata.final = v; },
-    },
     animationTime: {
       get() { return this.userdata.animation_time ?? 1.5; },
       set(v) { this.userdata.animation_time = v; },
@@ -413,11 +686,67 @@ export default {
       get() { return this.userdata.show_drawn !== false; },
       set(v) { this.userdata.show_drawn = v; },
     },
+
+    // ── Roleta ──────────────────────────────────────────────────────────
+    rouletteItems() { return this.appdata.roulette_items || []; },
+    rouletteDrawn()  { return this.appdata.roulette_drawn  || []; },
+    rouletteActiveItems() {
+      if (this.rouletteRemoveDrawn) {
+        const drawn = new Set(this.rouletteDrawn);
+        return this.rouletteItems.filter(i => !drawn.has(i));
+      }
+      return this.rouletteItems;
+    },
+    rouletteRemoveDrawn: {
+      get() { return this.userdata.roulette_remove_drawn !== false; },
+      set(v) { this.userdata.roulette_remove_drawn = v; },
+    },
+
+    rouletteShowParticipants: {
+      get() { return this.userdata.roulette_show_participants !== false; },
+      set(v) { this.userdata.roulette_show_participants = v; },
+    },
+    rouletteShowHistory: {
+      get() { return this.userdata.roulette_show_history !== false; },
+      set(v) { this.userdata.roulette_show_history = v; },
+    },
+
+    rouletteBg() {
+      return this.userdata.background_color
+        || this.$vuetify?.theme?.global?.current?.colors?.primary
+        || '#1b2a41';
+    },
+
+    rouletteColor() {
+      return this.userdata.font_color
+        || this.$vuetify?.theme?.global?.current?.colors?.['on-primary']
+        || '#ffffff';
+    },
+
+    roulettePanelBorder() {
+      return `${this.rouletteColor}33`;
+    },
+
+    winnerTopStyle() {
+      return { color: this.rouletteColor };
+    },
   },
   methods: {
     /* METHODS OBRIGATÓRIAS - INÍCIO */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIAS - FIM */
 
@@ -435,14 +764,19 @@ export default {
 
     // ---- NÚMEROS ----
     addNumbers() {
-      const start = Math.min(this.initialVal, this.finalVal);
-      const end = Math.max(this.initialVal, this.finalVal);
+      const a = parseFloat(this.initialVal);
+      const b = parseFloat(this.finalVal);
+      if (isNaN(a) || isNaN(b)) return;
+      const start = Math.min(a, b);
+      const end = Math.max(a, b);
       const existing = new Set([...this.availableList, ...this.drawnList]);
       const newNums = [];
       for (let i = start; i <= end; i++) {
         if (!existing.has(i)) newNums.push(i);
       }
       this.appdata.available = [...this.availableList, ...newNums];
+      this.userdata.initial = null;
+      this.userdata.final = null;
     },
 
     // ---- NOMES ----
@@ -474,6 +808,10 @@ export default {
       this.importFromText(this.importText);
       this.importText = "";
       this.showImportDialog = false;
+      if (this.activeTab === "numbers") {
+        this.userdata.initial = null;
+        this.userdata.final = null;
+      }
     },
 
     readFile(event) {
@@ -495,6 +833,10 @@ export default {
       if (this.isAnimating) return;
       if (pool.length === 0) {
         this.appdata.fim = true;
+        this.noMoreMessage = isNames
+          ? this.t("no_more_names")
+          : this.t("no_more_numbers");
+        this.noMoreSnack = true;
         return;
       }
 
@@ -593,6 +935,176 @@ export default {
       }
     },
 
+    // ── ROLETA ───────────────────────────────────────────────────────────
+    onRouletteSpinStart(winnerIdx, duration) {
+      this.rouletteSpinning      = true;
+      this.rouletteCurrentWinner = null;
+      this.appdata.roulette_spin_id         = (this.appdata.roulette_spin_id || 0) + 1;
+      this.appdata.roulette_spin_winner_idx = winnerIdx;
+      this.appdata.roulette_spin_items      = [...this.rouletteActiveItems];
+      this.appdata.roulette_spin_duration   = duration || 7000;
+    },
+
+    rouletteAdd() {
+      const val = this.rouletteInput.trim();
+      if (!val) return;
+      if (!this.rouletteItems.includes(val)) {
+        this.appdata.roulette_items = [...this.rouletteItems, val];
+      }
+      this.rouletteInput = "";
+    },
+
+    rouletteRemoveItem(idx) {
+      const items = [...this.rouletteItems];
+      items.splice(idx, 1);
+      this.appdata.roulette_items = items;
+    },
+
+    rouletteSpin() {
+      if (this.$refs.rouletteWheel) this.$refs.rouletteWheel.spin();
+    },
+
+    onRouletteWinner(winner) {
+      this.rouletteSpinning      = false;
+      this.rouletteCurrentWinner = winner;
+      this.appdata.roulette_drawn = [winner, ...this.rouletteDrawn];
+      if (this._winnerTimer) clearTimeout(this._winnerTimer);
+      this._winnerTimer = setTimeout(() => { this.rouletteCurrentWinner = null; }, 8000);
+    },
+
+    rouletteReset() {
+      if (this._winnerTimer) { clearTimeout(this._winnerTimer); this._winnerTimer = null; }
+      if (this.$refs.rouletteWheel) this.$refs.rouletteWheel.reset();
+      this.appdata.roulette_drawn = [];
+      this.rouletteCurrentWinner = null;
+    },
+
+    rouletteClear() {
+      if (this._winnerTimer) { clearTimeout(this._winnerTimer); this._winnerTimer = null; }
+      if (this.$refs.rouletteWheel) this.$refs.rouletteWheel.reset();
+      this.appdata.roulette_items = [];
+      this.appdata.roulette_drawn = [];
+      this.rouletteCurrentWinner = null;
+    },
+
+    rouletteImportFromText() {
+      const lines = (this.rouletteImportText || "")
+        .split("\n").map(l => l.trim()).filter(l => l.length > 0);
+      const existing = new Set(this.rouletteItems);
+      const added = lines.filter(l => !existing.has(l));
+      this.appdata.roulette_items = [...this.rouletteItems, ...added];
+      this.rouletteImportText = "";
+      this.showRouletteImport = false;
+    },
+
+    rouletteReadFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.rouletteImportText = e.target.result;
+        this.rouletteImportFromText();
+      };
+      reader.readAsText(file, "UTF-8");
+      event.target.value = "";
+    },
+
+    // Google Forms CSV parsing
+    parseForms() {
+      const raw = this.formsCsvText.trim();
+      if (!raw) { this.formsCols = []; this.formsPreview = []; return; }
+      const rows = raw.split(/\r?\n/).map(r => {
+        // Respect quoted CSV fields
+        const cells = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < r.length; i++) {
+          const c = r[i];
+          if (c === '"') { inQ = !inQ; }
+          else if (c === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+          else { cur += c; }
+        }
+        cells.push(cur.trim());
+        return cells;
+      }).filter(r => r.some(c => c.length > 0));
+
+      if (rows.length < 2) { this.formsCols = []; this.formsPreview = []; return; }
+
+      const headers = rows[0];
+      this.formsCols = headers;
+      if (!this.formsSelectedCol || !headers.includes(this.formsSelectedCol)) {
+        // Auto-select: first non-Timestamp column
+        this.formsSelectedCol = headers.find(h => !/timestamp|carimbo/i.test(h)) || headers[0];
+      }
+      const colIdx = headers.indexOf(this.formsSelectedCol);
+      this.formsPreview = rows.slice(1)
+        .map(r => (r[colIdx] || "").trim())
+        .filter(v => v.length > 0);
+    },
+
+    rouletteImportForms() {
+      const existing = new Set(this.rouletteItems);
+      const added = this.formsPreview.filter(n => !existing.has(n));
+      this.appdata.roulette_items = [...this.rouletteItems, ...added];
+      this.showFormsDialog = false;
+      this.formsCsvText = "";
+      this.formsCols = [];
+      this.formsPreview = [];
+      this.formsSelectedCol = null;
+    },
+
+    // QR Code / Registro
+    async toggleRegServer() {
+      if (this.regRunning) {
+        await this.$electron.regserverStop();
+        if (this._regHandler) {
+          this.$electron.off('regserver:registration', this._regHandler);
+          this._regHandler = null;
+        }
+        this.regRunning = false;
+        this.qrDataUrl  = null;
+        this.regUrl     = "";
+        this.regIps     = [];
+        this.regPort    = 0;
+        return;
+      }
+      const info = await this.$electron.regserverStart();
+      if (!info) return;
+      this.regPort    = info.port;
+      this.regIps     = info.ips && info.ips.length > 0 ? info.ips : [info.ip];
+      this.regUrl     = `http://${info.ip}:${info.port}`;
+      this.regRunning = true;
+      this.regCount   = 0;
+
+      // Gerar QR code
+      const dataUrl = await this.$electron.qrcodeGenerate(this.regUrl, { width: 200 });
+      this.qrDataUrl = dataUrl;
+
+      // Ouvir novos registros
+      this._regHandler = this.$electron.on('regserver:registration', (name) => {
+        if (name && !this.rouletteItems.includes(name)) {
+          this.appdata.roulette_items = [...this.rouletteItems, name];
+        }
+        this.regCount++;
+      });
+    },
+
+    async changeRegIp(ip) {
+      this.regUrl    = `http://${ip}:${this.regPort}`;
+      this.qrDataUrl = null;
+      const dataUrl  = await this.$electron.qrcodeGenerate(this.regUrl, { width: 200 });
+      this.qrDataUrl = dataUrl;
+    },
+
+    copyRegUrl() {
+      if (navigator.clipboard && this.regUrl) {
+        navigator.clipboard.writeText(this.regUrl);
+      }
+    },
+
+    openRegUrl() {
+      if (this.regUrl) this.$electron.openExternal(this.regUrl);
+    },
+
     handleKeydown(e) {
       if (e.key === "F4" && this.show) {
         e.preventDefault();
@@ -605,6 +1117,9 @@ export default {
     // Migração: limpa cores hardcoded antigas para que o tema da aplicação seja usado
     if (this.userdata.background_color === "#0d1b2a") this.userdata.background_color = null;
     if (this.userdata.font_color === "#FFFFFF") this.userdata.font_color = null;
+    // Migração: initial/final agora são transientes (data), não persistidos
+    if (this.userdata.initial !== null) this.userdata.initial = null;
+    if (this.userdata.final !== null) this.userdata.final = null;
     if (this.appdata.available === null) {
       this.appdata.available = [];
       this.appdata.drawn = [];
@@ -616,10 +1131,17 @@ export default {
       this.appdata.reveal_id = 0;
       this.appdata.fim = false;
     }
+    if (!this.appdata.roulette_items) {
+      this.appdata.roulette_items = [];
+      this.appdata.roulette_drawn = [];
+    }
   },
   unmounted() {
     window.removeEventListener("keydown", this.handleKeydown);
     this._stopAnimation();
+    if (this._winnerTimer) clearTimeout(this._winnerTimer);
+    if (this.regRunning) this.$electron.regserverStop();
+    if (this._regHandler) this.$electron.off('regserver:registration', this._regHandler);
   },
 };
 </script>
@@ -651,4 +1173,170 @@ export default {
   padding: 6px 12px;
   gap: 8px;
 }
+
+/* ── Aba Roleta ─────────────────────────────────────────────────────── */
+.roulette-screen {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: v-bind("rouletteBg");
+  color: v-bind("rouletteColor");
+}
+
+.roulette-panel {
+  width: 210px;
+  min-width: 140px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid v-bind("roulettePanelBorder");
+  flex-shrink: 0;
+}
+.roulette-panel--right {
+  border-right: none;
+  border-left: 1px solid v-bind("roulettePanelBorder");
+}
+
+.roulette-panel__header {
+  padding: 10px 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.65;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.roulette-panel__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.roulette-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.roulette-panel__content::-webkit-scrollbar { width: 4px; }
+.roulette-panel__content::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+}
+
+.roulette-panel__empty {
+  font-size: 12px;
+  opacity: 0.4;
+  font-style: italic;
+  padding: 4px 2px;
+}
+
+.roulette-item-row {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  gap: 4px;
+  padding: 2px 0;
+}
+.roulette-item-drawn { opacity: 0.4; text-decoration: line-through; }
+.roulette-item-history { opacity: 0.8; }
+.roulette-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roulette-item-num { font-size: 10px; opacity: 0.5; min-width: 18px; }
+
+.roulette-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 12px;
+  z-index: 1;
+}
+
+.roulette-wheel-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* QR mini panel */
+.roulette-qr-mini {
+  padding: 8px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  text-align: center;
+}
+.roulette-qr-mini__img {
+  width: 100%;
+  max-width: 140px;
+  border-radius: 6px;
+  margin: 0 auto 4px;
+  display: block;
+}
+.roulette-qr-mini__url {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 9px;
+  opacity: 0.5;
+  word-break: break-all;
+  margin-bottom: 3px;
+}
+.roulette-qr-mini__ips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  margin: 3px 0;
+}
+.roulette-qr-mini__ip {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+  font-family: monospace;
+}
+.roulette-qr-mini__ip--active { color: #2ecc71; border-color: rgba(46,204,113,0.4); }
+.roulette-qr-mini__count { font-size: 11px; font-weight: 600; color: #2ecc71; }
+
+/* Vencedor em overlay centralizado sobre a roda */
+.rw-top-winner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  font-size: clamp(16px, 4vh, 40px);
+  font-weight: 900;
+  text-align: center;
+  max-width: 85%;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.2;
+  text-shadow: 0 3px 16px rgba(0,0,0,0.9);
+  background: rgba(0,0,0,0.60);
+  padding: 12px 24px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(255,255,255,0.20);
+  pointer-events: none;
+}
+.rw-top-enter-active { animation: rw-top-in  0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.rw-top-leave-active { animation: rw-top-out 0.3s ease forwards; }
+@keyframes rw-top-in  { from { opacity:0; transform:translate(-50%,-50%) scale(0.80); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+@keyframes rw-top-out { from { opacity:1; } to { opacity:0; } }
 </style>

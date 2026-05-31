@@ -5,8 +5,8 @@
   "category": "utilities",
   "icon": "mdi-dice-multiple-outline",
   "customization": {
-    "initial": { "default": 1 },
-    "final": { "default": 100 },
+    "initial": { "default": null },
+    "final": { "default": null },
     "animation_time": { "default": 1.5 },
     "font_size": {
       "type": "font-size",

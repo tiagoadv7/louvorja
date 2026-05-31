@@ -6,6 +6,7 @@ import $path from "@/helpers/Path";
 import $alert from "@/helpers/Alert";
 import $modules from "@/helpers/Modules";
 import $database from "@/helpers/Database";
+import $electron from "@/helpers/Electron";
 
 export default {
   async open(params) {
@@ -55,6 +56,19 @@ export default {
       return;
     }
 
+    // Troca de modo (cantado ↔ playback) na mesma música → crossfade, sem reiniciar
+    const _currentId = $appdata.get("modules.media.id_music");
+    const _currentMode = $appdata.get("modules.media.config.mode");
+    if (
+      params.id_music === _currentId && _currentId != null &&
+      params.mode !== _currentMode &&
+      (params.mode === "audio" || params.mode === "instrumental") &&
+      (_currentMode === "audio" || _currentMode === "instrumental")
+    ) {
+      this.switchMode(params.mode);
+      return;
+    }
+
     this.stopAudio();
     this.clearVariables();
 
@@ -70,6 +84,7 @@ export default {
       this.close(true);
       return;
     }
+    await this.resolveDataImages(data);
     $appdata.set("modules.media.data", data);
 
     $appdata.set("modules.media.id_music", id_music);
@@ -105,18 +120,15 @@ export default {
         ),
       );
 
-      $appdata.set(
-        "modules.media.config.audio",
-        $path.file(
-          mode == "audio" ? data.url_music : data.url_instrumental_music,
-        ),
-      );
+      const rawUrl = mode == "audio" ? data.url_music : data.url_instrumental_music;
+      const localUrl = await $electron.mediaResolveFile(rawUrl);
+      $appdata.set("modules.media.config.audio", localUrl || $path.file(rawUrl));
 
+      // Arquivo local encontrado ou lazy_load ativo: reproduz direto (sem XHR)
       if (
-        $appdata.get("is_online") &&
-        $userdata.get("modules.media.lazy_load")
+        localUrl ||
+        ($appdata.get("is_online") && $userdata.get("modules.media.lazy_load"))
       ) {
-        //Se a opção lazy_load estiver marcada, execução rápida (o audio vai carregando enquanto é executado)
         $appdata.set("modules.media.config.lazy", true);
         audio.src = $appdata.get("modules.media.config.audio");
         audio.load();
@@ -187,6 +199,84 @@ export default {
     $appdata.set("modules.media.config.mode", mode);
   },
 
+  async switchMode(newMode) {
+    const data = $appdata.get("modules.media.data");
+    if (!data) return;
+
+    const audio = this.getElement();
+    const capturedTime = audio.currentTime;
+    const targetVolume = $appdata.get("modules.media.config.volume") / 100;
+    const isPaused = $appdata.get("modules.media.config.is_paused") || audio.paused;
+
+    const rawSwitchUrl = newMode === "audio" ? data.url_music : data.url_instrumental_music;
+    const newUrl = (await $electron.mediaResolveFile(rawSwitchUrl)) || $path.file(rawSwitchUrl);
+
+    $appdata.set(
+      "modules.media.times",
+      this.slides().map((item) =>
+        $datetime.toNumber(
+          newMode === "audio" ? item.time : item.instrumental_time,
+        ),
+      ),
+    );
+    $appdata.set("modules.media.config.mode", newMode);
+    $appdata.set("modules.media.config.audio", newUrl);
+
+    if (isPaused) {
+      audio.src = newUrl;
+      audio.volume = targetVolume;
+      audio.addEventListener("canplay", () => { audio.currentTime = capturedTime; }, { once: true });
+      audio.load();
+      return;
+    }
+
+    $appdata.set("modules.media.config.is_fading", true);
+
+    const existing = document.getElementById("__audio_xfade");
+    if (existing) { existing.pause(); existing.remove(); }
+
+    const xfade = document.createElement("audio");
+    xfade.id = "__audio_xfade";
+    xfade.preload = "auto";
+    xfade.volume = 0;
+    xfade.src = newUrl;
+    document.body.appendChild(xfade);
+
+    xfade.addEventListener("canplay", () => {
+      xfade.currentTime = capturedTime;
+      xfade.play().catch(() => {});
+
+      const STEP = 0.05;
+      const INTERVAL = 60;
+
+      const fade = setInterval(() => {
+        const oldDone = audio.volume <= 0;
+        const newDone = xfade.volume >= targetVolume;
+
+        if (!oldDone) audio.volume = Math.max(0, audio.volume - STEP);
+        if (!newDone) xfade.volume = Math.min(targetVolume, xfade.volume + STEP);
+
+        if (oldDone && newDone) {
+          clearInterval(fade);
+          audio.pause();
+          audio.src = newUrl;
+          audio.volume = targetVolume;
+          audio.addEventListener("canplay", () => {
+            audio.currentTime = xfade.currentTime;
+            audio.play().catch(() => {});
+            xfade.pause();
+            xfade.src = "";
+            xfade.remove();
+            $appdata.set("modules.media.config.is_fading", false);
+          }, { once: true });
+          audio.load();
+        }
+      }, INTERVAL);
+    }, { once: true });
+
+    xfade.load();
+  },
+
   close(force = false) {
     //Se force for true, fechamento forçado. Sem diálogo de confirmação!
     if (!force) {
@@ -200,9 +290,23 @@ export default {
     }
 
     this.stopAudio();
-    this.clearVariables();
+
+    const popup = $appdata.get("popup");
+    const popupModule = $appdata.get("popup_module");
+    const outputIsMedia = popup && popupModule === "media";
+
     $appdata.set("modules.media.show", false);
     $appdata.set("modules.media.minimized", false);
+
+    if (outputIsMedia) {
+      // Dispara o fade-out na janela projetada enquanto os dados ainda estão
+      // presentes, evitando o flash de tela preta antes do fechamento suave.
+      $electron.closeOutput();
+      // Limpa os dados após a animação de fade terminar (~450ms no Electron)
+      setTimeout(() => this.clearVariables(), 500);
+    } else {
+      this.clearVariables();
+    }
   },
 
   async openLyric(params) {
@@ -226,7 +330,7 @@ export default {
       this.closeLyric();
       return;
     }
-
+    await this.resolveDataImages(data);
     $appdata.set("modules.lyric.data", data);
 
     $appdata.set("modules.lyric.id_music", id_music);
@@ -259,7 +363,9 @@ export default {
       this.closeAlbum();
       return;
     }
-
+    if (data.url_image) {
+      data.url_image = await this.resolveImageUrl(data.url_image);
+    }
     $appdata.set("modules.album.data", data);
 
     let hymnal = data.categories.filter((item) =>
@@ -300,10 +406,11 @@ export default {
       return;
     }
 
-    const url =
-      mode == "instrumental" ? data.url_instrumental_music : data.url_music;
+    const rawAudioUrl = mode == "instrumental" ? data.url_instrumental_music : data.url_music;
+    const localAudioUrl = await $electron.mediaResolveFile(rawAudioUrl);
+    const url = localAudioUrl || $path.file(rawAudioUrl);
 
-    window.open($path.file(url), "_blank");
+    window.open(url, "_blank");
 
     $appdata.set("loading", false);
   },
@@ -487,16 +594,15 @@ export default {
 
   fadeInAudio(callback) {
     const audio = this.getElement();
-
     $appdata.set("modules.media.config.is_fading", true);
     const max_volume = $appdata.get("modules.media.config.volume") / 100;
 
-    const fadeOut = setInterval(() => {
+    const interval = setInterval(() => {
       if (audio.volume < max_volume) {
-        audio.volume = Math.min(audio.volume + 0.05, max_volume); // Incrementa suavemente.
+        audio.volume = Math.min(audio.volume + 0.05, max_volume);
       } else {
         $appdata.set("modules.media.config.is_fading", false);
-        clearInterval(fadeOut);
+        clearInterval(interval);
         if (callback) callback();
       }
     }, 60);
@@ -511,12 +617,12 @@ export default {
 
     $appdata.set("modules.media.config.is_fading", true);
 
-    const fadeOut = setInterval(() => {
+    const interval = setInterval(() => {
       if (audio.volume > 0) {
         audio.volume = Math.max(audio.volume - 0.05, 0);
       } else {
         $appdata.set("modules.media.config.is_fading", false);
-        clearInterval(fadeOut);
+        clearInterval(interval);
         if (callback) callback();
       }
     }, 60);
@@ -662,5 +768,40 @@ export default {
 
     el.setAttribute("autoplay", true);
     return el;
+  },
+
+  async resolveImageUrl(url) {
+    if (!url) return '';
+    // Tenta arquivo local primeiro (Electron, inclusive para URLs remotas já conhecidas)
+    if ($electron.isElectron()) {
+      const local = await $electron.mediaResolveImage(url);
+      if (local) return local;
+    }
+    if (url.startsWith('file://') || url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    return $path.file(url);
+  },
+
+  async resolveDataImages(data) {
+    if (!data) return;
+    if (data.url_image) {
+      data.url_image = await this.resolveImageUrl(data.url_image);
+    }
+    const slides = data.lyric || data.slides;
+    if (slides) {
+      for (const slide of Object.values(slides)) {
+        if (slide.url_image) {
+          slide.url_image = await this.resolveImageUrl(slide.url_image);
+        }
+      }
+    }
+    if (data.albums) {
+      for (const album of data.albums) {
+        if (album.url_image) {
+          album.url_image = await this.resolveImageUrl(album.url_image);
+        }
+      }
+    }
   },
 };

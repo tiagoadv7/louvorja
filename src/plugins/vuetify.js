@@ -66,55 +66,55 @@ export default createVuetify({
       dark: {
         dark: true,
         colors: {
-          primary: "#2e2e2e",
+          primary: "#616161",
         },
       },
       "dark-blue": {
         dark: true,
         colors: {
-          primary: "#29569b",
+          primary: "#4a7fc1",
         },
       },
       "dark-darkblue": {
         dark: true,
         colors: {
-          primary: "#1b2a41",
+          primary: "#3a6092",
         },
       },
       "dark-navy": {
         dark: true,
         colors: {
-          primary: "#0b3d62",
+          primary: "#1976d2",
         },
       },
       "dark-green": {
         dark: true,
         colors: {
-          primary: "#077568",
+          primary: "#26a69a",
         },
       },
       "dark-orange": {
         dark: true,
         colors: {
-          primary: "#d24726",
+          primary: "#ef6c00",
         },
       },
       "dark-purple": {
         dark: true,
         colors: {
-          primary: "#80397b",
+          primary: "#ab47bc",
         },
       },
       "dark-pink": {
         dark: true,
         colors: {
-          primary: "#e91e63",
+          primary: "#f06292",
         },
       },
       "ocean-blue": {
         dark: true,
         colors: {
-          primary: "#006994",
+          primary: "#0288d1",
         },
       },
     },

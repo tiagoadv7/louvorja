@@ -1,17 +1,12 @@
 <template>
   <div
     ref="container"
-    :class="[
-      'd-flex',
-      `align-${userdata.vertical_align}`,
-      `justify-${userdata.horizontal_align}`,
-    ]"
     :style="{
       position: 'relative',
+      overflow: 'hidden',
       background: userdata.background_color,
       width: '100%',
       height: height ? height + 'px' : '100%',
-      padding: `${this.fontSizePc(userdata.border_spacing)}px`,
     }"
   >
     <img
@@ -28,41 +23,59 @@
       }"
     />
 
-    <div v-if="bible" class="d-flex flex-column">
-      <span
-        v-if="bible.text"
-        :class="
-          'text-' +
-          (userdata.horizontal_align == 'start'
-            ? 'left'
-            : userdata.horizontal_align == 'end'
-              ? 'right'
-              : 'center')
-        "
+    <transition name="fade" mode="out-in">
+      <div
+        :key="layerKey"
+        class="d-flex flex-column"
+        :class="[
+          `align-${userdata.vertical_align}`,
+          `justify-${userdata.horizontal_align}`,
+        ]"
         :style="{
-          zIndex: 1,
-          color: userdata.font_color,
-          fontSize: `${this.fontSizePc(userdata.font_size)}px`,
-          fontFamily: userdata.font || 'Arial, sans-serif',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          padding: `${fontSizePc(userdata.border_spacing)}px`,
         }"
       >
-        {{ bible.text }}
-      </span>
-      <span
-        v-if="bible.scriptural_reference"
-        :class="
-          'text-' + (userdata.horizontal_align == 'start' ? 'left' : 'right')
-        "
-        :style="{
-          zIndex: 1,
-          color: userdata.reference_font_color,
-          fontSize: `${this.fontSizePc(userdata.reference_font_size)}px`,
-          fontFamily: userdata.reference_font || 'Arial, sans-serif',
-        }"
-      >
-        {{ bible.scriptural_reference }}
-      </span>
-    </div>
+        <span
+          v-if="bible && bible.text"
+          :class="
+            'text-' +
+            (userdata.horizontal_align == 'start'
+              ? 'left'
+              : userdata.horizontal_align == 'end'
+                ? 'right'
+                : 'center')
+          "
+          :style="{
+            zIndex: 1,
+            color: userdata.font_color,
+            fontSize: `${fontSizePc(userdata.font_size)}px`,
+            fontFamily: userdata.font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.text }}
+        </span>
+        <span
+          v-if="bible && bible.scriptural_reference"
+          :class="
+            'text-' + (userdata.horizontal_align == 'start' ? 'left' : 'right')
+          "
+          :style="{
+            zIndex: 1,
+            color: userdata.reference_font_color,
+            fontSize: `${fontSizePc(userdata.reference_font_size)}px`,
+            fontFamily: userdata.reference_font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.scriptural_reference }}
+        </span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -105,6 +118,9 @@ export default {
     bible() {
       return this.$appdata.get("modules.bible.data");
     },
+    layerKey() {
+      return (this.bible?.text || "") + "||" + (this.bible?.scriptural_reference || "");
+    },
   },
   methods: {
     fontSizePc(pc) {
@@ -117,7 +133,7 @@ export default {
         this.s_width = container.offsetWidth;
         this.s_height = container.offsetHeight;
 
-        if (this.width <= 0 || this.height <= 0) {
+        if (this.s_width <= 0 || this.s_height <= 0) {
           const self = this;
           setTimeout(function () {
             self.windowResize();
@@ -135,3 +151,18 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.fade-enter-active {
+  transition: opacity 0.4s ease-in-out;
+  will-change: opacity;
+}
+.fade-leave-active {
+  transition: opacity 0.25s ease-in-out;
+  will-change: opacity;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

@@ -21,16 +21,14 @@ export default {
   methods: {
     handleKeydown() {
       console.log("click ");
-      //if (event.shiftKey && event.key === "A") {
       this.$dev.toogle();
-      //}
     },
   },
 };
 </script>
 
 <style>
-#app-container > div {
+#app-container > .v-application__wrap {
   height: 100vh;
 }
 </style>

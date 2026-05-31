@@ -430,7 +430,7 @@ export default {
   },
   watch: {
     async show() {
-      if (this.show && this.lang != this.$i18n.locale) {
+      if (this.show && this.lang != this.$i18n.locale.value) {
         this.versions = [];
         this.books = [];
         this.verses = [];
@@ -464,7 +464,19 @@ export default {
     /* METHODS OBRIGATÓRIOS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIOS - FIM */
     send(param, value) {
@@ -476,7 +488,7 @@ export default {
       if (this.books.length <= 0) {
         this.loading_book = true;
         this.books = await this.$database.get(
-          `${this.$i18n.locale}_bible_book`,
+          `${this.$i18n.locale?.value || this.$i18n.locale}_bible_book`,
         );
         if (!this.bible.id_bible_book) {
           await this.selBook(this.books[0].id_bible_book);
@@ -486,7 +498,7 @@ export default {
 
       if (this.versions.length <= 0) {
         this.versions = await this.$database.get(
-          `${this.$i18n.locale}_bible_version`,
+          `${this.$i18n.locale?.value || this.$i18n.locale}_bible_version`,
         );
         if (!this.bible.id_bible_version) {
           await this.selVersion(this.versions[0].id_bible_version);
@@ -510,7 +522,7 @@ export default {
         this.bible.verses = this.select_bible.verses;
       }
 
-      this.lang = this.$i18n.locale;
+      this.lang = this.$i18n.locale.value;
       this.loading = false;
     },
     resize(data) {

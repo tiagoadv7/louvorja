@@ -4,16 +4,17 @@ export default {
   set(param, value) {
     store.commit("setData", [param, value]);
 
+    // Sincroniza com a janela de saída via postMessage (somente no navegador)
     const popup = this.get("popup");
     if (
       popup &&
+      !popup._electron &&
       param != "popup" &&
       param != "is_popup" &&
       param != "is_fullscreen"
     ) {
       if (popup.closed) {
         this.set("popup", null);
-        //this.set("popup_module", null);
       } else {
         try {
           popup.postMessage({ param, value }, window.location.origin);
@@ -21,6 +22,18 @@ export default {
           console.log(e);
         }
       }
+    }
+
+    // No Electron, envia via IPC para a janela de saída.
+    // Bloqueado na própria janela de saída (is_popup) para evitar loop de IPC.
+    if (
+      typeof window !== "undefined" &&
+      window.electron &&
+      param != "popup" &&
+      param != "is_popup" &&
+      !this.get("is_popup")
+    ) {
+      window.electron.sendStateUpdate({ param, value });
     }
   },
 
