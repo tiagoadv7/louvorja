@@ -187,16 +187,21 @@ function setupIpc(mainWindow) {
       });
 
       const html = `<!DOCTYPE html>
-<html style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;
-  -webkit-clip-path:inset(0 round 14px);clip-path:inset(0 round 14px)">
-<body style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;
-  background:rgba(10,10,10,.88);box-sizing:border-box;
-  border:2px solid rgba(255,255,255,.25);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  color:#fff;font-family:sans-serif;">
-  <div style="font-size:52px;font-weight:700;line-height:1">${num}</div>
-  <div style="font-size:13px;margin-top:6px;opacity:.85">${label}</div>
-  <div style="font-size:11px;opacity:.5;margin-top:3px">${width}×${height}</div>
+<html style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;">
+<body style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;
+  display:flex;align-items:center;justify-content:center;">
+  <div style="
+    width:100%;height:100%;box-sizing:border-box;
+    background:rgba(12,12,14,0.92);
+    border:2.5px solid rgba(255,255,255,0.75);
+    border-radius:14px;
+    box-shadow:0 0 0 1px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+    <div style="font-size:52px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>
+    <div style="font-size:13px;margin-top:8px;opacity:0.85;font-weight:500">${label}</div>
+    <div style="font-size:11px;opacity:0.45;margin-top:4px;letter-spacing:0.3px">${width}×${height}</div>
+  </div>
 </body></html>`;
 
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);

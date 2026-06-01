@@ -163,9 +163,11 @@ function createMainWindow() {
   mainWindow.loadURL(getAppUrl());
 
   mainWindow.once('ready-to-show', () => {
+    // setOpacity(0) ANTES do maximize: o maximize() chama show() internamente,
+    // então a janela precisa estar invisível antes de ser exibida
+    mainWindow.setOpacity(0);
     if (saved.maximized || firstLaunch) mainWindow.maximize();
     if (isDev) mainWindow.webContents.openDevTools();
-    mainWindow.setOpacity(0);
     mainWindow.show();
   });
 

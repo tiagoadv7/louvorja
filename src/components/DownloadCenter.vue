@@ -63,7 +63,7 @@
               Baixe coletâneas completas (letras, capas, áudio) para usar o LouvorJA sem conexão.
             </p>
             <v-row dense>
-              <v-col v-for="item in navItems" :key="item.section" cols="6">
+              <v-col v-for="item in navItems.filter(i => i.section !== 'home')" :key="item.section" cols="6">
                 <v-card variant="tonal" color="primary" class="dc-home-card" @click="goTo(item.section)">
                   <v-card-text class="d-flex align-center gap-3 pa-3">
                     <v-icon size="26" color="primary">{{ item.icon }}</v-icon>
@@ -77,19 +77,35 @@
           <!-- HINÁRIOS -->
           <template v-else-if="section === 'hymnals'">
             <div class="dc-section-title">Hinários</div>
-            <div class="dc-pkg-list mt-2">
-              <div v-for="h in hymnalItems" :key="h.file" class="dc-pkg-row">
-                <v-icon size="32" color="primary" class="mr-3 flex-shrink-0">{{ h.icon }}</v-icon>
-                <div class="flex-grow-1 min-w-0">
-                  <div class="text-body-1 font-weight-medium">{{ h.name }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ h.description }}</div>
+            <div class="dc-hymnal-grid mt-3">
+              <div v-for="h in hymnalItems" :key="h.file" class="dc-hymnal-card">
+                <!-- Capa: imagem real ou gradiente como fallback -->
+                <div
+                  class="dc-hymnal-cover"
+                  :style="h.cover ? {} : { background: `linear-gradient(145deg, ${h.color}ee 0%, ${h.color}99 100%)` }"
+                >
+                  <img
+                    v-if="h.cover"
+                    :src="resolveUrl(h.cover)"
+                    class="dc-hymnal-img"
+                    loading="lazy"
+                  />
+                  <v-icon v-else size="72" color="white" style="opacity:0.9">{{ h.icon }}</v-icon>
+                  <div v-if="isDownloaded(h.file)" class="dc-album-badge-ok">
+                    <v-icon size="18" color="white">mdi-check</v-icon>
+                  </div>
                 </div>
-                <div class="d-flex align-center gap-2 flex-shrink-0">
-                  <v-icon v-if="isDownloaded(h.file)" color="success" size="18">mdi-check-circle</v-icon>
+
+                <!-- Info + botão -->
+                <div class="dc-hymnal-info">
+                  <div class="dc-hymnal-name">{{ h.name }}</div>
+                  <div class="dc-hymnal-desc">{{ h.description }}</div>
                   <v-btn
                     :color="isDownloaded(h.file) ? 'success' : 'primary'"
                     variant="tonal"
                     size="small"
+                    block
+                    class="mt-3"
                     :loading="downloading[h.file]"
                     :prepend-icon="isDownloaded(h.file) ? 'mdi-refresh' : 'mdi-download'"
                     @click="downloadFile(h.file)"
@@ -403,21 +419,136 @@
           <template v-else-if="section === 'downloads'">
             <div class="dc-section-title">
               Meus Downloads
-              <span class="text-caption text-medium-emphasis ml-2">({{ localFiles.length }} arquivo(s) • {{ totalSize }})</span>
+              <span class="text-caption text-medium-emphasis ml-2">({{ totalSize }})</span>
             </div>
+
             <div v-if="localFiles.length === 0" class="text-caption text-medium-emphasis mt-3">
               Nenhum arquivo baixado ainda.
             </div>
-            <div v-else class="dc-local-list mt-2">
-              <div v-for="f in localFiles" :key="f.name" class="dc-local-row">
-                <v-icon size="14" color="success" class="mr-2 flex-shrink-0">mdi-check-circle</v-icon>
-                <span class="text-body-2 flex-grow-1">{{ f.name }}</span>
-                <span class="text-caption text-medium-emphasis">{{ formatSize(f.size) }}</span>
-                <v-btn icon size="x-small" variant="text" color="error" class="ml-1" @click="deleteFile(f.name)">
-                  <v-icon size="14">mdi-delete-outline</v-icon>
-                </v-btn>
-              </div>
-            </div>
+
+            <template v-else>
+              <!-- Álbuns -->
+              <template v-if="downloadedAlbums.length > 0">
+                <div class="dc-dl-group-title mt-4">
+                  <v-icon size="14" class="mr-1">mdi-music-box-multiple-outline</v-icon>
+                  Coletâneas
+                  <span class="dc-dl-group-count">{{ downloadedAlbums.length }}</span>
+                </div>
+                <div class="dc-albums-grid mt-2">
+                  <div
+                    v-for="album in downloadedAlbums"
+                    :key="album.id_album"
+                    class="dc-album-card"
+                  >
+                    <div class="dc-album-img-wrap">
+                      <img
+                        v-if="album.url_image"
+                        :src="resolveUrl(album.url_image)"
+                        class="dc-album-img dc-album-img--full"
+                        loading="lazy"
+                      />
+                      <v-icon v-else size="42" color="grey-lighten-1">mdi-music-box</v-icon>
+                      <div class="dc-album-badge-ok">
+                        <v-icon size="16" color="white">mdi-check</v-icon>
+                      </div>
+                    </div>
+                    <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
+                    <v-btn
+                      icon
+                      variant="text"
+                      size="x-small"
+                      color="error"
+                      @click="deleteFile(`album_${album.id_album}`)"
+                    >
+                      <v-icon size="16">mdi-delete-outline</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Hinários -->
+              <template v-if="downloadedHymnals.length > 0">
+                <div class="dc-dl-group-title mt-4">
+                  <v-icon size="14" class="mr-1">mdi-music-note</v-icon>
+                  Hinários
+                  <span class="dc-dl-group-count">{{ downloadedHymnals.length }}</span>
+                </div>
+                <div class="dc-albums-grid mt-2">
+                  <div
+                    v-for="h in downloadedHymnals"
+                    :key="h.name"
+                    class="dc-album-card"
+                  >
+                    <div
+                      class="dc-album-img-wrap"
+                      :style="h.cover ? {} : { background: `linear-gradient(145deg, ${h.color}dd 0%, ${h.color}88 100%)` }"
+                    >
+                      <img
+                        v-if="h.cover"
+                        :src="resolveUrl(h.cover)"
+                        class="dc-album-img dc-album-img--full"
+                        loading="lazy"
+                      />
+                      <v-icon v-else size="52" color="white" style="opacity:0.85">{{ h.icon }}</v-icon>
+                      <div class="dc-album-badge-ok">
+                        <v-icon size="16" color="white">mdi-check</v-icon>
+                      </div>
+                    </div>
+                    <div class="dc-album-name" :title="h.label">{{ h.label }}</div>
+                    <v-btn
+                      icon
+                      variant="text"
+                      size="x-small"
+                      color="error"
+                      @click="deleteFile(h.name)"
+                    >
+                      <v-icon size="16">mdi-delete-outline</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Bíblias -->
+              <template v-if="downloadedBibleSets.length > 0">
+                <div class="dc-dl-group-title mt-4">
+                  <v-icon size="14" class="mr-1">mdi-book-open-variant</v-icon>
+                  Bíblias
+                  <span class="dc-dl-group-count">{{ downloadedBibleSets.length }}</span>
+                </div>
+                <div class="dc-pkg-list mt-2">
+                  <div v-for="b in downloadedBibleSets" :key="b.id" class="dc-pkg-row">
+                    <v-icon size="28" :color="b.color" class="mr-3 flex-shrink-0">mdi-book-open-variant</v-icon>
+                    <div class="flex-grow-1 min-w-0">
+                      <div class="text-body-2 font-weight-medium">{{ b.name }}</div>
+                      <div class="text-caption text-medium-emphasis">{{ formatSize(b.totalSize) }}</div>
+                    </div>
+                    <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
+                    <v-btn icon size="x-small" variant="text" color="error" @click="deleteFiles(b.files)">
+                      <v-icon size="14">mdi-delete-outline</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Outros -->
+              <template v-if="downloadedOthers.length > 0">
+                <div class="dc-dl-group-title mt-4">
+                  <v-icon size="14" class="mr-1">mdi-file-outline</v-icon>
+                  Outros
+                  <span class="dc-dl-group-count">{{ downloadedOthers.length }}</span>
+                </div>
+                <div class="dc-local-list mt-2">
+                  <div v-for="f in downloadedOthers" :key="f.name" class="dc-local-row">
+                    <v-icon size="14" color="success" class="mr-2 flex-shrink-0">mdi-check-circle</v-icon>
+                    <span class="text-body-2 flex-grow-1">{{ f.name }}</span>
+                    <span class="text-caption text-medium-emphasis">{{ formatSize(f.size) }}</span>
+                    <v-btn icon size="x-small" variant="text" color="error" class="ml-1" @click="deleteFile(f.name)">
+                      <v-icon size="14">mdi-delete-outline</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </template>
+            </template>
           </template>
         </div>
       </div>
@@ -467,8 +598,8 @@ const NAV_ITEMS = [
 ];
 
 const HYMNAL_ITEMS = [
-  { file: 'pt_hymnal',      name: 'Hinário',      description: 'Hinário moderno das AdPB',           icon: 'mdi-music-note' },
-  { file: 'pt_hymnal_1996', name: 'Hinário 1996', description: 'Hinário histórico de 1996 das AdPB', icon: 'mdi-music-note-outline' },
+  { file: 'pt_hymnal',      name: 'Hinário 2022', description: 'Hinário moderno',           cover: '/covers/hasd.bmp', icon: 'mdi-music-note',        color: '#1565C0' },
+  { file: 'pt_hymnal_1996', name: 'Hinário 1996', description: 'Hinário histórico de 1996', cover: '/covers/hasd.bmp', icon: 'mdi-music-note-outline', color: '#6A1B9A' },
 ];
 
 const BIBLE_ITEMS = [
@@ -521,6 +652,8 @@ export default {
     // Dialog de substituição de álbum
     replaceDialog:         false,
     replaceAlbumTarget:    null,
+    // Infos dos álbuns baixados (id_album -> {name, url_image})
+    downloadedAlbumInfos:  {},
   }),
 
   computed: {
@@ -548,6 +681,44 @@ export default {
       const t = this.localFiles.reduce((s, f) => s + (f.size || 0), 0);
       return this.formatSize(t);
     },
+
+    downloadedAlbums() {
+      return this.localFiles
+        .filter(f => f.name.startsWith('album_'))
+        .map(f => {
+          const id = f.name.replace('album_', '');
+          const info = this.downloadedAlbumInfos[id] || {};
+          return { id_album: id, name: info.name || f.name, url_image: info.url_image || '', size: f.size };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    downloadedHymnals() {
+      const map = Object.fromEntries(HYMNAL_ITEMS.map(h => [h.file, h]));
+      return this.localFiles
+        .filter(f => map[f.name])
+        .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '' }));
+    },
+
+    downloadedBibleSets() {
+      const sizeMap = Object.fromEntries(this.localFiles.map(f => [f.name, f.size || 0]));
+      const downloaded = new Set(this.localFiles.map(f => f.name));
+      return BIBLE_ITEMS
+        .filter(b => b.files.some(f => downloaded.has(f)))
+        .map(b => ({ ...b, totalSize: b.files.reduce((s, f) => s + (sizeMap[f] || 0), 0) }));
+    },
+
+    downloadedOthers() {
+      const known = new Set([
+        ...HYMNAL_ITEMS.map(h => h.file),
+        ...BIBLE_ITEMS.flatMap(b => b.files),
+      ]);
+      return this.localFiles.filter(f =>
+        !f.name.startsWith('album_') &&
+        !f.name.startsWith('music_') &&
+        !known.has(f.name)
+      );
+    },
   },
 
   methods: {
@@ -570,12 +741,16 @@ export default {
     async init() {
       await this.loadLocalFiles();
       if (this.section === 'collections') await this.loadCategories();
+      if (this.section === 'downloads') await this.loadDownloadedAlbumInfos();
     },
 
     async goTo(s) {
       this.section = s;
       if (s === 'collections' && this.categories.length === 0) await this.loadCategories();
-      if (s === 'downloads') await this.loadLocalFiles();
+      if (s === 'downloads') {
+        await this.loadLocalFiles();
+        await this.loadDownloadedAlbumInfos();
+      }
       if (s === 'settings') await this.loadLocalFiles();
     },
 
@@ -588,6 +763,39 @@ export default {
 
     async loadLocalFiles() {
       this.localFiles = await this.$electron.dbLocalList() || [];
+    },
+
+    async loadDownloadedAlbumInfos() {
+      const albumFiles = this.localFiles.filter(f => f.name.startsWith('album_'));
+      if (!albumFiles.length) { this.downloadedAlbumInfos = {}; return; }
+
+      // Garante que as categories estão carregadas para buscar nome e capa
+      if (!this.categories.length) await this.loadCategories();
+
+      const infos = {};
+      for (const f of albumFiles) {
+        const id = f.name.replace('album_', '');
+        let found = null;
+
+        // Busca nas categories (fonte mais completa — tem nome e url_image)
+        for (const cat of this.categories) {
+          const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
+          if (album) { found = { name: album.name, url_image: album.url_image || '' }; break; }
+        }
+
+        // Fallback: lê do banco local
+        if (!found) {
+          try {
+            const data = await this.$electron.dbLocalGet(f.name);
+            found = { name: data?.name || f.name, url_image: data?.url_image || '' };
+          } catch {
+            found = { name: f.name, url_image: '' };
+          }
+        }
+
+        infos[id] = found || { name: f.name, url_image: '' };
+      }
+      this.downloadedAlbumInfos = infos;
     },
 
     isDownloaded(filename) {
@@ -849,6 +1057,17 @@ export default {
     async deleteFile(filename) {
       await this.$electron.dbLocalDelete(filename);
       await this.loadLocalFiles();
+      if (this.section === 'downloads') await this.loadDownloadedAlbumInfos();
+    },
+
+    async deleteFiles(filenames) {
+      for (const name of filenames) {
+        if (this.localFiles.some(f => f.name === name)) {
+          await this.$electron.dbLocalDelete(name);
+        }
+      }
+      await this.loadLocalFiles();
+      if (this.section === 'downloads') await this.loadDownloadedAlbumInfos();
     },
 
     async clearAll() {
@@ -937,6 +1156,52 @@ export default {
 .dc-home-card { cursor: pointer; transition: opacity 0.15s; }
 .dc-home-card:hover { opacity: 0.85; }
 
+/* ── Grid de Hinários ───────────────────────────────────────────── */
+.dc-hymnal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.dc-hymnal-card {
+  border-radius: 12px;
+  border: 1px solid rgba(128,128,128,0.15);
+  overflow: hidden;
+  background: rgba(128,128,128,0.04);
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s;
+}
+.dc-hymnal-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.18); }
+.dc-hymnal-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dc-hymnal-info {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.dc-hymnal-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.dc-hymnal-desc {
+  font-size: 12px;
+  opacity: 0.55;
+}
+.dc-hymnal-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ── Lista de pacotes ───────────────────────────────────────────── */
 .dc-pkg-list { display: flex; flex-direction: column; gap: 12px; }
 .dc-pkg-row {
@@ -1011,6 +1276,7 @@ export default {
   transition: filter 0.2s;
 }
 .dc-album-card:hover .dc-album-img { filter: grayscale(0); }
+.dc-album-img--full { filter: grayscale(0) !important; }
 .dc-album-overlay {
   position: absolute;
   inset: 0;
@@ -1070,6 +1336,20 @@ export default {
 }
 
 /* ── Meus Downloads ─────────────────────────────────────────────── */
+.dc-dl-group-title {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.55;
+}
+.dc-dl-group-count {
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 400;
+}
 .dc-local-list { display: flex; flex-direction: column; gap: 2px; max-height: 380px; overflow-y: auto; }
 .dc-local-row {
   display: flex;
