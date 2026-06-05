@@ -165,18 +165,27 @@ class SQLiteReader {
 
   /**
    * Extrai o nome da pasta do álbum a partir do campo files.dir do SQLite.
-   * Exemplos:
-   *   "config\\musicas\\2017 - Eu Creio\\"  → "2017 - Eu Creio"
-   *   "config/musicas/1992 - Brilha Jesus/" → "1992 - Brilha Jesus"
+   * Suporta tanto o formato local (Delphi) quanto o formato de URL da API:
+   *   "config\\musicas\\2017 - Eu Creio\\"   → "2017 - Eu Creio"
+   *   "config/musicas/1992 - Brilha Jesus/"  → "1992 - Brilha Jesus"
+   *   "/musics/pt/2022 - Eu Vou"             → "2022 - Eu Vou"
+   *   "/musics/pt/2026 - Meu Lugar no Mundo" → "2026 - Meu Lugar no Mundo"
+   *   "/musics/pt/Adoradores 5"              → "Adoradores 5"
    */
   _extractAlbumFromDir(dir) {
     if (!dir) return null;
     const norm = dir.replace(/\\/g, '/').replace(/\/$/, '');
     const parts = norm.split('/');
-    const idx   = parts.findIndex(p => p.toLowerCase() === 'musicas');
-    if (idx >= 0 && idx + 1 < parts.length) {
-      const folder = parts[idx + 1].trim();
-      return folder || null;
+    // Localiza "musicas" (path local Delphi) ou "musics" (URL da API)
+    const idx = parts.findIndex(p => p.toLowerCase() === 'musicas' || p.toLowerCase() === 'musics');
+    if (idx >= 0) {
+      let next = idx + 1;
+      // Pula o código de idioma de 2 letras (pt, en, es, …) que aparece após "musics" no formato API
+      if (next < parts.length && /^[a-z]{2}$/i.test(parts[next])) next++;
+      if (next < parts.length) {
+        const folder = parts[next].trim();
+        return folder || null;
+      }
     }
     return null;
   }
@@ -250,6 +259,24 @@ class SQLiteReader {
     else if (s.cat.id_language) conditions.push(`c.id_language = '${lang}'`);
     const catWhere = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    // Pré-constrói mapa albumId → folderName (ex: "2026 - Meu Lugar no Mundo")
+    // via files.dir, que é a fonte mais confiável e inclui o ano + nome da pasta.
+    const albumFolderMap = new Map();
+    if (s.hasAlbMusics && s.hasFiles && s.fi.dir && s.mu.id_file_music) {
+      const dirRows = this._query(`
+        SELECT am.id_album, MIN(f.dir) AS dir
+        FROM   files f
+        JOIN   musics m  ON m.id_file_music  = f.id_file
+        JOIN   albums_musics am ON am.id_music = m.id_music
+        WHERE  f.dir IS NOT NULL AND f.dir != ''
+        GROUP  BY am.id_album
+      `);
+      for (const dr of dirRows) {
+        const fn = this._extractAlbumFromDir(dr.dir);
+        if (fn) albumFolderMap.set(dr.id_album, fn);
+      }
+    }
+
     const rows = this._query(`
       SELECT c.id_category, c.name,
              ${catOrd} AS cat_order,
@@ -278,9 +305,11 @@ class SQLiteReader {
         });
       }
       if (r.id_album) {
+        // Prioridade: files.dir (mais confiável, inclui ano) → albums.name → categories_albums.name
+        const folderName = albumFolderMap.get(r.id_album) || null;
         catMap.get(r.id_category).albums.push({
           id_album:  r.id_album,
-          name:      r.a_name  || r.ca_name || `Álbum ${r.id_album}`,
+          name:      folderName || r.a_name || r.ca_name || `Álbum ${r.id_album}`,
           subtitle:  r.ca_name || '',
           color:     r.color   || '#555555',
           url_image: this._resolveCapa(r.img_name),
