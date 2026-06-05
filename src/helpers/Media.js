@@ -91,6 +91,23 @@ export default {
       return;
     }
     await this.resolveDataImages(data);
+
+    // Precarrega a imagem do slide capa no cache do browser (elimina tela preta inicial).
+    // Se o arquivo estiver local o protocolo app-local:// o serve em ms; se não estiver,
+    // busca da API em background — em ambos os casos a imagem já está pronta ao renderizar.
+    await this.preloadImage(data.url_image);
+
+    // Precarrega imagens dos demais slides sem bloquear (evita flash ao navegar).
+    {
+      const _seen = new Set([data.url_image || '']);
+      for (const s of Object.values(data?.lyric || data?.slides || {})) {
+        if (s.url_image && !_seen.has(s.url_image)) {
+          _seen.add(s.url_image);
+          this.preloadImage(s.url_image);
+        }
+      }
+    }
+
     $appdata.set("modules.media.data", data);
 
     $appdata.set("modules.media.id_music", id_music);
@@ -371,6 +388,16 @@ export default {
       return;
     }
     await this.resolveDataImages(data);
+    await this.preloadImage(data.url_image);
+    {
+      const _seen = new Set([data.url_image || '']);
+      for (const s of Object.values(data?.lyric || data?.slides || {})) {
+        if (s.url_image && !_seen.has(s.url_image)) {
+          _seen.add(s.url_image);
+          this.preloadImage(s.url_image);
+        }
+      }
+    }
     $appdata.set("modules.lyric.data", data);
 
     $appdata.set("modules.lyric.id_music", id_music);
@@ -843,6 +870,19 @@ export default {
 
     el.setAttribute("autoplay", true);
     return el;
+  },
+
+  // Precarrega uma imagem no cache do browser antes de exibir o slide.
+  // Resolve na primeira conclusão (load, error ou timeout de 5s) sem jamais rejeitar.
+  preloadImage(url) {
+    if (!url) return Promise.resolve();
+    return new Promise((resolve) => {
+      const img = new Image();
+      const t   = setTimeout(resolve, 5000);
+      img.onload  = () => { clearTimeout(t); resolve(); };
+      img.onerror = () => { clearTimeout(t); resolve(); };
+      img.src = url;
+    });
   },
 
   async resolveImageUrl(url) {

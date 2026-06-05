@@ -61,15 +61,30 @@ export default {
     image: String,
     image_position: Number,
   },
-  data: () => ({
-    slides: [{}, {}],
-    repeat: false,
-    width: 0,
-    height: 0,
-    globalBg:     null,
-    _bgListener:  null,
-    _ipcBgListener: null,
-  }),
+  data() {
+    // Inicializa slides[1] com os props já recebidos para evitar que bgKey mude
+    // no primeiro setSlide() (mounted) e dispare a transição bg-crossfade sobre preto.
+    return {
+      slides: [
+        {},
+        {
+          slide_number:   this.slide_number,
+          cover:          this.cover,
+          text:           this.text,
+          aux_text:       this.aux_text,
+          image:          this.image,
+          image_position: this.image_position,
+          active:         true,
+        },
+      ],
+      repeat:         false,
+      width:          0,
+      height:         0,
+      globalBg:       null,
+      _bgListener:    null,
+      _ipcBgListener: null,
+    };
+  },
   computed: {
     props_slide() {
       return {
