@@ -81,6 +81,12 @@ export default {
 
     let data = await $database.get(`music_${id_music}`);
     if (data == null) {
+      // Modo offline ativo mas música não baixada → abre o Download Center (Coletâneas)
+      if ($database.isLocalEnabled()) {
+        window.dispatchEvent(
+          new CustomEvent('open-download-center', { detail: { section: 'collections' } })
+        );
+      }
       this.close(true);
       return;
     }
@@ -123,6 +129,40 @@ export default {
       const rawUrl = mode == "audio" ? data.url_music : data.url_instrumental_music;
       const localUrl = await $electron.mediaResolveFile(rawUrl);
       $appdata.set("modules.media.config.audio", localUrl || $path.file(rawUrl));
+
+      // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar
+      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
+        const albumName = (() => {
+          if (data.albums?.length > 0) {
+            const a = id_album ? data.albums.find((x) => x.id_album == id_album) : null;
+            return (a || data.albums[0])?.name || "";
+          }
+          return "";
+        })();
+        $alert.show(
+          {
+            title: "modules.media.alerts.not_loaded_offline",
+            text: "modules.media.alerts.not_loaded_offline_detail",
+            color: "warning",
+            translate: true,
+            buttons: [
+              { text: "alert.close", color: "grey", value: "close" },
+              { text: "modules.media.alerts.btn_download", color: "primary", value: "download" },
+            ],
+          },
+          function (val) {
+            if (val === "download") {
+              window.dispatchEvent(
+                new CustomEvent("open-download-center", {
+                  detail: { section: "collections", id_album, albumName },
+                })
+              );
+            }
+          }
+        );
+        $appdata.set("modules.media.loading", false);
+        return;
+      }
 
       // Arquivo local encontrado ou lazy_load ativo: reproduz direto (sem XHR)
       if (
@@ -360,6 +400,12 @@ export default {
 
     let data = await $database.get(`album_${id_album}`);
     if (data == null) {
+      // Modo offline ativo mas álbum não baixado → abre o Download Center (Coletâneas)
+      if ($database.isLocalEnabled()) {
+        window.dispatchEvent(
+          new CustomEvent('open-download-center', { detail: { section: 'collections' } })
+        );
+      }
       this.closeAlbum();
       return;
     }
@@ -451,6 +497,10 @@ export default {
   maximize() {
     $appdata.set("modules.media.show", true);
     $appdata.set("modules.media.minimized", false);
+    // Atualiza o módulo ativo para a janela de saída.
+    // AppData.js envia automaticamente para o output via IPC se ele estiver aberto.
+    // Se o output estiver fechado, a mensagem IPC é ignorada — sem efeito colateral.
+    $appdata.set("popup_module", "media");
   },
 
   isMinimized() {
@@ -480,9 +530,9 @@ export default {
         url_image: data?.url_image,
         image_position: data?.image_position,
       },
-      ...Object.values(data?.lyric || {})
-        .filter((lyric) => lyric.show_slide === 1)
-        .sort((a, b) => a.order - b.order)
+      ...Object.values(data?.lyric || data?.slides || {})
+        .filter((lyric) => !lyric.cover && lyric.show_slide !== 0 && lyric.show_slide !== false)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((lyric) => {
           if (lyric.url_image) {
             prev_image = lyric.url_image;
@@ -567,17 +617,42 @@ export default {
     } else {
       let self = this;
       audio.play().catch((e) => {
-        $alert.error(
-          {
-            text: "modules.media.alerts.not_loaded",
-            error: e || "",
-          },
-          function (a) {
-            if (a) {
-              self.open($appdata.get("modules.media.id_music"));
+        const audioSrc = $appdata.get("modules.media.config.audio") || "";
+        if (audioSrc.startsWith("app-local://") || audioSrc.startsWith("file://")) {
+          $alert.show(
+            {
+              title: "modules.media.alerts.not_loaded_offline",
+              text: "modules.media.alerts.not_loaded_offline_detail",
+              color: "warning",
+              translate: true,
+              buttons: [
+                { text: "alert.close", color: "grey", value: "close" },
+                { text: "modules.media.alerts.btn_download", color: "primary", value: "download" },
+              ],
+            },
+            function (val) {
+              if (val === "download") {
+                window.dispatchEvent(
+                  new CustomEvent("open-download-center", {
+                    detail: {
+                      section: "collections",
+                      id_album: $appdata.get("modules.media.id_album"),
+                    },
+                  })
+                );
+              }
             }
-          },
-        );
+          );
+        } else {
+          $alert.error(
+            { text: "modules.media.alerts.not_loaded", error: e || "" },
+            function (a) {
+              if (a) {
+                self.open($appdata.get("modules.media.id_music"));
+              }
+            }
+          );
+        }
       });
       if (fade_audio) {
         this.fadeInAudio(() => {
@@ -660,7 +735,7 @@ export default {
 
   setAlbumInfo(id_album, module = "media") {
     const data = $appdata.get(`modules.${module}.data`);
-    if (data.albums.length <= 0) {
+    if (!data?.albums || data.albums.length <= 0) {
       $appdata.set(`modules.${module}.config.subtitle`, "");
       $appdata.set(`modules.${module}.config.track`, 0);
       $appdata.set(`modules.${module}.config.image`, "");
@@ -772,7 +847,10 @@ export default {
 
   async resolveImageUrl(url) {
     if (!url) return '';
-    // Tenta arquivo local primeiro (Electron, inclusive para URLs remotas já conhecidas)
+    // app-local:// é servido pelo protocolo privilegiado do Electron — sem bloqueio
+    // do webSecurity. Retorna direto sem precisar de IPC adicional.
+    if (url.startsWith('app-local://')) return url;
+    // Tenta resolver para app-local:// via IPC (busca o arquivo no disco)
     if ($electron.isElectron()) {
       const local = await $electron.mediaResolveImage(url);
       if (local) return local;

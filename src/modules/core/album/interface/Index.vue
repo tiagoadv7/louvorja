@@ -11,37 +11,23 @@
     @close="onClose()"
     slot-left-class="w-100"
   >
-    <!-- Botão de download local no cabeçalho -->
+    <!-- Botão de download: abre o Centro de Downloads na seção Coletâneas -->
     <template v-slot:system_buttons>
-      <v-tooltip location="bottom" :text="downloadTooltip">
+      <v-tooltip location="bottom" :text="downloaded ? 'Disponível offline — ir ao Centro de Downloads' : 'Baixar álbum — Centro de Downloads'">
         <template v-slot:activator="{ props }">
-          <div v-bind="props" class="alb-dl-btn-wrap ms-1">
-            <!-- Progresso circular enquanto baixa -->
-            <v-progress-circular
-              v-if="downloading"
-              :model-value="dlPercent"
-              color="white"
-              size="28"
-              width="2"
-              class="alb-dl-progress"
-            >
-              <span style="font-size:8px">{{ dlPercent }}%</span>
-            </v-progress-circular>
-
-            <!-- Botão normal -->
-            <v-btn
-              v-else
-              icon
-              variant="text"
-              size="small"
-              :color="downloaded ? 'success' : 'white'"
-              @click="downloadAlbum"
-            >
-              <v-icon size="20">
-                {{ downloaded ? 'mdi-check-circle' : 'mdi-download-circle-outline' }}
-              </v-icon>
-            </v-btn>
-          </div>
+          <v-btn
+            v-bind="props"
+            icon
+            variant="text"
+            size="small"
+            :color="downloaded ? 'success' : 'white'"
+            class="ms-1"
+            @click="openDownloadCenter"
+          >
+            <v-icon size="20">
+              {{ downloaded ? 'mdi-check-circle' : 'mdi-download-circle-outline' }}
+            </v-icon>
+          </v-btn>
         </template>
       </v-tooltip>
     </template>
@@ -118,12 +104,7 @@ export default {
   },
 
   data: () => ({
-    downloading:      false,
-    downloaded:       false,
-    dlPercent:        0,
-    dlMessage:        '',
-    dlStats:          null,
-    _progressHandler: null,
+    downloaded: false,
   }),
 
   computed: {
@@ -157,15 +138,6 @@ export default {
 
     albumId() {
       return this.$appdata.get("modules.album.id_album");
-    },
-
-    downloadTooltip() {
-      if (this.downloading) return this.dlMessage || 'Baixando...';
-      if (this.downloaded) {
-        if (this.dlStats) return `Disponível offline · ${this.dlStats.json} letras · ${this.dlStats.audio} áudios · ${this.dlStats.images} imagens`;
-        return 'Disponível offline — clique para atualizar';
-      }
-      return 'Baixar álbum completo para uso offline';
     },
   },
 
@@ -203,63 +175,14 @@ export default {
       this.downloaded = await this.$electron.dbLocalExists(`album_${id}`);
     },
 
-    async downloadAlbum() {
-      const id = this.albumId;
-      if (!id || this.downloading) return;
-
-      this.downloading = true;
-      this.dlPercent  = 0;
-      this.dlMessage  = 'Iniciando...';
-
-      this._progressHandler = this.$electron.on('album:download-progress', (data) => {
-        if (data.albumId !== id) return;
-        if (data.step === 'done') return;
-        this.dlPercent = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
-        this.dlMessage = data.message || '';
-      });
-
-      try {
-        const result = await this.$electron.albumDownloadFull(
-          id,
-          import.meta.env.VITE_URL_DATABASE,
-          import.meta.env.VITE_URL_FILES,
-          import.meta.env.VITE_API_TOKEN,
-        );
-
-        if (result?.success) {
-          this.downloaded = true;
-          this.dlStats    = result.stats;
-        } else {
-          this.$alert?.error?.({
-            text: `Falha ao baixar álbum: ${result?.error || 'erro desconhecido'}`,
-          });
-        }
-      } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
-      } finally {
-        this.downloading = false;
-        this.dlPercent   = 0;
-        if (this._progressHandler) {
-          this.$electron.off('album:download-progress', this._progressHandler);
-          this._progressHandler = null;
-        }
-      }
+    openDownloadCenter() {
+      // Abre o Centro de Downloads na seção Coletâneas
+      window.dispatchEvent(new CustomEvent('open-download-center', { detail: { section: 'collections' } }));
     },
 
     onClose() {
-      if (this._progressHandler) {
-        this.$electron.off('album:download-progress', this._progressHandler);
-        this._progressHandler = null;
-      }
       this.$media.closeAlbum();
     },
-  },
-
-  beforeUnmount() {
-    if (this._progressHandler) {
-      this.$electron.off('album:download-progress', this._progressHandler);
-      this._progressHandler = null;
-    }
   },
 };
 </script>

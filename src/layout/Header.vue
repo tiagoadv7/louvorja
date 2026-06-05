@@ -43,9 +43,9 @@
 
     <v-btn
       icon="mdi-download-box-outline"
-      @click="downloadDialog = true"
+      @click="openDownload()"
     />
-    <DownloadCenter v-model="downloadDialog" />
+    <DownloadCenter v-model="downloadDialog" :initial-section="downloadSection" />
 
     <MonitorSelector />
 
@@ -67,6 +67,8 @@ export default {
   },
   data: () => ({
     downloadDialog: false,
+    downloadSection: 'home',
+    _downloadHandler: null,
   }),
   computed: {
     layout() {
@@ -82,7 +84,24 @@ export default {
       return this.$userdata.get("remote.url");
     },
   },
+  mounted() {
+    this._downloadHandler = (e) => {
+      this.downloadSection = e.detail?.section || 'home';
+      this.downloadDialog = true;
+    };
+    window.addEventListener('open-download-center', this._downloadHandler);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('open-download-center', this._downloadHandler);
+  },
+
   methods: {
+    openDownload(section = 'home') {
+      this.downloadSection = section;
+      this.downloadDialog = true;
+    },
+
     changeLayout() {
       if (this.layout == "apps") {
         this.$userdata.set("layout", "ribbon");

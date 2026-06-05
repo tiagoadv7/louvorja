@@ -120,7 +120,19 @@ export default {
       this.outputOpen = false;
     },
     async openOutput() {
-      const moduleId = this.$appdata.get('popup_module');
+      let moduleId = this.$appdata.get('popup_module');
+
+      // Se não há módulo definido para o popup, usar o módulo ativo no momento
+      if (!moduleId) {
+        const modules = this.$appdata.get('modules') || {};
+        for (const [id, mod] of Object.entries(modules)) {
+          if (mod && mod.show) { moduleId = id; break; }
+        }
+        if (moduleId) {
+          this.$appdata.set('popup_module', moduleId);
+        }
+      }
+
       await this.$electron.openOutput(moduleId, null);
       this.outputOpen = true;
     },
@@ -151,6 +163,13 @@ export default {
       Object.keys(data).forEach((param) => {
         this.$electron.sendStateUpdate({ param, value: data[param] });
       });
+      // slide_global_bg não está no appdata (fica no localStorage) — envia separadamente
+      // para que o output window fique em sincronia com qualquer fundo definido na sessão.
+      try {
+        const raw = localStorage.getItem('slide_global_bg');
+        const bgValue = raw ? JSON.parse(raw) : null;
+        this.$electron.sendStateUpdate({ param: 'slide_global_bg', value: bgValue });
+      } catch (_) {}
     });
     this.outputHandlers = [
       h1 ? { channel: "output-window-closed", handler: h1 } : null,

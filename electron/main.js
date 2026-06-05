@@ -1,5 +1,12 @@
-const { app, BrowserWindow, ipcMain, screen, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session, protocol } = require('electron');
+
+// Deve ser chamado ANTES de app.whenReady() — registra o esquema como seguro
+// para que <img src="app-local://capas/2026.bmp"> funcione no renderer
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app-local', privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true } },
+]);
 const path = require('path');
+const fs   = require('fs');
 const Store = require('./store');
 const { setupIpc } = require('./ipc');
 const { createMenu } = require('./menu');
@@ -310,6 +317,76 @@ function registerIpcHandlers() {
       }
     };
     step();
+
+    // Após o fade-in: verifica se SQLite já foi aberto por trySqliteAutoOpen (ipc.js).
+    // Se sim, notifica o renderer. Se não (race condition ou primeira execução sem banco salvo),
+    // tenta abrir com as mediaDirs corretas antes de notificar.
+    // Fallback: dispara sqlite:auto-import para gerar JSONs em db/ se necessário.
+    setTimeout(async () => {
+      try {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+
+        const sqliteReader = require('./sqlite-reader');
+
+        const exeDir   = app.isPackaged
+          ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe')))
+          : app.getPath('userData');
+        const userData = app.getPath('userData');
+
+        // Locais candidatos para database.db
+        const candidates = [
+          path.join(exeDir,   'config', 'database.db'),
+          path.join(userData, 'config', 'database.db'),
+          path.join(userData, 'database.db'),
+        ];
+
+        const dbPath = candidates.find(p => fs.existsSync(p) && fs.statSync(p).size > 100);
+        if (!dbPath) return; // nenhum banco encontrado — app usa apenas API
+
+        if (sqliteReader.isAvailable()) {
+          // Abre se ainda não estiver aberto (ipc.js pode ter aberto em paralelo).
+          // Passa mediaDirs para que imagens e áudio resolvam corretamente.
+          if (!sqliteReader.isOpen()) {
+            let writableBase = exeDir;
+            try { fs.writeFileSync(path.join(exeDir, '.wtest'), ''); fs.unlinkSync(path.join(exeDir, '.wtest')); }
+            catch (_) { writableBase = userData; }
+
+            const writableConfig = path.join(writableBase, 'config');
+            const installConfig  = path.join(exeDir, 'config');
+            const mediaDirs = {
+              capasDir:   path.join(writableConfig, 'capas'),
+              musicasDir: path.join(writableConfig, 'musicas'),
+              imagensDir: path.join(writableConfig, 'imagens'),
+              // fallback: instalação original (read-only, ex: Program Files)
+              _installCapas:   path.join(installConfig, 'capas'),
+              _installMusicas: path.join(installConfig, 'musicas'),
+              _installImagens: path.join(installConfig, 'imagens'),
+            };
+            try { await sqliteReader.open(dbPath, mediaDirs); } catch (_) {}
+          }
+
+          // Notifica o renderer para atualizar o status na UI
+          if (sqliteReader.isOpen()) {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('sqlite:direct-ready', { path: dbPath });
+            }
+            return;
+          }
+        }
+
+        // ── Fallback: aciona import SQLite → JSON se pt_categories.json não existe ─
+        let writableBase = exeDir;
+        try { fs.writeFileSync(path.join(exeDir, '.wtest'), ''); fs.unlinkSync(path.join(exeDir, '.wtest')); }
+        catch (_) { writableBase = userData; }
+
+        const dbDir   = Store.get('db_local_folder') || path.join(writableBase, 'db');
+        const catFile = path.join(dbDir, 'pt_categories.json');
+
+        if (!fs.existsSync(catFile)) {
+          mainWindow.webContents.send('sqlite:auto-import', { dbPath });
+        }
+      } catch (_) {}
+    }, 1500);
   });
 }
 

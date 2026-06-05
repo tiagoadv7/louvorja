@@ -14,16 +14,22 @@ export default {
     try {
       const offlineEnabled = $storage.get("db_local_enabled", false) === true;
 
-      // 1. Modo offline: lê do disco/localStorage local
+      // 1. Modo offline ativo → usa SQLite direto ou JSON em disco.
+      //    O IPC db:local-get já prioriza SQLite quando aberto, depois JSON.
+      //    Somente entra aqui quando o usuário habilitou o modo offline.
       if (offlineEnabled) {
         const local = await $electron.dbLocalGet(file);
         if (local) {
           $dev.write("Lendo BD local (offline)", file);
+          $storage.set(`db:${file}`, local, "session");
           return local;
         }
+        // Offline ativo mas arquivo não encontrado localmente
+        $dev.write("Modo offline — arquivo não encontrado localmente", file);
+        return null;
       }
 
-      // 2. Session memory cache
+      // 2. Session memory cache (evita fetch repetido na mesma sessão)
       const cache_name = `db:${file}`;
       const cache = $storage.get(cache_name, null, "session");
       if (cache) {
@@ -31,7 +37,7 @@ export default {
         return cache;
       }
 
-      // 3. Remote API
+      // 3. API remota (modo padrão / online)
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const url = `${$path.db(`/${file}`)}?${date}`;
       $dev.write("Abrindo BD", url);
@@ -39,22 +45,28 @@ export default {
         headers: { "Api-Token": import.meta.env.VITE_API_TOKEN },
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
-      // Save to session cache
       $dev.write("Salvando BD em cache", file);
       $storage.set(cache_name, data, "session");
 
-      // Auto-save ao disco para uso offline futuro
-      if ($electron.isElectron()) {
-        $electron.dbLocalSave(file, data).catch(() => {});
-      } else if (offlineEnabled) {
-        $electron.dbLocalSave(file, data).catch(() => {});
-      }
+      // Auto-save ao disco para uso offline futuro (transparente, sem bloquear)
+      $electron.dbLocalSave(file, data).catch(() => {});
 
       return data;
     } catch (error) {
+      // Fallback: se API falhar, tenta local mesmo sem modo offline ativo
+      if ($electron.isElectron()) {
+        try {
+          const local = await $electron.dbLocalGet(file);
+          if (local) {
+            $dev.write("Fallback BD local (API falhou)", file);
+            $storage.set(`db:${file}`, local, "session");
+            return local;
+          }
+        } catch (_) {}
+      }
       $alert.error({ text: "messages.file_database_not_found", error });
       return null;
     }

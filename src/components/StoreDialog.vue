@@ -97,7 +97,9 @@
         <v-card variant="outlined" class="mb-4">
           <v-card-text class="pb-2">
             <div class="text-caption text-medium-emphasis mb-3">
-              Selecione um banco de dados SQLite (.db) para importar coletâneas, músicas e letras.
+              Selecione o arquivo <b>database.db</b> da instalação anterior para importar
+              coletâneas, músicas, letras e capas. Os arquivos de mídia já existentes em
+              <code>config/</code> serão reconhecidos automaticamente.
             </div>
 
             <v-text-field
@@ -106,7 +108,7 @@
               density="compact"
               variant="outlined"
               hide-details
-              class="mb-3"
+              class="mb-2"
               readonly
             >
               <template v-slot:append-inner>
@@ -119,6 +121,10 @@
               </template>
             </v-text-field>
 
+            <div v-if="sqliteDbPath" class="text-caption text-medium-emphasis mb-3">
+              Capas detectadas em: <b>{{ sqliteCapasPath }}</b>
+            </div>
+
             <!-- Botões de ação -->
             <div class="d-flex gap-2 mb-2">
               <v-btn
@@ -130,7 +136,7 @@
                 :loading="importing"
                 @click="importSqlite"
               >
-                Importar
+                Importar banco
               </v-btn>
               <v-spacer />
               <v-btn
@@ -169,6 +175,7 @@
               <div class="text-caption">
                 Importado em {{ formatDate(sqliteImportInfo.date) }} —
                 {{ sqliteImportInfo.categories }} coletâneas,
+                {{ sqliteImportInfo.albums || 0 }} álbuns,
                 {{ sqliteImportInfo.musics }} músicas
               </div>
             </v-alert>
@@ -499,6 +506,14 @@ export default {
         $storage.set('db_local_enabled', val);
       },
     },
+
+    // Detecta automaticamente a pasta de capas ao lado do banco selecionado
+    sqliteCapasPath() {
+      if (!this.sqliteDbPath) return '';
+      const sep = this.sqliteDbPath.includes('\\') ? '\\' : '/';
+      const dir = this.sqliteDbPath.split(sep).slice(0, -1).join(sep);
+      return dir + sep + 'capas';
+    },
   },
   watch: {
     dialog(open) {
@@ -604,8 +619,8 @@ export default {
       this.subscribeProgress();
       try {
         const result = await this.$electron.sqliteImport({
-          dbPath: this.sqliteDbPath,
-          capasPath: null,
+          dbPath:    this.sqliteDbPath,
+          capasPath: this.sqliteCapasPath || null,
         });
         if (result.success) {
           await this.loadSqliteInfo();

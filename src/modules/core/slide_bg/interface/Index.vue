@@ -32,28 +32,35 @@
       <v-btn-toggle
         :model-value="bgType"
         @update:modelValue="setBgType"
-        mandatory
         density="compact"
         variant="outlined"
         color="primary"
         class="mb-4 sbg-toggle"
       >
         <v-btn value="none"  size="small" class="flex-grow-1" prepend-icon="mdi-text-box-outline">
-          {{ t('type_none') }}
+          Sem Fundo
         </v-btn>
         <v-btn value="image" size="small" class="flex-grow-1" prepend-icon="mdi-image-outline">
-          {{ t('type_image') }}
+          Imagem
         </v-btn>
         <v-btn value="video" size="small" class="flex-grow-1" prepend-icon="mdi-video-outline">
-          {{ t('type_video') }}
+          Vídeo
         </v-btn>
       </v-btn-toggle>
 
+      <!-- ── Estado neutro: nenhum tipo selecionado (padrão inicial) ─── -->
+      <div v-if="bgType === null" class="sbg-empty">
+        <v-icon size="38" style="opacity:0.25">mdi-image-sync-outline</v-icon>
+        <div class="text-caption text-medium-emphasis mt-2 text-center">
+          Usando imagem padrão do slide. Selecione um tipo acima para personalizar.
+        </div>
+      </div>
+
       <!-- ── Sem fundo ─────────────────────────────────────────────────── -->
-      <div v-if="bgType === 'none'" class="sbg-empty">
+      <div v-else-if="bgType === 'none'" class="sbg-empty">
         <v-icon size="38" style="opacity:0.25">mdi-image-off-outline</v-icon>
         <div class="text-caption text-medium-emphasis mt-2 text-center">
-          {{ t('type_none_desc') }}
+          {{ t('type_none_desc') || 'Apresenta as letras sem imagem de fundo.' }}
         </div>
       </div>
 
@@ -135,6 +142,19 @@
           color="primary" hide-details density="compact" :thumb-size="14"
         />
       </template>
+
+      <!-- ── Redefinir para padrão (visível em todas as abas) ──────────── -->
+      <div class="d-flex justify-center mt-3 mb-1">
+        <v-btn
+          size="small"
+          variant="tonal"
+          color="secondary"
+          prepend-icon="mdi-image-sync-outline"
+          @click="resetToDefault"
+        >
+          Redefinir para imagem padrão do slide
+        </v-btn>
+      </div>
 
       <!-- ── Personalização de Texto ──────────────────────────────────── -->
       <v-divider class="my-4" />
@@ -226,8 +246,11 @@ function t(key) {
 // ── Módulo para CustomizationTools (guarded com v-if no template) ─────────
 const module = computed(() => proxy?.$modules?.get(ID));
 
+// Flag para evitar que o watcher re-escreva o localStorage após um reset
+let _resetPending = false;
+
 // ── Estado local reativo ──────────────────────────────────────────────────
-const bgType       = ref('none');
+const bgType       = ref(null); // null = estado neutro (imagem padrão do slide)
 const imageUrl     = ref('');
 const videoUrl     = ref('');
 const imageOpacity = ref(85);
@@ -272,7 +295,8 @@ const textPreviewStyle = computed(() => ({
 function loadFromUserdata() {
   const ud = proxy?.$userdata;
   if (!ud) return;
-  bgType.value        = ud.get(`modules.${ID}.bg_type`,       'none') ?? 'none';
+  // bgType NÃO é carregado do userdata aqui — ele é determinado pelo estado atual
+  // do localStorage em onMounted (fonte de verdade = o que o slide está mostrando).
   imageUrl.value      = ud.get(`modules.${ID}.image`,          '')    ?? '';
   videoUrl.value      = ud.get(`modules.${ID}.video`,          '')    ?? '';
   imageOpacity.value  = ud.get(`modules.${ID}.image_opacity`,  85)    ?? 85;
@@ -285,13 +309,17 @@ function loadFromUserdata() {
 // ── Sync para localStorage — Slide.vue lê desta chave ─────────────────────
 // Lê direto do $userdata para capturar também mudanças do CustomizationTools.
 function syncToLocalStorage() {
+  // Após um reset, o watcher dispara mas não deve re-escrever o localStorage
+  if (_resetPending) { _resetPending = false; return; }
+  // Estado neutro (nenhum tipo selecionado): não altera o slide
+  if (!bgType.value) return;
   const ud = proxy?.$userdata;
   if (!ud) return;
-  const type = bgType.value || 'none';
+  const type = bgType.value;
   const url  = type === 'video' ? (videoUrl.value || '') : (imageUrl.value || '');
   const effectiveType = (type !== 'none' && !url) ? 'none' : type;
   try {
-    localStorage.setItem('slide_global_bg', JSON.stringify({
+    const bgData = {
       // Fundo
       type:             effectiveType,
       url,
@@ -305,8 +333,17 @@ function syncToLocalStorage() {
       panel_font_size:  ud.get(`modules.${ID}.panel_font_size`,  14)           ?? 14,
       // Janela
       border_spacing:   ud.get(`modules.${ID}.border_spacing`,   5)            ?? 5,
-    }));
+    };
+    localStorage.setItem('slide_global_bg', JSON.stringify(bgData));
+
+    // Atualiza a janela atual (mesma aba / modo web)
     window.dispatchEvent(new CustomEvent('slide-bg-changed'));
+
+    // Sincroniza em tempo real com a janela de saída via IPC (Electron)
+    // state-update é interceptado pelo main process e reenviado para o outputWindow
+    if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
+      window.electron.sendStateUpdate({ param: 'slide_global_bg', value: bgData });
+    }
   } catch (_) {}
 }
 
@@ -323,8 +360,14 @@ watch(
 
 // ── Setters do conteúdo principal ─────────────────────────────────────────
 function setBgType(v) {
+  // v === null significa que o usuário clicou no botão já ativo (toggle off)
+  // — não fazemos nada; para voltar ao padrão usa-se "Redefinir".
+  if (!v) return;
   bgType.value = v;           // reativo imediato → botão ativo atualiza
   proxy?.$userdata?.set(`modules.${ID}.bg_type`, v);
+  // Garante o sync mesmo quando $userdata.set não dispara o watcher
+  // (valor igual no store, ex: 'none' → 'none' após um Redefinir).
+  syncToLocalStorage();
 }
 function setOpacity(v) {
   imageOpacity.value = v;
@@ -395,10 +438,40 @@ function clearVideo() {
   proxy?.$userdata?.set(`modules.${ID}.video`, '');
 }
 
+// Redefine para o padrão: remove o fundo personalizado do localStorage
+// → Slide.vue lê null → exibe a imagem padrão de cada slide do álbum
+function resetToDefault() {
+  // Volta ao estado neutro: nenhum botão selecionado
+  bgType.value = null;
+
+  // Suprime o próximo sync automático do watcher (bgType mudou via ref, não userdata)
+  _resetPending = true;
+  setTimeout(() => { _resetPending = false; }, 0);
+
+  // Remove globalBg do localStorage → Slide.vue lê null → exibe imagem padrão do slide
+  try { localStorage.removeItem('slide_global_bg'); } catch (_) {}
+  window.dispatchEvent(new CustomEvent('slide-bg-changed'));
+
+  // Notifica a janela de saída via IPC (Electron)
+  if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
+    window.electron.sendStateUpdate({ param: 'slide_global_bg', value: null });
+  }
+}
+
 // ── Inicialização ─────────────────────────────────────────────────────────
 onMounted(() => {
-  loadFromUserdata();
-  syncToLocalStorage();
+  loadFromUserdata(); // carrega imageUrl, videoUrl, font, etc. do userdata
+
+  // bgType reflete o ESTADO ATUAL DO SLIDE (localStorage) — não o userdata salvo.
+  // Isso garante que o botão exibido corresponde ao que o slide está mostrando:
+  //   • App recém-iniciado (localStorage limpo por App.vue): null → nenhum botão
+  //   • Sessão ativa com bg personalizado (localStorage tem valor): botão correto
+  try {
+    const raw = localStorage.getItem('slide_global_bg');
+    bgType.value = raw ? (JSON.parse(raw)?.type ?? null) : null;
+  } catch (_) {
+    bgType.value = null;
+  }
 });
 </script>
 

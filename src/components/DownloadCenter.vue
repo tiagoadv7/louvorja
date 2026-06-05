@@ -92,7 +92,7 @@
                   />
                   <v-icon v-else size="72" color="white" style="opacity:0.9">{{ h.icon }}</v-icon>
                   <div v-if="isDownloaded(h.file)" class="dc-album-badge-ok">
-                    <v-icon size="18" color="white">mdi-check</v-icon>
+                    <v-icon size="18" color="success">mdi-check</v-icon>
                   </div>
                 </div>
 
@@ -175,7 +175,7 @@
                   </div>
 
                   <div v-else-if="isAlbumFullyDownloaded(album)" class="dc-album-badge-ok">
-                    <v-icon size="16" color="white">mdi-check</v-icon>
+                    <v-icon size="16" color="success">mdi-check</v-icon>
                   </div>
                 </div>
 
@@ -233,12 +233,20 @@
             <div class="dc-section-title">Configurações</div>
 
             <!-- Modo offline -->
-            <v-card variant="tonal" color="primary" class="mt-3 mb-3">
+            <v-card
+              variant="tonal"
+              :color="localEnabled ? 'success' : 'primary'"
+              class="mt-3 mb-3"
+            >
               <v-card-text class="pa-4">
                 <div class="d-flex align-center">
-                  <v-icon class="mr-3" size="28">mdi-wifi-off</v-icon>
+                  <v-icon class="mr-3" size="28">
+                    {{ localEnabled ? 'mdi-wifi-off' : 'mdi-wifi' }}
+                  </v-icon>
                   <div class="flex-grow-1">
-                    <div class="text-body-2 font-weight-medium">Modo offline</div>
+                    <div class="text-body-2 font-weight-medium">
+                      {{ localEnabled ? 'Modo Offline' : 'Modo Online' }}
+                    </div>
                     <div class="text-caption text-medium-emphasis">
                       {{ localFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}
                     </div>
@@ -246,7 +254,7 @@
                   <v-switch
                     :model-value="localEnabled"
                     @update:modelValue="setOfflineMode"
-                    color="white"
+                    :color="localEnabled ? 'success' : 'grey'"
                     density="compact"
                     hide-details
                   />
@@ -257,6 +265,45 @@
             <div class="text-caption text-medium-emphasis mb-4">
               Com o <b>Modo offline</b> ativado, o app usa os arquivos já baixados
               em vez de acessar a internet. Baixe os conteúdos em <b>Coletâneas</b>.
+            </div>
+
+            <v-divider class="mb-4" />
+
+            <!-- Pastas locais -->
+            <div class="text-subtitle-2 mb-3">Pastas de armazenamento</div>
+
+            <div v-if="dbFolder" class="dc-folder-row mb-2">
+              <v-icon size="16" class="mr-2" color="primary">mdi-database-outline</v-icon>
+              <div class="dc-folder-info">
+                <div class="text-caption font-weight-medium">Banco de dados (JSON)</div>
+                <div class="dc-folder-path text-caption text-medium-emphasis" :title="dbFolder">{{ dbFolder }}</div>
+              </div>
+              <v-btn
+                icon="mdi-folder-open-outline"
+                variant="text"
+                size="x-small"
+                density="compact"
+                class="ml-1"
+                title="Abrir pasta"
+                @click="$electron.shellOpenFolder(dbFolder)"
+              />
+            </div>
+
+            <div v-if="configFolder" class="dc-folder-row mb-4">
+              <v-icon size="16" class="mr-2" color="primary">mdi-folder-music-outline</v-icon>
+              <div class="dc-folder-info">
+                <div class="text-caption font-weight-medium">Mídias (capas, áudios, imagens)</div>
+                <div class="dc-folder-path text-caption text-medium-emphasis" :title="configFolder">{{ configFolder }}</div>
+              </div>
+              <v-btn
+                icon="mdi-folder-open-outline"
+                variant="text"
+                size="x-small"
+                density="compact"
+                class="ml-1"
+                title="Abrir pasta"
+                @click="$electron.shellOpenFolder(configFolder)"
+              />
             </div>
 
             <v-divider class="mb-4" />
@@ -290,7 +337,7 @@
                 <div class="text-body-2 font-weight-medium mb-1">
                   {{ scanResult.total }} arquivo(s) em falta
                 </div>
-                <div class="d-flex gap-3 flex-wrap">
+                <div class="d-flex gap-3 flex-wrap mb-2">
                   <span v-if="scanResult.counts.cover" class="text-caption">
                     🖼 {{ scanResult.counts.cover }} capa(s)
                   </span>
@@ -300,6 +347,16 @@
                   <span v-if="scanResult.counts.audio" class="text-caption">
                     🔊 {{ scanResult.counts.audio }} áudio(s)
                   </span>
+                </div>
+                <div v-if="configFolder" class="text-caption text-medium-emphasis" style="word-break:break-all">
+                  Pasta verificada: <span class="font-weight-medium" style="font-family:monospace">{{ configFolder }}</span>
+                  <v-btn
+                    variant="text"
+                    size="x-small"
+                    density="compact"
+                    class="ml-1"
+                    @click="$electron.shellOpenFolder(configFolder)"
+                  >Abrir</v-btn>
                 </div>
               </v-alert>
             </template>
@@ -374,28 +431,25 @@
                       <span class="text-body-2 flex-grow-1">
                         {{ scanResult.counts.cover }} capa(s) de álbum
                       </span>
-                      <span class="text-caption text-medium-emphasis">→ config/capas</span>
                     </div>
                     <div v-if="scanResult && scanResult.counts && scanResult.counts.image" class="dc-missing-row">
                       <v-icon size="16" color="primary" class="mr-2">mdi-image</v-icon>
                       <span class="text-body-2 flex-grow-1">
                         {{ scanResult.counts.image }} imagem(ns) de slides
                       </span>
-                      <span class="text-caption text-medium-emphasis">→ config/imagens</span>
                     </div>
                     <div v-if="scanResult && scanResult.counts && scanResult.counts.audio" class="dc-missing-row">
                       <v-icon size="16" color="primary" class="mr-2">mdi-music-note</v-icon>
                       <span class="text-body-2 flex-grow-1">
                         {{ scanResult.counts.audio }} arquivo(s) de áudio
                       </span>
-                      <span class="text-caption text-medium-emphasis">→ config/musicas</span>
                     </div>
                   </div>
 
                   <v-alert type="info" variant="tonal" density="compact" class="mt-4">
                     <div class="text-caption">
-                      Os arquivos serão salvos nas pastas padrão do aplicativo
-                      (<code>config/capas</code>, <code>config/imagens</code>, <code>config/musicas</code>).
+                      Os arquivos serão salvos em subpastas de:
+                      <span class="font-weight-medium" style="word-break:break-all">{{ configFolder || 'config/' }}</span>
                     </div>
                   </v-alert>
                 </v-card-text>
@@ -449,7 +503,7 @@
                       />
                       <v-icon v-else size="42" color="grey-lighten-1">mdi-music-box</v-icon>
                       <div class="dc-album-badge-ok">
-                        <v-icon size="16" color="white">mdi-check</v-icon>
+                        <v-icon size="16" color="success">mdi-check</v-icon>
                       </div>
                     </div>
                     <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
@@ -491,7 +545,7 @@
                       />
                       <v-icon v-else size="52" color="white" style="opacity:0.85">{{ h.icon }}</v-icon>
                       <div class="dc-album-badge-ok">
-                        <v-icon size="16" color="white">mdi-check</v-icon>
+                        <v-icon size="16" color="success">mdi-check</v-icon>
                       </div>
                     </div>
                     <div class="dc-album-name" :title="h.label">{{ h.label }}</div>
@@ -611,7 +665,8 @@ export default {
   name: 'DownloadCenter',
 
   props: {
-    modelValue: { type: Boolean, default: false },
+    modelValue:     { type: Boolean, default: false },
+    initialSection: { type: String,  default: 'home' },
   },
 
   emits: ['update:modelValue'],
@@ -621,6 +676,12 @@ export default {
     dialog(v) {
       this.$emit('update:modelValue', v);
       this.onToggle(v);
+    },
+    // Navega para a seção solicitada mesmo se o dialog já estava aberto
+    initialSection(s) {
+      if (this.dialog && s && s !== 'home') {
+        this.goTo(s);
+      }
     },
   },
 
@@ -654,6 +715,9 @@ export default {
     replaceAlbumTarget:    null,
     // Infos dos álbuns baixados (id_album -> {name, url_image})
     downloadedAlbumInfos:  {},
+    // Caminhos das pastas locais
+    dbFolder:     '',
+    configFolder: '',
   }),
 
   computed: {
@@ -724,10 +788,15 @@ export default {
   methods: {
     onToggle(open) {
       if (open) {
+        // Usa a seção solicitada (ex: 'collections' quando vem do botão do álbum)
+        if (this.initialSection && this.initialSection !== 'home') {
+          this.section = this.initialSection;
+        }
         this.localEnabled = $storage.get('db_local_enabled', false) === true;
         this.init();
         this.subscribeProgress();
       } else {
+        this.section = 'home';
         this.unsubscribeProgress();
         this.unsubscribeMissingProgress();
       }
@@ -736,12 +805,20 @@ export default {
     setOfflineMode(val) {
       this.localEnabled = val;
       $storage.set('db_local_enabled', val);
+
+      // Limpa o cache de sessão da API (db:*) para que o próximo acesso
+      // use o modo correto (local ou API) sem servir dados em cache
+      $storage.removeAll('db', 'session');
+
+      // Recarrega os dados do álbum/categorias com o novo modo
+      this.init();
     },
 
     async init() {
       await this.loadLocalFiles();
       if (this.section === 'collections') await this.loadCategories();
       if (this.section === 'downloads') await this.loadDownloadedAlbumInfos();
+      if (this.section === 'settings') await this.loadFolderPaths();
     },
 
     async goTo(s) {
@@ -751,7 +828,10 @@ export default {
         await this.loadLocalFiles();
         await this.loadDownloadedAlbumInfos();
       }
-      if (s === 'settings') await this.loadLocalFiles();
+      if (s === 'settings') {
+        await this.loadLocalFiles();
+        await this.loadFolderPaths();
+      }
     },
 
     async loadCategories() {
@@ -763,6 +843,12 @@ export default {
 
     async loadLocalFiles() {
       this.localFiles = await this.$electron.dbLocalList() || [];
+    },
+
+    async loadFolderPaths() {
+      if (!this.isElectron) return;
+      this.dbFolder     = await this.$electron.dbGetActualDir() || '';
+      this.configFolder = await this.$electron.configGetDir()   || '';
     },
 
     async loadDownloadedAlbumInfos() {
@@ -812,7 +898,11 @@ export default {
 
     resolveUrl(url) {
       if (!url) return '';
-      if (url.startsWith('file://') || url.startsWith('http://') || url.startsWith('https://')) return url;
+      // Já é URL absoluta (file://, http://, https://) → usa direto
+      if (url.startsWith('file://') || url.startsWith('app-local://') || url.startsWith('http://') || url.startsWith('https://')) return url;
+      // URL relativa (ex: /covers/2026.bmp da API):
+      // Se tiver arquivo local em cache (capas), a syncLocalFileUrls já teria substituído.
+      // Fallback: resolve contra VITE_URL_FILES para acesso online.
       return this.$path.file(url);
     },
 
@@ -821,10 +911,10 @@ export default {
       this.downloading = { ...this.downloading, [filename]: true };
       try {
         const ok = await $database.download(filename);
-        if (!ok) this.$alert?.error?.({ text: `Falha ao baixar: ${filename}. Verifique sua conexão.` });
+        if (!ok) this.$alert?.error?.({ text: `Falha ao baixar: ${filename}. Verifique sua conexão.`, translate: false });
         await this.loadLocalFiles();
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         this.downloading = { ...this.downloading, [filename]: false };
       }
@@ -838,9 +928,9 @@ export default {
           if (!await $database.download(f)) failed.push(f);
         }
         await this.loadLocalFiles();
-        if (failed.length) this.$alert?.error?.({ text: `Falha ao baixar: ${failed.join(', ')}. Verifique sua conexão.` });
+        if (failed.length) this.$alert?.error?.({ text: `Falha ao baixar: ${failed.join(', ')}. Verifique sua conexão.`, translate: false });
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         this.downloading = { ...this.downloading, [key]: false };
       }
@@ -917,7 +1007,7 @@ export default {
         this.albumStats = { ...this.albumStats, [id]: statsLocal };
         await this.loadLocalFiles();
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         const p = { ...this.albumProgress };
         delete p[id];
@@ -949,17 +1039,23 @@ export default {
         if (result.success) {
           const s = result.stats || {};
           this.albumStats = { ...this.albumStats, [id]: s };
+          // Recarrega categorias para que as capas com URL app-local:// sejam exibidas
+          await this.loadCategories();
           if ((s.skipped || 0) > 0 && !overwrite) {
             this.$alert?.info?.({
               text: `${s.skipped} arquivo(s) já existiam e foram ignorados. Use "Substituir" para forçar o re-download.`,
+              translate: false,
             });
           }
         } else {
-          this.$alert?.error?.({ text: `Falha ao baixar álbum "${album.name}": ${result.error || 'erro desconhecido'}` });
+          this.$alert?.error?.({
+            text: `Falha ao baixar álbum "${album.name}": ${result.error || 'erro desconhecido'}`,
+            translate: false,
+          });
         }
         await this.loadLocalFiles();
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         const p = { ...this.albumProgress };
         delete p[id];
@@ -1000,7 +1096,7 @@ export default {
         // Store as plain object so Vue reactivity doesn't wrap nested items in Proxy
         this.scanResult = raw ? JSON.parse(JSON.stringify(raw)) : null;
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         this.scanning = false;
       }
@@ -1026,10 +1122,10 @@ export default {
           this.scanResult = null;
           await this.loadLocalFiles();
         } else {
-          this.$alert?.error?.({ text: result.error || 'Erro ao baixar arquivos.' });
+          this.$alert?.error?.({ text: result.error || 'Erro ao baixar arquivos.', translate: false });
         }
       } catch (e) {
-        this.$alert?.error?.({ text: String(e) });
+        this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
         this.downloadingMissing = false;
         this.missingProgress    = { percent: 0, message: '' };
@@ -1297,13 +1393,14 @@ export default {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: rgba(46,204,113,0.85);
+  background: rgba(255,255,255,0.92);
   border-radius: 50%;
   width: 22px;
   height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 .dc-album-name {
   font-size: 11px;
@@ -1322,6 +1419,27 @@ export default {
   font-size: 9px;
   opacity: 0.6;
   padding-bottom: 2px;
+}
+
+/* ── Pastas de armazenamento ─────────────────────────────────────── */
+.dc-folder-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(128,128,128,0.06);
+  border: 1px solid rgba(128,128,128,0.12);
+}
+.dc-folder-info {
+  flex: 1;
+  min-width: 0;
+}
+.dc-folder-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 11px;
 }
 
 /* ── Verificação de arquivos em falta ───────────────────────────── */

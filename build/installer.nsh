@@ -24,6 +24,17 @@
   CreateDirectory "$INSTDIR\config\capas"
   CreateDirectory "$INSTDIR\config\fontes"
   CreateDirectory "$INSTDIR\config\ico"
+
+  ; Se o usuário tiver um database.db customizado (baixado via app ou copiado
+  ; manualmente) em AppData, preserva — não sobrescreve com o bundled.
+  ; O bundled/database.db já foi extraído para $INSTDIR\config\ pelo electron-builder.
+  ; Se existir um db mais recente em userData, move o bundled para .bak.
+  StrCpy $0 "$APPDATA\LouvorJA\config\database.db"
+  ${If} ${FileExists} "$0"
+    ; Usuário tem versão própria → faz backup do bundled e mantém o customizado
+    Rename "$INSTDIR\config\database.db" "$INSTDIR\config\database.db.bak"
+  ${EndIf}
+
   ; Concede permissão total de leitura/escrita a todos os usuários
   ; (necessário para o app baixar arquivos sem precisar de admin)
   nsExec::ExecToLog 'icacls "$INSTDIR\config" /grant:r "*S-1-1-0":(OI)(CI)F /T /Q'

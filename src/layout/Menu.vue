@@ -24,6 +24,14 @@
           <v-list-item-title>{{ moduleTitle(module) }}</v-list-item-title>
         </v-list-item>
       </template>
+      <v-divider class="my-1" />
+      <v-list-item
+        v-if="$electron.isElectron()"
+        prepend-icon="mdi-folder-sync-outline"
+        @click="$appdata.toogle('menu.show'); dispatchSyncFiles()"
+      >
+        <v-list-item-title>Sincronizar arquivos</v-list-item-title>
+      </v-list-item>
     </v-list>
   </v-navigation-drawer>
 </template>
@@ -31,6 +39,7 @@
 <script>
 export default {
   name: "MenuLayout",
+  emits: ['sync-files'],
   computed: {
     show: {
       get() {
@@ -70,6 +79,9 @@ export default {
     },
   },
   methods: {
+    dispatchSyncFiles() {
+      window.dispatchEvent(new CustomEvent('sync-files'));
+    },
     moduleTitle(module) {
       if (!module.title) return module.manifest?.name || '';
       const translated = this.$t(module.title);

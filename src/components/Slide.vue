@@ -1,17 +1,17 @@
 <template>
-  <div ref="container" class="w-100 h-100">
-    <transition
-      name="fade"
-      v-for="(slide, index) in slides.slice().reverse()"
-      :key="index"
-    >
+  <!-- position:relative para z-index funcionar entre os filhos absolute.
+       O container é sempre transparent — os divs de fundo internos (absolute, z-index 1/2)
+       cobrem o container o tempo todo, inclusive durante o bg-crossfade. -->
+  <div ref="container" class="w-100 h-100" style="position:relative;overflow:hidden;background:transparent">
+    <!-- ── Camada de fundo (separada do texto) ─────────────────────────────
+         Transição bg-crossfade: novo fundo aparece por cima (z-index:2) enquanto
+         o antigo permanece visível abaixo (z-index:1) — sem transparência. -->
+    <transition name="bg-crossfade">
       <div
-        v-if="!slide.destroy"
-        v-show="slide.active"
+        :key="bgKey"
         class="position-absolute top-0 left-0 w-100 h-100"
-        :style="style_bg(slide)"
+        :style="bgStyle"
       >
-        <!-- Layer de vídeo global (apenas quando type='video') -->
         <video
           v-if="globalBg && globalBg.type === 'video' && globalBg.url"
           :src="globalBg.url"
@@ -19,22 +19,31 @@
           class="position-absolute top-0 left-0 w-100 h-100"
           :style="{ objectFit: globalBg.fit || 'cover', opacity: (globalBg.opacity ?? 100) / 100 }"
         />
+      </div>
+    </transition>
 
-        <div
-          class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center align-center"
-        >
-          <div>
-            <div
-              v-if="slide.aux_text"
-              v-html="slide.aux_text"
-              :style="style_aux_text()"
-            />
-            <div
-              v-if="slide.text"
-              v-html="slide.text"
-              :style="style_text(slide)"
-            />
-          </div>
+    <!-- ── Camada de texto (fade independente do fundo) ────────────────── -->
+    <transition
+      name="fade"
+      v-for="(slide, index) in slides.slice().reverse()"
+      :key="'txt-' + index"
+    >
+      <div
+        v-if="!slide.destroy"
+        v-show="slide.active"
+        class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center align-center"
+      >
+        <div>
+          <div
+            v-if="slide.aux_text"
+            v-html="slide.aux_text"
+            :style="style_aux_text()"
+          />
+          <div
+            v-if="slide.text"
+            v-html="slide.text"
+            :style="style_text(slide)"
+          />
         </div>
       </div>
     </transition>
@@ -57,8 +66,9 @@ export default {
     repeat: false,
     width: 0,
     height: 0,
-    globalBg:    null,
-    _bgListener: null,
+    globalBg:     null,
+    _bgListener:  null,
+    _ipcBgListener: null,
   }),
   computed: {
     props_slide() {
@@ -74,6 +84,25 @@ export default {
     screenSize() {
       return { width: this.width, height: this.height };
     },
+
+    // Slide ativo corrente (para estilo do fundo estático)
+    activeSlide() {
+      return this.slides.find(s => s.active) || this.slides[1] || {};
+    },
+
+    // Chave única do fundo — muda SOMENTE quando a imagem/tipo realmente muda,
+    // evitando que a transição dispare ao trocar apenas o texto.
+    bgKey() {
+      const bg = this.globalBg;
+      if (bg) return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}`;
+      return `bg-default-${this.activeSlide.image || ''}-${this.image_position ?? 5}`;
+    },
+
+    // Estilo do fundo calculado a partir do slide ativo (sem depender do slide em transição)
+    bgStyle() {
+      return this.style_bg(this.activeSlide);
+    },
+
   },
   watch: {
     props_slide() {
@@ -122,37 +151,8 @@ export default {
     style_bg(slide) {
       const bg = this.globalBg;
 
-      // ── Fundo personalizado configurado ──────────────────────────────
-      if (bg) {
-        // type='none': transparente — apenas o quadro rgba das letras aparece.
-        //   Usa transição 'fade-text' para evitar sobreposição.
-        if (bg.type === 'none') {
-          return { overflow: "hidden", backgroundColor: "transparent" };
-        }
-
-        // type='image': aplicado como backgroundImage no slide (igual ao original).
-        //   O fundo preto sólido cobre o slide anterior durante a transição.
-        if (bg.type === 'image' && bg.url) {
-          return {
-            overflow:           "hidden",
-            backgroundColor:    bg.background_color || "rgb(0, 0, 0)",
-            backgroundImage:    `url(${bg.url})`,
-            backgroundRepeat:   "no-repeat",
-            backgroundPosition: "center center",
-            backgroundSize:     bg.fit || "cover",
-          };
-        }
-
-        // type='video': fundo preto sólido — o vídeo é renderizado como elemento
-        //   filho dentro do slide div (acima do preto, abaixo do texto).
-        return {
-          overflow:        "hidden",
-          backgroundColor: bg.background_color || "rgb(0, 0, 0)",
-        };
-      }
-
-      // ── Modo padrão: idêntico ao código original ──────────────────────
-      return {
+      // Estilo padrão do slide (usado quando não há fundo personalizado ativo)
+      const slideDefault = {
         overflow:           "hidden",
         backgroundColor:    "rgb(0, 0, 0)",
         backgroundImage:    `url(${slide.image})`,
@@ -164,6 +164,35 @@ export default {
         ][this.image_position || 5],
         backgroundSize: "cover",
       };
+
+      // ── Fundo personalizado configurado ──────────────────────────────
+      if (bg) {
+        // type='none': transparente — letras aparecem sem imagem de fundo
+        if (bg.type === 'none') {
+          return { overflow: "hidden", backgroundColor: "transparent" };
+        }
+
+        // type='image': imagem personalizada escolhida pelo usuário
+        if (bg.type === 'image' && bg.url) {
+          return {
+            overflow:           "hidden",
+            backgroundColor:    bg.background_color || "rgb(0, 0, 0)",
+            backgroundImage:    `url(${bg.url})`,
+            backgroundRepeat:   "no-repeat",
+            backgroundPosition: "center center",
+            backgroundSize:     bg.fit || "cover",
+          };
+        }
+
+        // type='video': fundo preto (vídeo renderizado como elemento filho)
+        return {
+          overflow:        "hidden",
+          backgroundColor: bg.background_color || "rgb(0, 0, 0)",
+        };
+      }
+
+      // ── Sem fundo personalizado (globalBg=null): imagem padrão do slide ──
+      return slideDefault;
     },
 
     style_aux_text() {
@@ -231,22 +260,32 @@ export default {
     this.globalBg    = this._readGlobalBg();
     this._bgListener = () => { this.globalBg = this._readGlobalBg(); };
     window.addEventListener('slide-bg-changed', this._bgListener);
+
+    // Sincronização em tempo real via IPC (janela de saída Electron):
+    // recebe state-update com param='slide_global_bg' enviado pelo Fundo Personalizado
+    if (window.electron) {
+      this._ipcBgListener = window.electron.on('state-update', ({ param, value }) => {
+        if (param === 'slide_global_bg') {
+          this.globalBg = value ?? this._readGlobalBg();
+        }
+      });
+    }
+
     this.setSlide();
     this.windowResize();
     window.addEventListener("resize", this.windowResize);
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
-    if (this._bgListener) window.removeEventListener('slide-bg-changed', this._bgListener);
+    if (this._bgListener)    window.removeEventListener('slide-bg-changed', this._bgListener);
+    if (this._ipcBgListener) window.electron?.off?.('state-update', this._ipcBgListener);
   },
 };
 </script>
 
 <style scoped>
-/* ── Transição padrão — idêntica ao código original ──────────────────
-   Enter e Leave com a MESMA duração (0.5s ease).
-   O fundo preto sólido do novo slide cobre o conteúdo do slide anterior,
-   impedindo sobreposição de textos durante o crossfade. */
+/* ── Transição de texto (fade normal) ────────────────────────────────
+   Texto antigo sai enquanto novo entra — crossfade simples. */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.5s ease;
@@ -256,4 +295,20 @@ export default {
   opacity: 0;
 }
 
+/* ── Transição de fundo (bg-crossfade) ──────────────────────────────
+   Novo fundo entra por cima (z-index:2) enquanto o antigo fica visível
+   abaixo (z-index:1) durante toda a animação — sem transparência.
+   O container tem background-color:black como rede de segurança. */
+.bg-crossfade-enter-active {
+  transition: opacity 0.5s ease;
+  z-index: 2;
+}
+.bg-crossfade-leave-active {
+  z-index: 1;
+  /* Mesmo delay+duração do enter para o element DOM não ser removido antes da hora.
+     opacity não muda (1→1), mas o browser mantém o element por 0.5s. */
+  transition: opacity 0.001s ease 0.499s;
+}
+.bg-crossfade-enter-from { opacity: 0; }
+.bg-crossfade-leave-to   { opacity: 1; }
 </style>

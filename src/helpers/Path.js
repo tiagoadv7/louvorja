@@ -5,7 +5,7 @@ export default {
   },
   file(filePath) {
     if (!filePath) return '';
-    if (filePath.startsWith('file://') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    if (filePath.startsWith('file://') || filePath.startsWith('app-local://') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
       return filePath;
     }
     const base = (import.meta.env.VITE_URL_FILES || '').replace(/\/$/, '');

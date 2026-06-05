@@ -141,17 +141,39 @@ export default {
   mediaResolveImage: (filename) =>
     isElectron() ? window.electron.mediaResolveImage(filename) : Promise.resolve(null),
 
-  // ── Importação SQLite ─────────────────────────────────────────────────
+  // ── Importação SQLite (legacy: converte para JSON) ────────────────────
   sqliteImport: (opts) =>
     isElectron() ? window.electron.sqliteImport(opts) : Promise.resolve({ success: false }),
   sqliteGetImportInfo: () =>
     isElectron() ? window.electron.sqliteGetImportInfo() : Promise.resolve(null),
   sqliteClear: () =>
     isElectron() ? window.electron.sqliteClear() : Promise.resolve(false),
+  sqliteCheckUpdate: (dbBaseUrl, token) =>
+    isElectron()
+      ? window.electron.sqliteCheckUpdate(dbBaseUrl, token)
+      : Promise.resolve({ updated: false, reason: 'not-electron' }),
+
+  // ── SQLite direto (better-sqlite3) — sem conversão para JSON ──────────
+  sqliteOpenPath: (dbPath) =>
+    isElectron()
+      ? window.electron.sqliteOpenPath(dbPath)
+      : Promise.resolve({ success: false, error: 'not-electron' }),
+  sqliteUnload: () =>
+    isElectron() ? window.electron.sqliteUnload() : Promise.resolve(false),
+  sqliteStatus: () =>
+    isElectron()
+      ? window.electron.sqliteStatus()
+      : Promise.resolve({ available: false, open: false, path: null }),
+  sqliteAutoDetect: () =>
+    isElectron()
+      ? window.electron.sqliteAutoDetect()
+      : Promise.resolve({ found: false, reason: 'not-electron' }),
 
   // ── Banco de dados local ───────────────────────────────────────────────
   dbGetLocalFolder: () =>
     isElectron() ? window.electron.dbGetLocalFolder() : Promise.resolve(null),
+  dbGetActualDir: () =>
+    isElectron() ? window.electron.dbGetActualDir() : Promise.resolve(null),
   dbSetLocalFolder: (folderPath) =>
     isElectron() ? window.electron.dbSetLocalFolder(folderPath) : Promise.resolve(false),
   dbLocalExists: (filename) =>
@@ -179,6 +201,11 @@ export default {
       ? window.electron.scanMissingFiles()
       : Promise.resolve({ total: 0, missing: [], counts: {} }),
 
+  scanAlbumsFiles: () =>
+    isElectron()
+      ? window.electron.scanAlbumsFiles()
+      : Promise.resolve({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] }),
+
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
     isElectron()
       ? window.electron.downloadMissingFiles(missingList, filesBaseUrl, token)
@@ -205,6 +232,8 @@ export default {
   // ── Pasta config/ ────────────────────────────────────────────────────────
   configGetDir: () =>
     isElectron() ? window.electron.configGetDir() : Promise.resolve(null),
+  shellOpenFolder: (folderPath) =>
+    isElectron() ? window.electron.shellOpenFolder(folderPath) : Promise.resolve(),
 
   // ── Sincronização de estado ────────────────────────────────────────────
   sendStateUpdate: (data) =>

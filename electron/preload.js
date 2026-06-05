@@ -14,6 +14,8 @@ const RECEIVE_CHANNELS = [
   'menu:about',
   'menu:check-updates',
   'sqlite:progress',
+  'sqlite:auto-import',
+  'sqlite:direct-ready',
   'regserver:registration',
   'album:download-progress',
   'files:download-progress',
@@ -56,6 +58,7 @@ contextBridge.exposeInMainWorld('electron', {
   getUserDataPath: () => ipcRenderer.invoke('app:get-user-data-path'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   showItemInFolder: (filePath) => ipcRenderer.invoke('app:show-item-in-folder', filePath),
+  refreshWritableBase: () => ipcRenderer.invoke('app:refresh-writable-base'),
 
   // ── Arquivos de mídia locais ─────────────────────────────────────────────
   mediaGetBaseFolder: () => ipcRenderer.invoke('media:get-base-folder'),
@@ -66,10 +69,18 @@ contextBridge.exposeInMainWorld('electron', {
   mediaSetImagesFolder: (folderPath) => ipcRenderer.invoke('media:set-images-folder', folderPath),
   mediaResolveImage: (filename) => ipcRenderer.invoke('media:resolve-image', filename),
 
-  // ── Importação SQLite ────────────────────────────────────────────────────
+  // ── Importação SQLite (legacy: converte para JSON) ───────────────────────
   sqliteImport: (opts) => ipcRenderer.invoke('sqlite:import', opts),
   sqliteGetImportInfo: () => ipcRenderer.invoke('sqlite:get-import-info'),
   sqliteClear: () => ipcRenderer.invoke('sqlite:clear'),
+  sqliteCheckAutoImport: () => ipcRenderer.invoke('sqlite:check-auto-import'),
+  sqliteCheckUpdate: (dbBaseUrl, token) => ipcRenderer.invoke('sqlite:check-update', { dbBaseUrl, token }),
+
+  // ── SQLite direto (better-sqlite3) ───────────────────────────────────────
+  sqliteOpenPath:   (dbPath) => ipcRenderer.invoke('sqlite:open-path', dbPath),
+  sqliteUnload:     ()       => ipcRenderer.invoke('sqlite:unload'),
+  sqliteStatus:     ()       => ipcRenderer.invoke('sqlite:status'),
+  sqliteAutoDetect: ()       => ipcRenderer.invoke('sqlite:auto-detect'),
 
   // ── Servidor de registro (QR Code) ──────────────────────────────────────
   regserverStart:   ()           => ipcRenderer.invoke('regserver:start'),
@@ -80,6 +91,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Banco de dados local ─────────────────────────────────────────────────
   dbGetLocalFolder: () => ipcRenderer.invoke('db:get-local-folder'),
+  dbGetActualDir: () => ipcRenderer.invoke('db:get-actual-dir'),
   dbSetLocalFolder: (folderPath) => ipcRenderer.invoke('db:set-local-folder', folderPath),
   dbLocalExists: (filename) => ipcRenderer.invoke('db:local-exists', filename),
   dbLocalGet: (filename) => ipcRenderer.invoke('db:local-get', filename),
@@ -91,6 +103,7 @@ contextBridge.exposeInMainWorld('electron', {
   albumDownloadFull: (albumId, dbBaseUrl, filesBaseUrl, token, overwrite = false) =>
     ipcRenderer.invoke('album:download-full', albumId, dbBaseUrl, filesBaseUrl, token, overwrite),
   scanMissingFiles: () => ipcRenderer.invoke('files:scan-missing'),
+  scanAlbumsFiles: () => ipcRenderer.invoke('files:scan-albums'),
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
     ipcRenderer.invoke('files:download-missing', missingList, filesBaseUrl, token),
 
@@ -103,6 +116,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Pasta config/ ────────────────────────────────────────────────────────
   configGetDir: () => ipcRenderer.invoke('config:get-dir'),
+  shellOpenFolder: (folderPath) => ipcRenderer.invoke('shell:open-folder', folderPath),
 
   // ── Sincronização de estado (janela principal → janela de saída) ─────────
   sendStateUpdate: (data) => ipcRenderer.send('state-update', data),

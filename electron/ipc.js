@@ -2,6 +2,7 @@ const { ipcMain, dialog, shell, app, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const Store = require('./store');
+const sqliteReader = require('./sqlite-reader');
 
 // Resolve o arquivo WASM do sql.js tanto em dev quanto no app empacotado.
 // electron-builder desempacota sql.js para app.asar.unpacked via asarUnpack.
@@ -224,7 +225,48 @@ function setupIpc(mainWindow) {
   // ── Banco de dados local ───────────────────────────────────────────────────
   const { net } = require('electron');
 
-  const getDbDir = () => Store.get('db_local_folder') || path.join(app.getPath('userData'), 'db');
+  // Localização de LEITURA: onde estão os arquivos originais do LouvorJA
+  //   Dev       → userData
+  //   Portátil  → PORTABLE_EXECUTABLE_DIR
+  //   Instalado → pasta do .exe  (pode ser Program Files — read-only)
+  const getInstallDir = () => {
+    if (!app.isPackaged) return app.getPath('userData');
+    if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
+    return path.dirname(app.getPath('exe'));
+  };
+
+  // Base GRAVÁVEL — como o LouvorJA Delphi: usa a pasta do exe quando gravável.
+  //   Dev       → userData
+  //   Portátil  → PORTABLE_EXECUTABLE_DIR
+  //   Instalado em local gravável (ex: E:\Louvor JA\LouvorJA\) → pasta do exe
+  //   Instalado em Program Files (não-gravável) → userData (AppData\Roaming)
+  // Lazy singleton: calculado na primeira chamada, cacheado para evitar I/O repetido.
+  // Pode ser limpo via ipc handler 'app:refresh-writable-base' se permissões mudarem.
+  let _writableBaseCached = null;
+  const getWritableBase = () => {
+    if (_writableBaseCached) return _writableBaseCached;
+    if (!app.isPackaged) return (_writableBaseCached = app.getPath('userData'));
+    if (process.env.PORTABLE_EXECUTABLE_DIR) return (_writableBaseCached = process.env.PORTABLE_EXECUTABLE_DIR);
+    const exeDir = path.dirname(app.getPath('exe'));
+    try {
+      // Testa se a pasta do exe aceita gravação (como o Delphi: config/ junto ao exe)
+      const testFile = path.join(exeDir, '.louvorja-write-test');
+      fs.writeFileSync(testFile, '1');
+      fs.unlinkSync(testFile);
+      _writableBaseCached = exeDir;
+    } catch (_) {
+      _writableBaseCached = app.getPath('userData');
+    }
+    return _writableBaseCached;
+  };
+
+  ipcMain.handle('app:refresh-writable-base', () => {
+    _writableBaseCached = null; // força reavaliação na próxima chamada
+    return getWritableBase();
+  });
+
+  // Pasta de JSONs: sempre gravável (ou pasta customizada pelo usuário)
+  const getDbDir = () => Store.get('db_local_folder') || path.join(getWritableBase(), 'db');
 
   ipcMain.handle('db:get-local-folder', () => Store.get('db_local_folder', null));
 
@@ -238,16 +280,32 @@ function setupIpc(mainWindow) {
   });
 
   ipcMain.handle('db:local-exists', (_, filename) => {
+    // SQLite aberto tem precedência sobre os JSON em disco
+    if (sqliteReader.isOpen()) {
+      const data = sqliteReader.get(filename);
+      if (data !== null) return true;
+    }
     return fs.existsSync(path.join(getDbDir(), `${filename}.json`));
   });
 
   ipcMain.handle('db:local-get', (_, filename) => {
+    // 1. Leitura direta do SQLite — fonte primária quando config/database.db está aberto
+    if (sqliteReader.isOpen()) {
+      try {
+        const data = sqliteReader.get(filename);
+        if (data !== null) return data;
+      } catch (e) {
+        console.warn('[IPC] db:local-get SQLite falhou para', filename, '—', e.message, '— tentando JSON');
+      }
+    }
+
+    // 2. Fallback: arquivo JSON em disco (db/ — downloads da API ou importação manual)
     try {
       const fp = path.join(getDbDir(), `${filename}.json`);
       if (!fs.existsSync(fp)) return null;
       return JSON.parse(fs.readFileSync(fp, 'utf8'));
     } catch (e) {
-      console.error('[IPC] db:local-get error:', e.message);
+      console.error('[IPC] db:local-get JSON error:', e.message);
       return null;
     }
   });
@@ -330,20 +388,13 @@ function setupIpc(mainWindow) {
   });
 
   // ── Estrutura de pastas config/ ───────────────────────────────────────────
-  //
-  // Regras de localização (em ordem de prioridade):
-  //   1. Dev   → userData/config  (não polui a árvore de fontes)
-  //   2. Portátil → PORTABLE_EXECUTABLE_DIR/config  (junto ao .exe portátil)
-  //   3. Instalado → {dir do exe}/config  (junto ao LouvorJA.exe instalado)
-  //
-  const getInstallDir = () => {
-    if (!app.isPackaged) return app.getPath('userData');
-    if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
-    return path.dirname(app.getPath('exe'));
-  };
-
   const CONFIG_SUBFOLDERS = ['capas', 'fontes', 'help', 'ico', 'imagens', 'imagens_dxl', 'imagens_hlp', 'imagens_onl', 'musicas'];
+
+  // config/ para LEITURA: instalação original (pode ser Program Files)
   const getConfigDir = () => path.join(getInstallDir(), 'config');
+
+  // config/ para GRAVAÇÃO: sempre gravável (userData ou portátil)
+  const getWritableConfigDir = () => path.join(getWritableBase(), 'config');
 
   // Sanitiza o nome do álbum para uso como nome de pasta no Windows
   const sanitizeDir = (name) =>
@@ -353,20 +404,22 @@ function setupIpc(mainWindow) {
       .trim()
       .slice(0, 80) || 'Desconhecido';
 
-  // albumName opcional → com album: subpasta por álbum; sem: pasta base (para buscas)
-  const getAutoMediaDir  = (albumName) => albumName
-    ? path.join(getConfigDir(), 'musicas', sanitizeDir(albumName))
-    : path.join(getConfigDir(), 'musicas');
-  const getAutoImagesDir = (albumName) => albumName
-    ? path.join(getConfigDir(), 'imagens', sanitizeDir(albumName))
-    : path.join(getConfigDir(), 'imagens');
-  const getAutoCapasDir  = (albumName) => albumName
-    ? path.join(getConfigDir(), 'capas', sanitizeDir(albumName))
-    : path.join(getConfigDir(), 'capas');
+  // Músicas ficam em subpastas por álbum; capas e imagens são flat (estrutura LouvorJA Delphi)
+  // writable=true → aponta para pasta gravável (userData); false → instalação original
+  const getAutoMediaDir  = (albumName, writable = false) => {
+    const base = writable ? getWritableConfigDir() : getConfigDir();
+    return albumName ? path.join(base, 'musicas', sanitizeDir(albumName)) : path.join(base, 'musicas');
+  };
+  const getAutoImagesDir = (writable = false) => path.join(writable ? getWritableConfigDir() : getConfigDir(), 'imagens');
+  const getAutoCapasDir  = (writable = false) => path.join(writable ? getWritableConfigDir() : getConfigDir(), 'capas');
 
-  // Cria as subpastas base na inicialização
+  // Verifica existência num ou mais diretórios (para encontrar arquivos tanto na instalação quanto no userData)
+  const fileExistsIn = (filename, ...dirs) =>
+    dirs.some(d => d && fs.existsSync(path.join(d, filename)));
+
+  // Cria as subpastas base no diretório GRAVÁVEL (nunca Program Files)
   const initConfigFolders = () => {
-    const configDir = getConfigDir();
+    const configDir = getWritableConfigDir();
     for (const sub of CONFIG_SUBFOLDERS) {
       const p = path.join(configDir, sub);
       if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -374,12 +427,392 @@ function setupIpc(mainWindow) {
   };
   initConfigFolders();
 
-  // Strip query params and sanitize filename for local storage
+  // ── Helpers de mídia para SQLiteReader ────────────────────────────────────
+  // Monta o objeto mediaDirs com as pastas locais de capas/músicas/imagens,
+  // preferindo as pastas graváveis (userData) e usando as da instalação como fallback.
+  const buildSqliteMediaDirs = () => ({
+    capasDir:   getAutoCapasDir(true)  || getAutoCapasDir(false),
+    musicasDir: getAutoMediaDir(null, true) || getAutoMediaDir(null, false),
+    imagensDir: getAutoImagesDir(true) || getAutoImagesDir(false),
+  });
+
+  // Tenta abrir o SQLite configurado (persiste entre sessões via Store).
+  // Na primeira execução sem caminho salvo, auto-detecta config/database.db do LouvorJA Delphi.
+  // sql.js é assíncrono (carrega WASM) — dispara em background sem bloquear o IPC.
+  const trySqliteAutoOpen = async () => {
+    // 1. Caminho salvo em sessão anterior
+    const saved = Store.get('sqlite_db_path');
+    if (saved && fs.existsSync(saved)) {
+      try {
+        await sqliteReader.open(saved, buildSqliteMediaDirs());
+        console.log('[IPC] SQLite auto-aberto:', saved);
+        return;
+      } catch (e) {
+        console.warn('[IPC] Falha ao auto-abrir SQLite salvo:', e.message);
+      }
+    }
+
+    // 2. Primeira execução: detecta config/database.db do LouvorJA Delphi
+    const autoCandidates = [
+      path.join(getInstallDir(),   'config', 'database.db'),
+      path.join(getWritableBase(), 'config', 'database.db'),
+    ];
+    for (const p of autoCandidates) {
+      if (fs.existsSync(p)) {
+        try {
+          await sqliteReader.open(p, buildSqliteMediaDirs());
+          Store.set('sqlite_db_path', p);
+          console.log('[IPC] SQLite auto-detectado na inicialização:', p);
+          return;
+        } catch (e) {
+          console.warn('[IPC] Falha ao auto-detectar SQLite em', p, ':', e.message);
+        }
+      }
+    }
+  };
+  trySqliteAutoOpen().catch(() => {});
+
+  // ── Handlers SQLite direto ────────────────────────────────────────────────
+
+  /** Abre um arquivo .db SQLite como fonte primária de dados. */
+  ipcMain.handle('sqlite:open-path', async (_, dbPath) => {
+    if (!dbPath || !fs.existsSync(dbPath)) {
+      return { success: false, error: 'Arquivo não encontrado: ' + dbPath };
+    }
+    try {
+      await sqliteReader.open(dbPath, buildSqliteMediaDirs());
+      Store.set('sqlite_db_path', dbPath);
+      return { success: true, path: dbPath };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  /** Fecha o SQLite e remove da configuração. */
+  ipcMain.handle('sqlite:unload', () => {
+    sqliteReader.close();
+    Store.remove('sqlite_db_path');
+    return true;
+  });
+
+  /** Retorna estado atual do SQLiteReader. */
+  ipcMain.handle('sqlite:status', () => ({
+    available:    sqliteReader.isAvailable(),
+    open:         sqliteReader.isOpen(),
+    path:         sqliteReader.getPath(),
+  }));
+
+  /**
+   * Auto-detecta um database.db em locais padrão do LouvorJA:
+   *   1. config/database.db junto ao exe (instalação Delphi)
+   *   2. database.db na pasta gravável
+   *   3. userData/database.db
+   */
+  ipcMain.handle('sqlite:auto-detect', async () => {
+    const candidates = [
+      path.join(getInstallDir(),         'config', 'database.db'),
+      path.join(getWritableBase(),       'config', 'database.db'),
+      path.join(getWritableBase(),       'database.db'),
+      path.join(app.getPath('userData'), 'database.db'),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        try {
+          await sqliteReader.open(p, buildSqliteMediaDirs());
+          Store.set('sqlite_db_path', p);
+          console.log('[IPC] sqlite:auto-detect encontrou:', p);
+          return { found: true, path: p };
+        } catch (e) {
+          console.warn('[IPC] sqlite:auto-detect falha em', p, ':', e.message);
+        }
+      }
+    }
+    return { found: false, reason: 'Nenhum database.db encontrado.' };
+  });
+
+  // Strip query params, decodifica URL encoding e sanitiza para caminho local.
+  // Ex: "/musics/pt/2017%20-%20Eu%20Creio/Arquivo.mp3" → "Arquivo.mp3"
   const safeBasename = (raw) => {
     if (!raw) return '';
-    const clean = raw.replace(/\\/g, '/').split('?')[0].split('#')[0];
+    let clean = raw.replace(/\\/g, '/').split('?')[0].split('#')[0];
+    try { clean = decodeURIComponent(clean); } catch (_) { /* mantém original se decode falhar */ }
     return path.basename(clean).trim();
   };
+
+  // Converte caminho absoluto para URL file:// com encoding de caracteres especiais
+  const toLocalFileUrl = (absPath) => {
+    return 'file:///' + absPath
+      .replace(/\\/g, '/')
+      .split('/')
+      .map(seg => encodeURIComponent(seg).replace(/%3A/g, ':')) // preserva C: em Windows
+      .join('/');
+  };
+
+  // Busca recursiva por nome de arquivo em uma árvore de diretórios.
+  // Usado para musicas que ficam em subpastas com nomes do SQLite
+  // (ex: config/musicas/1992 - Brilha Jesus/) que podem diferir do nome do álbum no JSON.
+  const findFileInTree = (dir, filename) => {
+    if (!filename || !dir || !fs.existsSync(dir)) return null;
+    const lower = filename.toLowerCase();
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      // 1. Busca flat primeiro (mais rápido)
+      for (const e of entries) {
+        if (e.isFile() && e.name.toLowerCase() === lower) return path.join(dir, e.name);
+      }
+      // 2. Busca nas subpastas (ex: musicas/Hinário Adventista/)
+      for (const e of entries) {
+        if (e.isDirectory()) {
+          const found = findFileInTree(path.join(dir, e.name), filename);
+          if (found) return found;
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
+  // Encontra arquivo por nome:
+  // - Flat em writableDir (capas, imagens, ou musicas já baixadas)
+  // - Recursivo em readOnlyTree (musicas da instalação original com subpastas do SQLite)
+  const findLocalFile = (filename, writableDir, readOnlyDir, recursive = false) => {
+    if (!filename) return null;
+    // 1. Flat na pasta gravável
+    const w = path.join(writableDir, filename);
+    if (fs.existsSync(w)) return w;
+    if (!readOnlyDir) return null;
+    // 2. Flat ou recursivo na instalação original
+    if (!recursive) {
+      const r = path.join(readOnlyDir, filename);
+      return fs.existsSync(r) ? r : null;
+    }
+    return findFileInTree(readOnlyDir, filename);
+  };
+
+  // ── Protocolo app-local:// ────────────────────────────────────────────────
+  // Serve arquivos de config/ da instalação (capas, imagens, musicas) de forma
+  // independente do caminho de instalação (E:\, C:\Program Files\, etc.)
+  // Exemplo: app-local://capas/2026.bmp → config/capas/2026.bmp na instalação
+  (() => {
+    const { protocol: _p } = require('electron');
+    const IMG_MIME = { '.bmp':'image/bmp','.jpg':'image/jpeg','.jpeg':'image/jpeg',
+                       '.png':'image/png','.gif':'image/gif','.webp':'image/webp' };
+    const AUD_MIME = { '.mp3':'audio/mpeg','.wav':'audio/wav','.ogg':'audio/ogg','.aac':'audio/aac' };
+
+    _p.handle('app-local', async (request) => {
+      try {
+        const url      = new URL(request.url);
+        const folder   = url.hostname;                                    // 'capas', 'imagens', 'musicas'
+        const filename = decodeURIComponent(url.pathname.replace(/^\//, '')); // '2026.bmp'
+        const subpath  = path.join(folder, filename);
+        const ext      = path.extname(filename).toLowerCase();
+        const mime     = IMG_MIME[ext] || AUD_MIME[ext] || 'application/octet-stream';
+
+        // 1. Arquivo local: pasta gravável (userData) ou instalação original.
+        //    Inclui app.getPath('userData') como fallback para imagens baixadas em dev
+        //    ou quando o exe foi movido para outro diretório após o download.
+        //    Para musicas, usa busca recursiva pois ficam em subpastas (ANO - ALBUM).
+        const userDataConfigDir = path.join(app.getPath('userData'), 'config');
+        if (folder === 'musicas') {
+          // Busca recursiva em ambas as raízes de musicas
+          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+            const musicasRoot = path.join(base, 'musicas');
+            const found = findFileInTree(musicasRoot, path.basename(filename));
+            if (found) {
+              return new Response(fs.readFileSync(found), { headers: { 'Content-Type': mime } });
+            }
+          }
+        } else {
+          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+            const p = path.join(base, subpath);
+            if (fs.existsSync(p)) {
+              return new Response(fs.readFileSync(p), { headers: { 'Content-Type': mime } });
+            }
+          }
+        }
+
+        // 2. Não encontrado localmente → busca na API.
+        //    Mapeamento: capas→covers | imagens→images | musicas→musics/pt
+        {
+          const apiFolder = folder === 'capas'   ? 'covers'   :
+                            folder === 'imagens' ? 'images'   :
+                            folder === 'musicas' ? 'musics/pt' : folder;
+          // filename pode ter subpasta: "2017 - Eu Creio/Arquivo.mp3"
+          const encodedPath = filename.split('/').map(encodeURIComponent).join('/');
+          const filesBase   = (process.env.VITE_URL_FILES || 'https://api.louvorja.com.br/file').replace(/\/$/, '');
+          const apiUrl      = `${filesBase}/${apiFolder}/${encodedPath}`;
+          const resp = await net.fetch(apiUrl).catch(() => null);
+          if (resp?.ok) return resp;
+        }
+      } catch (_) {}
+      return new Response('Not Found', { status: 404 });
+    });
+  })();
+
+  // Verifica se uma URL local (file:// ou app-local://) aponta para arquivo válido
+  const fileUrlExists = (url) => {
+    if (!url) return false;
+    if (url.startsWith('app-local://')) {
+      try {
+        const rel = url.slice('app-local://'.length).split('?')[0].split('#')[0];
+        const slash = rel.indexOf('/');
+        if (slash < 0) return false;
+        const folder = rel.slice(0, slash);
+        const name = path.basename(decodeURIComponent(rel.slice(slash + 1)));
+        if (!name) return false;
+        const userDataConfigDir = path.join(app.getPath('userData'), 'config');
+        if (folder === 'imagens' || folder === 'capas') {
+          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+            if (fs.existsSync(path.join(base, folder, name))) return true;
+          }
+          return false;
+        }
+        if (folder === 'musicas') {
+          // Para áudio: verifica flat primeiro, depois recursivo
+          return !!findFileInTree(getAutoMediaDir(null, true), name) || !!findFileInTree(getAutoMediaDir(), name);
+        }
+        return false;
+      } catch (_) { return false; }
+    }
+    if (!url.startsWith('file:///')) return false;
+    try {
+      const p = decodeURIComponent(url.slice(8)).replace(/\//g, path.sep);
+      return fs.existsSync(p);
+    } catch (_) { return false; }
+  };
+
+  // Extrai a subpasta do álbum (ANO - ALBUM) do URL de uma música.
+  // Ex: "https://api.louvorja.com.br/file/musics/pt/2017 - Eu Creio/Arquivo.mp3"
+  //     → "2017 - Eu Creio"
+  const extractFolderFromMusicUrl = (url) => {
+    if (!url) return null;
+    const norm = url.replace(/\\/g, '/');
+    const m = norm.match(/\/musics?(?:\/[a-z]{2})?\/([^/?#]+)\//i);
+    return m ? decodeURIComponent(m[1]) : null;
+  };
+
+  // Após downloads, re-escaneia e atualiza URLs file:// nos JSONs do db/.
+  // Capas e imagens → flat em config/capas/ e config/imagens/
+  // Músicas → busca recursiva em config/musicas/ (subpastas com nomes do SQLite Delphi,
+  //           ex: "1992 - Brilha Jesus/", "Hinário Adventista/", "Adoradores 2/")
+  async function syncLocalFileUrls(dbDir) {
+    if (!fs.existsSync(dbDir)) return;
+
+    const capasW  = getAutoCapasDir(true);             // writable flat (userData)
+    const capasR  = getAutoCapasDir();                  // read-only flat (install)
+    const imgsW   = getAutoImagesDir(true);             // writable flat
+    const imgsR   = getAutoImagesDir();                 // read-only flat
+    const musicasW = getAutoMediaDir(null, true);       // writable musicas root
+    const musicasR = getAutoMediaDir();                 // read-only musicas root (Delphi structure)
+
+    const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
+    for (const af of albumFiles) {
+      const afPath = path.join(dbDir, af);
+      let albumData;
+      try { albumData = JSON.parse(fs.readFileSync(afPath, 'utf8')); } catch (_) { continue; }
+
+      let changed = false;
+
+      // ── Capa do álbum: usa app-local:// para ser independente do caminho ──
+      if (!fileUrlExists(albumData.url_image)) {
+        const capaName = safeBasename(albumData.url_image);
+        if (capaName) {
+          albumData.url_image = `app-local://capas/${encodeURIComponent(capaName)}`;
+          changed = true;
+        }
+      }
+
+      // ── Músicas ────────────────────────────────────────────────────────────
+      for (const m of (albumData.musics || [])) {
+        const mPath = path.join(dbDir, `music_${m.id_music}.json`);
+        if (!fs.existsSync(mPath)) continue;
+        let md;
+        try { md = JSON.parse(fs.readFileSync(mPath, 'utf8')); } catch (_) { continue; }
+        let mChanged = false;
+
+        // url_music — busca recursiva em ambas as raízes de musicas.
+        // Se encontrado localmente: file:// (acesso direto, mais rápido).
+        // Se não encontrado: app-local://musicas/folder/nome — protocolo serve ou busca na API.
+        const resolveAudioUrl = (rawUrl) => {
+          if (!rawUrl || rawUrl.startsWith('app-local://musicas/') || fileUrlExists(rawUrl)) return rawUrl; // já é local
+          const name = safeBasename(rawUrl);
+          if (!name) return rawUrl;
+          // 1. Tenta encontrar localmente (busca recursiva)
+          const found = findFileInTree(musicasW, name) || findFileInTree(musicasR, name);
+          if (found) return toLocalFileUrl(found);
+          // 2. Extrai subpasta do URL (ANO - ALBUM) para app-local com caminho correto
+          const folder = extractFolderFromMusicUrl(rawUrl);
+          if (folder) return `app-local://musicas/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`;
+          return rawUrl; // mantém API URL
+        };
+
+        if (md.url_music !== resolveAudioUrl(md.url_music)) {
+          md.url_music = resolveAudioUrl(md.url_music); mChanged = true;
+        }
+        if (md.url_instrumental_music !== resolveAudioUrl(md.url_instrumental_music)) {
+          md.url_instrumental_music = resolveAudioUrl(md.url_instrumental_music); mChanged = true;
+        }
+
+        // url_image do topo da música (imagem padrão usada quando slide não tem imagem própria)
+        if (md.url_image && !fileUrlExists(md.url_image)) {
+          const imgName = safeBasename(md.url_image);
+          if (imgName) {
+            md.url_image = `app-local://imagens/${encodeURIComponent(imgName)}`;
+            mChanged = true;
+          }
+        }
+
+        // url_image dos slides/letras: suporta AMBAS as estruturas da API:
+        //   • md.slides  → formato interno (gerado pelo sqlite-reader / gerar-banco-json)
+        //   • md.lyric   → formato direto da API (array com {url_image, lyric, time, ...})
+        // app-local:// → protocolo serve do disco ou busca na API (transparente).
+        const slideItems = Array.isArray(md.slides) ? md.slides
+                         : Array.isArray(md.lyric)  ? md.lyric
+                         : (md.lyric && typeof md.lyric === 'object' ? Object.values(md.lyric) : []);
+
+        for (const s of slideItems) {
+          if (s?.url_image && !fileUrlExists(s.url_image)) {
+            const imgName = safeBasename(s.url_image);
+            if (imgName) {
+              s.url_image = `app-local://imagens/${encodeURIComponent(imgName)}`;
+              mChanged = true;
+            }
+          }
+        }
+
+        if (mChanged) {
+          try { fs.writeFileSync(mPath, JSON.stringify(md), 'utf8'); } catch (_) {}
+        }
+      }
+
+      if (changed) {
+        try { fs.writeFileSync(afPath, JSON.stringify(albumData), 'utf8'); } catch (_) {}
+      }
+    }
+
+    // ── Atualiza pt_categories.json: substitui URLs relativas (/covers/...) ──
+    // por file:// locais quando o arquivo existe (para funcionar em modo offline)
+    const catFile = path.join(dbDir, 'pt_categories.json');
+    if (fs.existsSync(catFile)) {
+      try {
+        const cats = JSON.parse(fs.readFileSync(catFile, 'utf8'));
+        let catChanged = false;
+        cats.forEach(cat => {
+          (cat.albums || []).forEach(album => {
+            if (!fileUrlExists(album.url_image)) {
+              const coverName = safeBasename(album.url_image);
+              // Converte para app-local:// → independente do caminho de instalação
+              if (coverName) {
+                album.url_image = `app-local://capas/${encodeURIComponent(coverName)}`;
+                catChanged = true;
+              }
+            }
+          });
+        });
+        if (catChanged) fs.writeFileSync(catFile, JSON.stringify(cats), 'utf8');
+      } catch (_) {}
+    }
+  }
 
   // overwrite=false → skip existing files (returns 'skipped'); overwrite=true → always write
   const downloadBinary = async (url, destPath, hdrs = {}, overwrite = false) => {
@@ -402,8 +835,41 @@ function setupIpc(mainWindow) {
   const resolveFileUrl = (raw, filesBaseUrl) => {
     if (!raw) return null;
     const cleanRaw = raw.split('?')[0].split('#')[0];
-    if (cleanRaw.startsWith('http://') || cleanRaw.startsWith('https://') || cleanRaw.startsWith('file://')) return cleanRaw;
-    const base = filesBaseUrl.replace(/\/$/, '');
+    if (cleanRaw.startsWith('http://') || cleanRaw.startsWith('https://')) return cleanRaw;
+
+    const base = (filesBaseUrl || '').replace(/\/$/, '');
+
+    // Mapeamento de pastas locais → pastas da API (FileController.php do servidor)
+    // capas   → covers  |  imagens → images  |  musicas → musics/pt
+    const mapFolder = (f) => {
+      if (f === 'capas')   return 'covers';
+      if (f === 'imagens') return 'images';
+      if (f === 'musicas') return 'musics/pt';
+      return f;
+    };
+
+    // app-local://folder/filename → ${filesBaseUrl}/apiFolder/filename
+    if (cleanRaw.startsWith('app-local://')) {
+      const rel = cleanRaw.slice('app-local://'.length);
+      const slash = rel.indexOf('/');
+      if (slash >= 0) {
+        const folder = rel.slice(0, slash);
+        const file   = rel.slice(slash + 1);
+        return `${base}/${mapFolder(folder)}/${file}`;
+      }
+      return `${base}/${rel}`;
+    }
+
+    // file:// caminho local → extrai config/pasta/... → mapeia pasta → monta URL da API
+    if (cleanRaw.startsWith('file:')) {
+      try {
+        const noProto = cleanRaw.replace(/^file:\/+/i, '');
+        const m = noProto.match(/\/config\/([^/?#]+)\/(.+)$/i);
+        if (m) return `${base}/${mapFolder(m[1])}/${m[2]}`;
+      } catch (_) {}
+      return null;
+    }
+
     return base + (cleanRaw.startsWith('/') ? '' : '/') + cleanRaw;
   };
 
@@ -418,12 +884,46 @@ function setupIpc(mainWindow) {
       try { event.sender.send('album:download-progress', { albumId, step, total, current, message }); } catch (_) {}
     };
 
+    // Helper que identifica o tipo de pasta destino para busca local
+    const detectFileType = (destDir) => {
+      const d = destDir.replace(/\\/g, '/').toLowerCase();
+      if (d.includes('/capas'))   return 'cover';
+      if (d.includes('/imagens')) return 'image';
+      if (d.includes('/musicas')) return 'audio';
+      return 'other';
+    };
+
     const dl = async (raw, destDir) => {
       const name = safeBasename(raw);
       if (!name) return 'skip-noname';
+
+      const destPath = path.join(destDir, name);
+
+      // 1. Já existe no destino gravável → pula
+      if (!overwrite && fs.existsSync(destPath)) return 'skipped';
+
+      // 2. Já existe na instalação original (config/ do Delphi) → pula
+      //    Evita re-baixar arquivos que já estão localmente em outra pasta.
+      if (!overwrite) {
+        const type = detectFileType(destDir);
+        let foundLocal = false;
+        if (type === 'audio') {
+          // Busca recursiva em musicas/ gravável e somente-leitura
+          foundLocal = !!findFileInTree(getAutoMediaDir(null, true), name)
+                    || !!findFileInTree(getAutoMediaDir(), name);
+        } else if (type === 'cover') {
+          foundLocal = fs.existsSync(path.join(getAutoCapasDir(), name))
+                    || fs.existsSync(path.join(getAutoCapasDir(true), name));
+        } else if (type === 'image') {
+          foundLocal = fs.existsSync(path.join(getAutoImagesDir(), name))
+                    || fs.existsSync(path.join(getAutoImagesDir(true), name));
+        }
+        if (foundLocal) return 'skipped';
+      }
+
       const url = resolveFileUrl(raw, filesBaseUrl);
       if (!url) return false;
-      return downloadBinary(url, path.join(destDir, name), headers, overwrite);
+      return downloadBinary(url, destPath, headers, overwrite);
     };
 
     try {
@@ -437,9 +937,30 @@ function setupIpc(mainWindow) {
 
       // Pastas específicas por álbum
       const albumName = albumData.name || `album_${albumId}`;
-      const capasDir  = getAutoCapasDir(albumName);
-      const audioDir  = getAutoMediaDir(albumName);
-      const imagesDir = getAutoImagesDir(albumName);
+
+      // Tenta extrair "ANO - ALBUM" do URL da primeira música (campo url_music ou similar)
+      // Formato típico: "/musics/pt/2017 - Eu Creio/Arquivo.mp3"
+      const extractFolderFromUrl = (url) => {
+        if (!url) return null;
+        const norm = url.replace(/\\/g, '/');
+        const m = norm.match(/\/musics?(?:\/[a-z]{2})?\/([^/]+)\//i);
+        return m ? decodeURIComponent(m[1]) : null;
+      };
+
+      // Determina folderName: prioridade folder_name da API > extrai do URL > albumName
+      let folderName = albumData.folder_name || albumName;
+      // Se folderName parece não ter ano (não começa com 4 dígitos), tenta extrair da URL
+      if (!/^\d{4}\s*-/.test(folderName) && albumData.musics?.length) {
+        // Verifica nos url_music das músicas (se já tiver no album JSON)
+        for (const m of albumData.musics) {
+          const extracted = extractFolderFromUrl(m.url_music || m.url);
+          if (extracted && /^\d{4}\s*-/.test(extracted)) { folderName = extracted; break; }
+        }
+      }
+      // Destinos sempre graváveis (userData/config/..., nunca Program Files)
+      const capasDir  = getAutoCapasDir(true);               // flat, writable
+      let   audioDir  = getAutoMediaDir(folderName, true);   // subpasta "ANO - ALBUM" (atualizada na 1ª música)
+      const imagesDir = getAutoImagesDir(true);              // flat, writable
 
       const musics     = albumData.musics || [];
       const hasCover   = !!albumData.url_image;
@@ -448,11 +969,16 @@ function setupIpc(mainWindow) {
 
       send(done, grandTotal, hasCover ? 'Baixando capa do álbum...' : `Baixando ${musics.length} músicas...`);
 
-      // 2. Capa → config/capas/{albumName}/
+      // 2. Capa do álbum → config/capas/ (flat, writable)
       if (albumData.url_image) {
         const r = await dl(albumData.url_image, capasDir);
-        if (r === true) stats.images++;
+        if (r === true)       stats.images++;
         else if (r === 'skipped') stats.skipped++;
+        else {
+          // 'skip-noname' (URL sem basename) ou false (erro HTTP/rede)
+          console.warn('[IPC] album:download-full capa falhou:', albumData.url_image, '| result:', r);
+          stats.errors++;
+        }
         done++;
         send(done, grandTotal, `Baixando ${musics.length} músicas...`);
       }
@@ -469,6 +995,18 @@ function setupIpc(mainWindow) {
         const md = await musicResp.json();
         fs.writeFileSync(path.join(dbDir, `music_${m.id_music}.json`), JSON.stringify(md), 'utf8');
         stats.json++;
+
+        // Na 1ª música: detecta a pasta real (ANO - ALBUM) a partir de url_music.
+        // O álbum JSON só tem {id,track,name} — o url_music está no music JSON individual.
+        // Ex: "https://api.louvorja.com.br/file/musics/pt/2017 - Eu Creio/Arquivo.mp3"
+        if (i === 0 && md.url_music) {
+          const detected = extractFolderFromUrl(md.url_music);
+          if (detected && detected !== folderName) {
+            folderName = detected;
+            audioDir   = getAutoMediaDir(folderName, true);
+            console.log(`[IPC] album:download-full pasta corrigida para "${folderName}"`);
+          }
+        }
 
         // Áudio
         for (const key of ['url_music', 'url_instrumental_music']) {
@@ -494,8 +1032,14 @@ function setupIpc(mainWindow) {
         done++;
       }
 
-      send(grandTotal, grandTotal, 'Concluído!', 'done');
-      return { success: true, stats, albumName };
+      const resumo = `${stats.json} json, ${stats.images} imagens, ${stats.audio} áudios, ${stats.skipped} ignorados, ${stats.errors} erros`;
+      send(grandTotal, grandTotal, `Concluído! (${resumo})`, 'done');
+
+      // Converte URLs HTTP nos JSONs para app-local:// após o download,
+      // garantindo acesso offline independente do caminho de instalação.
+      try { await syncLocalFileUrls(dbDir); } catch (_) {}
+
+      return { success: true, stats, albumName: folderName };
     } catch (e) {
       console.error('[IPC] album:download-full error:', e.message);
       return { success: false, error: e.message };
@@ -583,13 +1127,20 @@ function setupIpc(mainWindow) {
       if (found) return toFileUrl(found);
     }
 
-    // 2. Direto na pasta de auto-download (mais rápido que scan)
-    const direct = path.join(getAutoMediaDir(), name);
-    if (fs.existsSync(direct)) return toFileUrl(direct);
+    // 2. Pasta gravável (getWritableBase()/config/musicas/) — downloads do app
+    const writableFound = search(getAutoMediaDir(null, true), 0);
+    if (writableFound) return toFileUrl(writableFound);
 
-    // 3. Scan na pasta de auto-download
-    const autoFound = search(getAutoMediaDir(), 0);
-    if (autoFound) return toFileUrl(autoFound);
+    // 3. userData/config/musicas/ — fallback para downloads feitos em dev ou build anterior
+    const userDataMusicDir = path.join(app.getPath('userData'), 'config', 'musicas');
+    if (userDataMusicDir !== getAutoMediaDir(null, true)) {
+      const userDataFound = search(userDataMusicDir, 0);
+      if (userDataFound) return toFileUrl(userDataFound);
+    }
+
+    // 4. Pasta da instalação original (config/musicas/ com subpastas do Delphi)
+    const installFound = search(getAutoMediaDir(), 0);
+    if (installFound) return toFileUrl(installFound);
 
     return null;
   });
@@ -606,6 +1157,10 @@ function setupIpc(mainWindow) {
     if (!filename) return null;
     const name = safeBasename(filename);
     if (!name) return null;
+
+    // Retorna app-local:// em vez de file:// para evitar bloqueios do webSecurity
+    // em produção. O protocolo app-local:// é privilegiado e acessa disco diretamente.
+    const asAppLocal = (folder) => `app-local://${folder}/${encodeURIComponent(name)}`;
 
     function searchDir(dir, depth) {
       if (!dir || !fs.existsSync(dir)) return null;
@@ -624,32 +1179,32 @@ function setupIpc(mainWindow) {
       return null;
     }
 
-    // Caminhos diretos (O(1), mais rápido que scan recursivo)
-    for (const dir of [getAutoImagesDir(), getAutoCapasDir()]) {
-      const direct = path.join(dir, name);
-      if (fs.existsSync(direct)) return toFileUrl(direct);
+    // Inclui userData como fallback para imagens baixadas em dev ou em build anterior.
+    const userDataImgsDir  = path.join(app.getPath('userData'), 'config', 'imagens');
+    const userDataCapasDir = path.join(app.getPath('userData'), 'config', 'capas');
+
+    // Caminhos diretos O(1): imagens primeiro, depois capas
+    for (const dir of [getAutoImagesDir(true), userDataImgsDir, getAutoImagesDir()]) {
+      if (fs.existsSync(path.join(dir, name))) return asAppLocal('imagens');
+    }
+    for (const dir of [getAutoCapasDir(true), userDataCapasDir, getAutoCapasDir()]) {
+      if (fs.existsSync(path.join(dir, name))) return asAppLocal('capas');
     }
 
-    // 1. Pasta de imagens configurada pelo usuário
+    // Pastas configuradas pelo usuário
     const imagesFolder = Store.get('media_images_folder');
-    if (imagesFolder) {
-      const found = searchDir(imagesFolder, 0);
-      if (found) return toFileUrl(found);
-    }
+    if (imagesFolder && searchDir(imagesFolder, 0)) return asAppLocal('imagens');
 
-    // 2. Pasta de mídia configurada pelo usuário
     const mediaFolder = Store.get('media_base_folder');
-    if (mediaFolder) {
-      const found = searchDir(mediaFolder, 0);
-      if (found) return toFileUrl(found);
+    if (mediaFolder && searchDir(mediaFolder, 0)) return asAppLocal('imagens');
+
+    // Scan recursivo: imagens depois capas
+    for (const dir of [getAutoImagesDir(true), userDataImgsDir, getAutoImagesDir()]) {
+      if (searchDir(dir, 0)) return asAppLocal('imagens');
     }
-
-    // 3. Scan completo em config/imagens e config/capas
-    const foundInAuto = searchDir(getAutoImagesDir(), 0);
-    if (foundInAuto) return toFileUrl(foundInAuto);
-
-    const foundInCapas = searchDir(getAutoCapasDir(), 0);
-    if (foundInCapas) return toFileUrl(foundInCapas);
+    for (const dir of [getAutoCapasDir(true), userDataCapasDir, getAutoCapasDir()]) {
+      if (searchDir(dir, 0)) return asAppLocal('capas');
+    }
 
     return null;
   });
@@ -665,13 +1220,14 @@ function setupIpc(mainWindow) {
       const buffer = fs.readFileSync(dbPath);
       const db = new SQL.Database(new Uint8Array(buffer));
 
-      // Respeita pasta customizada configurada pelo usuário
+      // Pastas de saída (sempre graváveis — nunca Program Files)
       const dbDir    = getDbDir();
-      const capasDir = getAutoCapasDir();
-      if (!fs.existsSync(dbDir))    fs.mkdirSync(dbDir,    { recursive: true });
-      if (!fs.existsSync(capasDir)) fs.mkdirSync(capasDir, { recursive: true });
-
-      const userData = app.getPath('userData');
+      const capasDir = getAutoCapasDir(true);    // writable flat
+      const imgsDir  = getAutoImagesDir(true);   // writable flat
+      const musicDir = getAutoMediaDir(null, true); // writable base (sem álbum)
+      for (const d of [dbDir, capasDir, imgsDir, musicDir]) {
+        if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+      }
 
       // helper: convert query to array of objects
       const query = (sql) => {
@@ -738,23 +1294,35 @@ function setupIpc(mainWindow) {
         ORDER BY cat_order, album_order
       `);
 
+      // albumMap: id_album → { id_album, name, url_image, order } para gerar album_{id}.json depois
+      const albumMap = {};
       const catMap = {};
       cats.forEach(r => {
         if (!catMap[r.id_category]) {
           catMap[r.id_category] = { id_category: r.id_category, name: r.name, order: r.cat_order || 0, slug: r.slug || '', albums: [] };
         }
         if (r.id_album) {
-          const imgPath = r.img_name
-            ? path.join(userData, 'files', 'capas', r.img_name).replace(/\\/g, '/')
-            : '';
-          catMap[r.id_category].albums.push({
-            id_album: r.id_album,
-            name: r.ca_name || r.a_name,
-            subtitle: r.a_name,
-            color: r.color || '#555555',
-            url_image: imgPath ? `file:///${imgPath}` : '',
-            order: r.album_order || 0,
-          });
+          const imgFile  = r.img_name || '';
+          // Procura a capa na pasta gravável (userData) E na instalação original
+          const imgFullW = imgFile ? path.join(capasDir, imgFile) : '';           // writable
+          const imgFullR = imgFile ? path.join(getAutoCapasDir(), imgFile) : '';  // read-only
+          // Usa app-local:// → independente do caminho de instalação
+          // O protocolo handler resolve config/capas/{imgFile} na pasta correta em tempo real
+          const imgUrl = imgFile ? `app-local://capas/${encodeURIComponent(imgFile)}` : '';
+
+          const albumEntry = {
+            id_album:  r.id_album,
+            name:      r.a_name || r.ca_name,
+            subtitle:  r.ca_name || '',
+            color:     r.color || '#555555',
+            url_image: imgUrl,
+            order:     r.album_order || 0,
+          };
+          catMap[r.id_category].albums.push(albumEntry);
+
+          if (!albumMap[r.id_album]) {
+            albumMap[r.id_album] = { id_album: r.id_album, name: albumEntry.name, url_image: imgUrl, musics: [] };
+          }
         }
       });
       fs.writeFileSync(path.join(dbDir, 'pt_categories.json'), JSON.stringify(Object.values(catMap)), 'utf8');
@@ -775,34 +1343,65 @@ function setupIpc(mainWindow) {
                ${hasAlbumsMusicT ? 'am.id_album' : 'NULL AS id_album'},
                ${hasAlbumsMusicT && hasAmTrack ? 'am.track' : '0 AS track'},
                ${hasAlbumsT ? 'a.name AS a_name' : "NULL AS a_name"}
-               ${hasFilesT && hasMFileMu ? ', f.file_name AS aud_name' : ", NULL AS aud_name"}
-               ${hasFilesT && hasMFileMu && hasFDir ? ', f.dir AS aud_dir' : ", NULL AS aud_dir"}
+               ${hasFilesT && hasMFileMu           ? ', f.file_name AS aud_name'   : ", NULL AS aud_name"}
+               ${hasFilesT && hasMFileMu && hasFDir ? ', f.dir AS aud_dir'          : ", NULL AS aud_dir"}
+               ${hasFilesT && hasMInstr            ? ', fi.file_name AS instr_name' : ", NULL AS instr_name"}
+               ${hasFilesT && hasMInstr && hasFDir  ? ', fi.dir AS instr_dir'        : ", NULL AS instr_dir"}
         FROM musics m
         ${hasAlbumsMusicT ? 'LEFT JOIN albums_musics am ON am.id_music = m.id_music' : ''}
         ${hasAlbumsT ? `LEFT JOIN albums a ON a.id_album = ${hasAlbumsMusicT ? 'am.id_album' : '0'} ${aCols.includes('id_language') ? "AND a.id_language = 'pt'" : ''}` : ''}
         ${hasFilesT && hasMFileMu ? 'LEFT JOIN files f ON f.id_file = m.id_file_music' : ''}
+        ${hasFilesT && hasMInstr  ? 'LEFT JOIN files fi ON fi.id_file = m.id_file_instrumental_music' : ''}
         ${hasMuLang ? "WHERE m.id_language = 'pt'" : ''}
         ORDER BY m.id_music
       `);
 
+      // Extrai o nome de pasta do álbum a partir do campo files.dir.
+      // Suporta formato Delphi (config\musicas\2010 - Geração Esperança\)
+      // e formato API (/musics/pt/2010 - Geração Esperança).
+      const getAudioFolder = (audDir) => {
+        if (!audDir) return null;
+        const last = audDir.replace(/[/\\]+$/, '').split(/[/\\]/).pop();
+        if (!last || /^(pt|en|es|musics|musicas|config)$/i.test(last)) return null;
+        return last;
+      };
+
+      // Monta URL file:// usando config/musicas/{folder}/{file} na instalação.
+      // folder vem do último segmento de files.dir: "2010 - Geração Esperança"
+      const buildAudioUrl = (audDir, audName) => {
+        if (!audName) return '';
+        const folder = getAudioFolder(audDir);
+        const full   = folder
+          ? path.join(getAutoMediaDir(folder, false), audName)
+          : path.join(musicDir, audName);
+        return toLocalFileUrl(full);
+      };
+
       const musicMap = {};
       mRows.forEach(r => {
         if (!musicMap[r.id_music]) {
-          const audPath = r.aud_name
-            ? path.join(r.aud_dir || '', r.aud_name).replace(/\\/g, '/')
-            : '';
           musicMap[r.id_music] = {
-            id_music: r.id_music,
-            name: r.name,
+            id_music:               r.id_music,
+            name:                   r.name,
             has_instrumental_music: !!r.id_file_instrumental_music,
-            lyric: '',
-            albums_names: '',
-            albums: [],
-            url_audio: audPath,
+            lyric:                  '',
+            albums_names:           '',
+            albums:                 [],
+            url_music:              buildAudioUrl(r.aud_dir,   r.aud_name),
+            url_instrumental_music: buildAudioUrl(r.instr_dir, r.instr_name),
           };
         }
         if (r.id_album && !musicMap[r.id_music].albums.find(a => a.id_album === r.id_album)) {
           musicMap[r.id_music].albums.push({ id_album: r.id_album, name: r.a_name, pivot: { track: r.track || 0 } });
+          // Adiciona música na lista do álbum
+          if (albumMap[r.id_album] && !albumMap[r.id_album].musics.find(m => m.id_music === r.id_music)) {
+            albumMap[r.id_album].musics.push({ id_music: r.id_music, name: r.name, track: r.track || 0 });
+            // Registra nome de pasta correto: "2010 - Geração Esperança" do files.dir
+            if (!albumMap[r.id_album].folder_name) {
+              const fn = getAudioFolder(r.aud_dir);
+              if (fn) albumMap[r.id_album].folder_name = fn;
+            }
+          }
         }
       });
       Object.values(musicMap).forEach(m => {
@@ -810,6 +1409,23 @@ function setupIpc(mainWindow) {
       });
       fs.writeFileSync(path.join(dbDir, 'pt_musics.json'), JSON.stringify(Object.values(musicMap)), 'utf8');
       results.musics = Object.keys(musicMap).length;
+
+      // Atualiza subtítulo dos álbuns em pt_categories.json usando o ano do folder_name.
+      // A API serve subtitle="1992" mas o SQLite exportado tem ca_name="" para álbuns clássicos.
+      // Extrai o ano do início de folder_name: "1992 - Brilha Jesus" → "1992"
+      let categoriesUpdated = false;
+      Object.values(catMap).forEach(cat => {
+        cat.albums.forEach(album => {
+          if (!album.subtitle) {
+            const fn = albumMap[album.id_album]?.folder_name || '';
+            const m = fn.match(/^(\d{4})\s*[-–]/);
+            if (m) { album.subtitle = m[1]; categoriesUpdated = true; }
+          }
+        });
+      });
+      if (categoriesUpdated) {
+        fs.writeFileSync(path.join(dbDir, 'pt_categories.json'), JSON.stringify(Object.values(catMap)), 'utf8');
+      }
 
       // ── 3. Letras por música (slides) ────────────────────────────────────
       const hasLFileImg    = lCols.includes('id_file_image');
@@ -835,14 +1451,16 @@ function setupIpc(mainWindow) {
       const slidesMap = {};
       lyricRows.forEach(r => {
         if (!slidesMap[r.id_music]) slidesMap[r.id_music] = [];
-        const imgPath = r.img_name
-          ? path.join(userData, 'files', 'images', r.img_name).replace(/\\/g, '/')
-          : '';
+        let imgUrl = '';
+        if (r.img_name) {
+          const imgFull = path.join(imgsDir, r.img_name);
+          imgUrl = toLocalFileUrl(imgFull);
+        }
         slidesMap[r.id_music].push({
           cover: r.order === 0 || r.order === null,
           lyric: r.lyric || '',
           aux_lyric: r.aux_lyric || '',
-          url_image: imgPath ? `file:///${imgPath}` : '',
+          url_image: imgUrl,
           image_position: r.image_position || 'center',
         });
       });
@@ -853,7 +1471,14 @@ function setupIpc(mainWindow) {
         const musicInfo = musicMap[id_music] || {};
         fs.writeFileSync(
           path.join(dbDir, `music_${id_music}.json`),
-          JSON.stringify({ id_music: parseInt(id_music), name: musicInfo.name || '', slides }),
+          JSON.stringify({
+            id_music:               parseInt(id_music),
+            name:                   musicInfo.name || '',
+            has_instrumental_music: musicInfo.has_instrumental_music || false,
+            url_music:              musicInfo.url_music || '',
+            url_instrumental_music: musicInfo.url_instrumental_music || '',
+            slides,
+          }),
           'utf8'
         );
         lCount++;
@@ -873,6 +1498,19 @@ function setupIpc(mainWindow) {
       });
       fs.writeFileSync(path.join(dbDir, 'pt_musics.json'), JSON.stringify(Object.values(musicMap)), 'utf8');
 
+      // ── Gera album_{id}.json para cada álbum ─────────────────────────────
+      event.sender.send('sqlite:progress', { percent: 87, message: 'Salvando dados dos álbuns...' });
+      let albumCount = 0;
+      for (const [id_album, album] of Object.entries(albumMap)) {
+        fs.writeFileSync(
+          path.join(dbDir, `album_${id_album}.json`),
+          JSON.stringify(album),
+          'utf8'
+        );
+        albumCount++;
+      }
+      results.albums = albumCount;
+
       db.close();
 
       // ── 4. Imagens das capas ─────────────────────────────────────────────
@@ -889,12 +1527,17 @@ function setupIpc(mainWindow) {
 
       // ── 5. Salva metadados da importação ─────────────────────────────────
       Store.set('sqlite_import', {
-        date: new Date().toISOString(),
+        date:       new Date().toISOString(),
         dbPath,
         capasPath,
         categories: results.categories,
-        musics: results.musics,
+        albums:     results.albums || 0,
+        musics:     results.musics,
       });
+
+      // Sincroniza URLs locais: capas/músicas já presentes ganham file:// correto
+      event.sender.send('sqlite:progress', { percent: 98, message: 'Sincronizando arquivos locais...' });
+      try { await syncLocalFileUrls(dbDir); } catch (_) {}
 
       event.sender.send('sqlite:progress', { percent: 100, message: 'Importação concluída!' });
       return { success: true, ...results };
@@ -908,9 +1551,64 @@ function setupIpc(mainWindow) {
     return Store.get('sqlite_import', null);
   });
 
+  // Verifica se o auto-import do SQLite local é necessário:
+  // database.db presente + db/ sem pt_categories.json (banco vazio)
+  ipcMain.handle('sqlite:check-auto-import', () => {
+    const dbPath = path.join(getConfigDir(), 'database.db');
+    const catFile = path.join(getDbDir(), 'pt_categories.json');
+    const available = fs.existsSync(dbPath) && fs.statSync(dbPath).size > 100;
+    const needed    = available && !fs.existsSync(catFile);
+    return { needed, available, dbPath };
+  });
+
   ipcMain.handle('sqlite:clear', () => {
     Store.remove('sqlite_import');
     return true;
+  });
+
+  // Verifica e baixa atualização do banco SQLite da API
+  // Compara ETag/Last-Modified com o armazenado. Se diferente, baixa e salva.
+  ipcMain.handle('sqlite:check-update', async (_, { dbBaseUrl, token }) => {
+    try {
+      if (!dbBaseUrl) return { updated: false, reason: 'no-url' };
+      const dbUrl = dbBaseUrl.replace(/\/$/, '') + '/database.db';
+
+      // HEAD para verificar versão via ETag ou Last-Modified
+      const headResp = await net.fetch(dbUrl, {
+        method: 'HEAD',
+        headers: token ? { 'Api-Token': token } : {},
+      }).catch(() => null);
+
+      if (!headResp || !headResp.ok) return { updated: false, reason: 'api-unavailable' };
+
+      const version = headResp.headers.get('etag') || headResp.headers.get('last-modified') || '';
+      const storedVersion = Store.get('sqlite_db_version', '');
+
+      if (version && version === storedVersion) return { updated: false, reason: 'up-to-date' };
+
+      // Download do novo database.db
+      const resp = await net.fetch(dbUrl, {
+        headers: token ? { 'Api-Token': token } : {},
+      }).catch(() => null);
+
+      if (!resp || !resp.ok) return { updated: false, reason: 'download-failed' };
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer.length) return { updated: false, reason: 'empty-response' };
+
+      const configDir = getWritableConfigDir();
+      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+
+      const dbPath = path.join(configDir, 'database.db');
+      fs.writeFileSync(dbPath, buffer);
+
+      if (version) Store.set('sqlite_db_version', version);
+
+      return { updated: true, dbPath };
+    } catch (e) {
+      console.warn('[IPC] sqlite:check-update error:', e.message);
+      return { updated: false, reason: e.message };
+    }
   });
 
   // ── Servidor de registro (QR Code) ────────────────────────────────────────
@@ -1104,7 +1802,19 @@ document.getElementById('f').onsubmit=async(e)=>{
   });
 
   // ── Pasta config/ ─────────────────────────────────────────────────────────
-  ipcMain.handle('config:get-dir', () => getConfigDir());
+  // Retorna a pasta GRAVÁVEL (userData ou portátil) — é para lá que vão os downloads.
+  // getConfigDir() (pasta do exe / instalação original) é usada internamente
+  // apenas para localizar arquivos existentes do LouvorJA Delphi.
+  ipcMain.handle('config:get-dir', () => getWritableConfigDir());
+
+  // Retorna o caminho real usado para os arquivos JSON (default ou customizado)
+  ipcMain.handle('db:get-actual-dir', () => getDbDir());
+
+  // Abre uma pasta no Explorer (shell.openPath)
+  ipcMain.handle('shell:open-folder', (_, folderPath) => {
+    const { shell } = require('electron');
+    return shell.openPath(folderPath);
+  });
 
   // ── Verificação e download de arquivos em falta ───────────────────────────
   ipcMain.handle('files:scan-missing', async () => {
@@ -1115,15 +1825,34 @@ document.getElementById('f').onsubmit=async(e)=>{
       const missing = [];
       const seen    = new Set();
 
-      // destDir já é a pasta do álbum; verifica e registra se o arquivo não existe
-      const addMissing = (rawUrl, destDir, type) => {
+      // Pastas raiz para busca de áudio — recursiva na instalação Delphi
+      const musicasW = getAutoMediaDir(null, true);   // gravável (userData/config/musicas/)
+      const musicasR = getAutoMediaDir();              // instalação (config/musicas/ com subpastas)
+      const capasW   = getAutoCapasDir(true);          const capasR  = getAutoCapasDir();
+      const imgsW    = getAutoImagesDir(true);         const imgsR   = getAutoImagesDir();
+
+      // Verifica existência: já tem URL válida, ou está em alguma pasta (recursiva p/ áudio)
+      const fileExists = (rawUrl, destWritable, type) => {
+        if (fileUrlExists(rawUrl)) return true;
+        const name = safeBasename(rawUrl);
+        if (!name) return false;
+        if (fs.existsSync(path.join(destWritable, name))) return true;
+        // Áudio: busca recursiva nas subpastas do Delphi (config/musicas/1992 - Brilha Jesus/ etc.)
+        if (type === 'audio') return !!findFileInTree(musicasR, name);
+        // Capas e imagens: flat na instalação original
+        if (type === 'cover') return fs.existsSync(path.join(capasR, name));
+        if (type === 'image') return fs.existsSync(path.join(imgsR, name));
+        return false;
+      };
+
+      const addMissing = (rawUrl, destWritable, type) => {
         if (!rawUrl) return;
         const name = safeBasename(rawUrl);
         if (!name) return;
-        const dest = path.join(destDir, name);
+        const dest = path.join(destWritable, name);
         if (seen.has(dest)) return;
         seen.add(dest);
-        if (!fs.existsSync(dest)) missing.push({ url: rawUrl, dest, type, name });
+        if (!fileExists(rawUrl, destWritable, type)) missing.push({ url: rawUrl, dest, type, name });
       };
 
       const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
@@ -1133,13 +1862,12 @@ document.getElementById('f').onsubmit=async(e)=>{
         try { albumData = JSON.parse(fs.readFileSync(path.join(dbDir, albumFile), 'utf8')); }
         catch (_) { continue; }
 
-        // Pastas específicas por álbum
-        const albumName  = albumData.name || albumFile.replace('.json', '');
-        const capasDir   = getAutoCapasDir(albumName);
-        const audioDir   = getAutoMediaDir(albumName);
-        const imagesDir  = getAutoImagesDir(albumName);
+        const albumName = albumData.name || albumFile.replace('.json', '');
+        // Usa folder_name (ex: "2010 - Geração Esperança") quando disponível,
+        // pois é o nome real da subpasta em config/musicas/
+        const audioW = getAutoMediaDir(albumData.folder_name || albumName, true);
 
-        addMissing(albumData.url_image, capasDir, 'cover');
+        addMissing(albumData.url_image, capasW, 'cover');
 
         for (const music of (albumData.musics || [])) {
           const mFile = path.join(dbDir, `music_${music.id_music}.json`);
@@ -1149,14 +1877,14 @@ document.getElementById('f').onsubmit=async(e)=>{
           try { md = JSON.parse(fs.readFileSync(mFile, 'utf8')); }
           catch (_) { continue; }
 
-          addMissing(md.url_music, audioDir, 'audio');
-          addMissing(md.url_instrumental_music, audioDir, 'audio');
-          addMissing(md.url_image, imagesDir, 'image');
+          addMissing(md.url_music, audioW, 'audio');
+          addMissing(md.url_instrumental_music, audioW, 'audio');
+          addMissing(md.url_image, imgsW, 'image');
 
           const slideList = Array.isArray(md.slides)
             ? md.slides
             : (md.lyric && typeof md.lyric === 'object' ? Object.values(md.lyric) : []);
-          for (const slide of slideList) addMissing(slide?.url_image, imagesDir, 'image');
+          for (const slide of slideList) addMissing(slide?.url_image, imgsW, 'image');
         }
       }
 
@@ -1168,30 +1896,202 @@ document.getElementById('f').onsubmit=async(e)=>{
     }
   });
 
+  // Retorna álbuns com arquivos faltando + lista flat de todos os itens.
+  // Igual ao ARQUIVOS_SISTEMA do LouvorJA Delphi: Arquivo | Diretório | Status
+  ipcMain.handle('files:scan-albums', async () => {
+    try {
+      const dbDir = getDbDir();
+      if (!fs.existsSync(dbDir)) return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] };
+
+      const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
+      if (!albumFiles.length) return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] };
+
+      const seen        = new Set();
+      const withMissing = [];
+      let totalFiles = 0;
+      let foundFiles = 0;
+
+      // Calcula caminho relativo à raiz de instalação (ex: config\musicas\Álbum\file.mp3)
+      const toRelPath = (destAbs) => {
+        for (const base of [getWritableBase(), getInstallDir()]) {
+          if (destAbs.toLowerCase().startsWith(base.toLowerCase() + path.sep) ||
+              destAbs.toLowerCase().startsWith(base.toLowerCase() + '/')) {
+            return destAbs.slice(base.length + 1);
+          }
+        }
+        const idx = destAbs.search(/config[/\\]/i);
+        return idx >= 0 ? destAbs.slice(idx) : path.basename(destAbs);
+      };
+
+      for (const af of albumFiles) {
+        let albumData;
+        try { albumData = JSON.parse(fs.readFileSync(path.join(dbDir, af), 'utf8')); }
+        catch (_) { continue; }
+
+        const albumName = albumData.name || af.replace(/\.json$/, '');
+        // Destinos graváveis (download)
+        const capasW  = getAutoCapasDir(true);
+        // Usa folder_name (ex: "2010 - Geração Esperança") para criar subpasta correta
+        const audioW  = getAutoMediaDir(albumData.folder_name || albumName, true);
+        const imgsW   = getAutoImagesDir(true);
+        // Leitura: instalação original (subpastas musicas/ com nomes do SQLite Delphi)
+        const musicasR = getAutoMediaDir();
+        const capasR   = getAutoCapasDir();
+        const imgsR    = getAutoImagesDir();
+
+        const missingItems = [];
+
+        // Verifica existência e registra com relPath para exibição estilo Delphi
+        const chk = (rawUrl, destW, type) => {
+          if (!rawUrl) return;
+          const name = safeBasename(rawUrl);
+          if (!name) return;
+          const dest = path.join(destW, name);
+          if (seen.has(dest)) return;
+          seen.add(dest);
+          totalFiles++;
+          let exists = fileUrlExists(rawUrl) || fs.existsSync(dest);
+          if (!exists) {
+            // Áudio: busca recursiva em userData (subpastas baixadas) e instalação (Delphi)
+            if (type === 'audio') exists = !!findFileInTree(getAutoMediaDir(null, true), name) || !!findFileInTree(musicasR, name);
+            else if (type === 'cover') exists = fs.existsSync(path.join(capasR, name));
+            else if (type === 'image') exists = fs.existsSync(path.join(imgsR, name));
+          }
+          if (exists) {
+            foundFiles++;
+          } else {
+            missingItems.push({ url: rawUrl, dest, type, name, relPath: toRelPath(dest) });
+          }
+        };
+
+        chk(albumData.url_image, capasW, 'cover');
+
+        for (const music of (albumData.musics || [])) {
+          const mFile = path.join(dbDir, `music_${music.id_music}.json`);
+          if (!fs.existsSync(mFile)) continue;
+          let md;
+          try { md = JSON.parse(fs.readFileSync(mFile, 'utf8')); }
+          catch (_) { continue; }
+          chk(md.url_music, audioW, 'audio');
+          chk(md.url_instrumental_music, audioW, 'audio');
+          chk(md.url_image, imgsW, 'image');
+          const slides = Array.isArray(md.slides) ? md.slides : [];
+          for (const s of slides) chk(s?.url_image, imgsW, 'image');
+        }
+
+        if (missingItems.length > 0) {
+          withMissing.push({
+            id_album:  albumData.id_album,
+            name:      albumName,
+            url_image: albumData.url_image || '',
+            missing:   missingItems.length,
+            items:     missingItems,
+          });
+        }
+      }
+
+      withMissing.sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name));
+
+      // Lista flat de todos os itens faltando (para exibição estilo Delphi)
+      const allMissing = withMissing.flatMap(a => a.items)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        total:      albumFiles.length,  // álbuns verificados
+        totalFiles,                     // total de arquivos checados
+        foundFiles,                     // arquivos encontrados
+        albums:     withMissing,        // álbuns com faltando (para exibição em grade)
+        allMissing,                     // lista flat de arquivos faltando (estilo Delphi)
+      };
+    } catch (e) {
+      console.error('[IPC] files:scan-albums error:', e.message);
+      return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [], error: e.message };
+    }
+  });
+
   ipcMain.handle('files:download-missing', async (event, missingList, filesBaseUrl, token) => {
     try {
       const hdrs  = token ? { 'Api-Token': token } : {};
       const total = missingList.length;
       let downloaded = 0, errors = 0;
+      let totalBytesDownloaded = 0;
+      const startTime = Date.now();
 
-      const send = (current, message) => {
-        try { event.sender.send('files:download-progress', { current, total, message }); } catch (_) {}
+      const formatSize = (bytes) => {
+        if (!bytes || bytes <= 0) return '';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      };
+
+      const send = (current, message, fileSize = 0, fileBytes = 0) => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed   = elapsed > 0 ? totalBytesDownloaded / elapsed : 0; // bytes/s
+        const speedStr = speed > 0 ? `${formatSize(speed)}/s` : '';
+        try {
+          event.sender.send('files:download-progress', {
+            current, total, message,
+            fileSize:  formatSize(fileSize),
+            speed:     speedStr,
+          });
+        } catch (_) {}
+      };
+
+      // Versão de downloadBinary que retorna o tamanho do arquivo baixado
+      const downloadBinaryWithSize = async (url, destPath) => {
+        try {
+          if (fs.existsSync(destPath)) {
+            const existing = fs.statSync(destPath).size;
+            return { ok: true, size: existing, skipped: true };
+          }
+          const resp = await net.fetch(url, Object.keys(hdrs).length ? { headers: hdrs } : {});
+          if (!resp.ok) return { ok: false, size: 0 };
+          const contentLength = parseInt(resp.headers.get('content-length') || '0', 10);
+          const buffer = Buffer.from(await resp.arrayBuffer());
+          if (!buffer.length) return { ok: false, size: 0 };
+          const dir = path.dirname(destPath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(destPath, buffer);
+          return { ok: true, size: buffer.length || contentLength };
+        } catch (e) {
+          console.error('[IPC] downloadBinaryWithSize error:', e.message, '| url:', url);
+          return { ok: false, size: 0 };
+        }
       };
 
       for (let i = 0; i < missingList.length; i++) {
         const item = missingList[i];
-        send(i, `[${i + 1}/${total}] ${item.name}`);
+        if (!item || !item.dest) {
+          console.warn('[IPC] files:download-missing item inválido no índice', i, item);
+          errors++;
+          continue;
+        }
+
+        send(i, `[${i + 1}/${total}] ${item.name || path.basename(item.dest)}`);
         const url = resolveFileUrl(item.url, filesBaseUrl);
-        const result = url ? await downloadBinary(url, item.dest, hdrs, true) : false;
-        if (result === true) {
+        if (!url) {
+          console.warn('[IPC] files:download-missing URL não resolvida:', item.url);
+          errors++;
+          continue;
+        }
+
+        const { ok, size } = await downloadBinaryWithSize(url, item.dest);
+        if (ok) {
           downloaded++;
+          totalBytesDownloaded += size;
+          send(i + 1, `[${i + 1}/${total}] ${item.name}`, size);
         } else {
           errors++;
-          console.warn('[IPC] files:download-missing falhou:', item.url, '| result:', result);
+          console.warn('[IPC] files:download-missing falhou:', item.url);
+          send(i + 1, `[${i + 1}/${total}] Erro: ${item.name}`);
         }
       }
 
       send(total, `Concluído! ${downloaded} baixado(s), ${errors} erro(s).`);
+
+      // Após os downloads, sincroniza os JSONs locais com os novos file:// URLs
+      try { await syncLocalFileUrls(getDbDir()); } catch (_) {}
+
       return { success: true, downloaded, errors };
     } catch (e) {
       console.error('[IPC] files:download-missing error:', e.message);
