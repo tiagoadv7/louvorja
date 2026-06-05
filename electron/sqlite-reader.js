@@ -15,15 +15,44 @@ const fs   = require('fs');
 
 // ── Helpers de resolução de arquivo ────────────────────────────────────────
 
-/** Procura fileName em uma lista de diretórios, retornando file:// URL ou ''. */
+/**
+ * Busca recursiva de fileName dentro de dir (até maxDepth níveis).
+ * Retorna o caminho absoluto do arquivo ou null.
+ */
+function findInTree(dir, lowerName, depth = 0, maxDepth = 3) {
+  if (!dir || !fs.existsSync(dir)) return null;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isFile()) {
+        if (entry.name.toLowerCase() === lowerName) return path.join(dir, entry.name);
+        // Permite match sem extensão (ex: "Eu Vou" encontra "Eu Vou.mp3")
+        const noExt = entry.name.toLowerCase().replace(/\.[^.]+$/, '');
+        const targetNoExt = lowerName.replace(/\.[^.]+$/, '');
+        if (noExt === targetNoExt) return path.join(dir, entry.name);
+      } else if (entry.isDirectory() && depth < maxDepth) {
+        const found = findInTree(path.join(dir, entry.name), lowerName, depth + 1, maxDepth);
+        if (found) return found;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Procura fileName em uma lista de diretórios, retornando file:// URL ou ''.
+ * Estratégia em dois passos:
+ *   1. Busca flat em cada dir (rápida — cobre o caso comum albumDir/fileName)
+ *   2. Busca recursiva em cada dir como fallback (cobre pastas com nome diferente do esperado)
+ */
 function findLocalFile(dirs, fileName) {
   if (!fileName) return '';
   const lower = fileName.toLowerCase();
+
+  // Passo 1: busca flat (prioridade — mais rápida)
   for (const dir of dirs) {
     if (!dir) continue;
     try {
       if (!fs.existsSync(dir)) continue;
-      // Filtra apenas arquivos (não pastas) para evitar match falso com subpastas de álbum
       const files = fs.readdirSync(dir).filter(f => {
         try { return fs.statSync(path.join(dir, f)).isFile(); } catch (_) { return false; }
       });
@@ -33,6 +62,14 @@ function findLocalFile(dirs, fileName) {
       if (found) return 'file:///' + path.join(dir, found).replace(/\\/g, '/');
     } catch (_) {}
   }
+
+  // Passo 2: busca recursiva como fallback (ex: arquivo em subpasta com nome diferente)
+  for (const dir of dirs) {
+    if (!dir) continue;
+    const found = findInTree(dir, lower);
+    if (found) return 'file:///' + found.replace(/\\/g, '/');
+  }
+
   return '';
 }
 
