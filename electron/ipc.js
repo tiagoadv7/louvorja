@@ -238,8 +238,9 @@ function setupIpc(mainWindow) {
   // Base GRAVÁVEL — como o LouvorJA Delphi: usa a pasta do exe quando gravável.
   //   Dev       → userData
   //   Portátil  → PORTABLE_EXECUTABLE_DIR
-  //   Instalado em local gravável (ex: E:\Louvor JA\LouvorJA\) → pasta do exe
-  //   Instalado em Program Files (não-gravável) → userData (AppData\Roaming)
+  //   Instalado em qualquer local → pasta do exe (testa gravação em config/, não na raiz)
+  //     O instalador NSIS concede acesso total a config/ mesmo em Program Files via icacls,
+  //     então o teste correto é em exeDir/config/, não em exeDir/ diretamente.
   // Lazy singleton: calculado na primeira chamada, cacheado para evitar I/O repetido.
   // Pode ser limpo via ipc handler 'app:refresh-writable-base' se permissões mudarem.
   let _writableBaseCached = null;
@@ -249,8 +250,11 @@ function setupIpc(mainWindow) {
     if (process.env.PORTABLE_EXECUTABLE_DIR) return (_writableBaseCached = process.env.PORTABLE_EXECUTABLE_DIR);
     const exeDir = path.dirname(app.getPath('exe'));
     try {
-      // Testa se a pasta do exe aceita gravação (como o Delphi: config/ junto ao exe)
-      const testFile = path.join(exeDir, '.louvorja-write-test');
+      // Testa escrita em exeDir/config/ — o NSIS concede acesso total a esta subpasta
+      // mesmo quando exeDir é Program Files (onde a raiz é read-only para não-admins).
+      const configDir = path.join(exeDir, 'config');
+      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+      const testFile = path.join(configDir, '.louvorja-write-test');
       fs.writeFileSync(testFile, '1');
       fs.unlinkSync(testFile);
       _writableBaseCached = exeDir;
