@@ -24,10 +24,11 @@ export default {
   name: "PopupPage",
   data: () => ({
     module: null,
-    visible: true,
+    visible: false,
     stateHandler: null,
     moduleHandler: null,
     closingHandler: null,
+    _revealTimer: null,
   }),
   computed: {
     moduleComponent() {
@@ -50,6 +51,20 @@ export default {
       if (!isElectron()) {
         setTimeout(() => window.close(), FADE_MS);
       }
+    },
+
+    // Pré-carrega a imagem de capa e abre o fade-in só depois que ela estiver pronta.
+    // Evita o flash de fundo preto enquanto a imagem carrega no renderer da janela de saída.
+    _revealWindow(imageUrl) {
+      if (this.visible) return;
+      clearTimeout(this._revealTimer);
+      const show = () => { if (!this.visible) this.visible = true; };
+      if (!imageUrl) { show(); return; }
+      const img = new Image();
+      img.onload = img.onerror = show;
+      img.src = imageUrl;
+      // Fallback: mostra em até 800 ms mesmo se a imagem não carregar
+      this._revealTimer = setTimeout(show, 800);
     },
 
     initElectron() {
@@ -77,6 +92,10 @@ export default {
           if (data.param === "theme" && data.value) {
             try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
           }
+          // Quando a imagem de capa chega, pré-carrega e revela a janela
+          if (data.param === "modules.media.data" && data.value?.url_image) {
+            this._revealWindow(data.value.url_image);
+          }
         }
       });
 
@@ -93,6 +112,10 @@ export default {
       });
 
       window.electron.notifyOutputReady();
+
+      // Fallback: para módulos sem imagem de capa (ou se modules.media.data não chegar),
+      // revela depois de 500 ms para não bloquear indefinidamente a janela de saída.
+      this._revealTimer = setTimeout(() => this._revealWindow(null), 500);
     },
 
     initBrowser() {
@@ -115,9 +138,14 @@ export default {
             if (event.data.param === "theme" && event.data.value) {
               try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
             }
+            if (event.data.param === "modules.media.data" && event.data.value?.url_image) {
+              this._revealWindow(event.data.value.url_image);
+            }
           }
         }
       });
+      // Fallback para browser: revela se não chegar dados de mídia
+      this._revealTimer = setTimeout(() => this._revealWindow(null), 500);
 
       try {
         window.opener?.postMessage("mounted", window.location.origin);
@@ -164,6 +192,7 @@ export default {
     }
   },
   beforeUnmount() {
+    clearTimeout(this._revealTimer);
     document.removeEventListener("keydown", this.handleKeyDown);
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off("state-update",    this.stateHandler);

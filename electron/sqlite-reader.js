@@ -411,7 +411,11 @@ class SQLiteReader {
     let musics = [];
     if (s.hasAlbMusics) {
       const trackCol  = s.am.track             ? 'am.track'                  : '1 AS track';
-      const instrCol  = s.mu.has_instrumental_music ? 'm.has_instrumental_music' : '0 AS has_instrumental_music';
+      const instrCol  = s.mu.has_instrumental_music
+        ? 'm.has_instrumental_music'
+        : (s.mu.id_file_instrumental_music
+          ? '(CASE WHEN m.id_file_instrumental_music IS NOT NULL AND m.id_file_instrumental_music > 0 THEN 1 ELSE 0 END) AS has_instrumental_music'
+          : '0 AS has_instrumental_music');
       const hasDurFile = s.hasFiles && s.fi.duration && s.mu.id_file_music;
       const durCol    = hasDurFile ? 'f_mus.duration AS duration' : '0 AS duration';
       const durJoin   = hasDurFile ? 'LEFT JOIN files f_mus ON f_mus.id_file = m.id_file_music' : '';
@@ -595,7 +599,11 @@ class SQLiteReader {
     if (!categoryId) return [];
 
     const trackCol  = s.am.track                  ? 'am.track'                  : '1 AS track';
-    const instrCol  = s.mu.has_instrumental_music  ? 'm.has_instrumental_music'  : '0 AS has_instrumental_music';
+    const instrCol  = s.mu.has_instrumental_music
+      ? 'm.has_instrumental_music'
+      : (s.mu.id_file_instrumental_music
+        ? '(CASE WHEN m.id_file_instrumental_music IS NOT NULL AND m.id_file_instrumental_music > 0 THEN 1 ELSE 0 END) AS has_instrumental_music'
+        : '0 AS has_instrumental_music');
     const hasDurFile = s.hasFiles && s.fi.duration && s.mu.id_file_music;
     const durCol    = hasDurFile ? 'f_mus.duration AS duration' : '0 AS duration';
     const durJoin   = hasDurFile ? 'LEFT JOIN files f_mus ON f_mus.id_file = m.id_file_music' : '';
@@ -621,7 +629,11 @@ class SQLiteReader {
     const s = this._getSchema();
 
     const langFilter = s.mu.id_language ? `WHERE m.id_language = '${lang}'` : '';
-    const instrCol   = s.mu.has_instrumental_music ? 'm.has_instrumental_music' : '0 AS has_instrumental_music';
+    const instrCol   = s.mu.has_instrumental_music
+      ? 'm.has_instrumental_music'
+      : (s.mu.id_file_instrumental_music
+        ? '(CASE WHEN m.id_file_instrumental_music IS NOT NULL AND m.id_file_instrumental_music > 0 THEN 1 ELSE 0 END) AS has_instrumental_music'
+        : '0 AS has_instrumental_music');
     const hasDurFile = s.hasFiles && s.fi.duration && s.mu.id_file_music;
     const durCol     = hasDurFile ? 'f_mus.duration AS duration' : '0 AS duration';
     const durJoin    = hasDurFile ? 'LEFT JOIN files f_mus ON f_mus.id_file = m.id_file_music' : '';

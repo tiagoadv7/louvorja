@@ -135,6 +135,9 @@ export default {
 
       await this.$electron.openOutput(moduleId, null);
       this.outputOpen = true;
+      // Registra o stub de popup para que Media.close() saiba que o output está aberto,
+      // mesmo quando aberto via barra do sistema (sem passar por $popup.open()).
+      this.$appdata.set("popup", { closed: false, _electron: true });
     },
   },
   async mounted() {

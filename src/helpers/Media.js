@@ -177,6 +177,7 @@ export default {
             }
           }
         );
+        $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
         return;
       }
@@ -266,18 +267,57 @@ export default {
     const isPaused = $appdata.get("modules.media.config.is_paused") || audio.paused;
 
     const rawSwitchUrl = newMode === "audio" ? data.url_music : data.url_instrumental_music;
-    const newUrl = (await $electron.mediaResolveFile(rawSwitchUrl)) || $path.file(rawSwitchUrl);
+    const localUrl = await $electron.mediaResolveFile(rawSwitchUrl);
+    const newUrl = localUrl || $path.file(rawSwitchUrl);
 
-    $appdata.set(
-      "modules.media.times",
-      this.slides().map((item) =>
-        $datetime.toNumber(
-          newMode === "audio" ? item.time : item.instrumental_time,
-        ),
-      ),
+    // Arquivo local não encontrado → avisar usuário sem travar is_fading
+    if (!localUrl && rawSwitchUrl && rawSwitchUrl.startsWith("app-local://")) {
+      $alert.show(
+        {
+          title: "modules.media.alerts.not_loaded_offline",
+          text: "modules.media.alerts.not_loaded_offline_detail",
+          color: "warning",
+          translate: true,
+          buttons: [
+            { text: "alert.close", color: "grey", value: "close" },
+            { text: "modules.media.alerts.btn_download", color: "primary", value: "download" },
+          ],
+        },
+        function (val) {
+          if (val === "download") {
+            window.dispatchEvent(
+              new CustomEvent("open-download-center", {
+                detail: {
+                  section: "collections",
+                  id_album: $appdata.get("modules.media.id_album"),
+                },
+              })
+            );
+          }
+        }
+      );
+      return;
+    }
+
+    const newTimes = this.slides().map((item) =>
+      $datetime.toNumber(newMode === "audio" ? item.time : item.instrumental_time)
     );
+    // Só substitui os tempos se o novo modo tiver marcações válidas.
+    // Sem isso, ao mudar para playback sem tempos definidos todos ficam em 0
+    // e o slide pula direto para o último.
+    if (newTimes.some(t => t > 0)) {
+      $appdata.set("modules.media.times", newTimes);
+    }
     $appdata.set("modules.media.config.mode", newMode);
     $appdata.set("modules.media.config.audio", newUrl);
+
+    // Cancela fadeIn/fadeOut em andamento e captura a chave desta transição
+    this._fadeKey = (this._fadeKey || 0) + 1;
+    if (this._pauseInterval) { clearInterval(this._pauseInterval); this._pauseInterval = null; }
+    if (!this._fades) this._fades = {};
+    clearInterval(this._fades.xfade_out);
+    clearInterval(this._fades.xfade_in);
+    const xfadeKey = this._fadeKey;
 
     if (isPaused) {
       audio.src = newUrl;
@@ -287,6 +327,7 @@ export default {
       return;
     }
 
+    audio.volume = targetVolume;
     $appdata.set("modules.media.config.is_fading", true);
 
     const existing = document.getElementById("__audio_xfade");
@@ -300,33 +341,58 @@ export default {
     document.body.appendChild(xfade);
 
     xfade.addEventListener("canplay", () => {
-      xfade.currentTime = capturedTime;
+      if (this._fadeKey !== xfadeKey) {
+        xfade.pause(); xfade.src = ""; xfade.remove();
+        return;
+      }
+
+      // Sincroniza posição com o audio atual
+      xfade.currentTime = audio.currentTime;
       xfade.play().catch(() => {});
 
-      const STEP = 0.05;
-      const INTERVAL = 60;
+      // Padrão SoundMaster: dois fades independentes com slots nomeados, 40 ms/passo
+      const FADE_MS = 1200;
+      const INTERVAL = 40;
+      const steps = Math.max(1, Math.round(FADE_MS / INTERVAL));
 
-      const fade = setInterval(() => {
-        const oldDone = audio.volume <= 0;
-        const newDone = xfade.volume >= targetVolume;
+      // FADE OUT — audio antigo sai de forma independente
+      const outStart = audio.volume;
+      const outD     = outStart / steps;
+      let outN = 0;
+      this._fades.xfade_out = setInterval(() => {
+        if (this._fadeKey !== xfadeKey) { clearInterval(this._fades.xfade_out); return; }
+        outN++;
+        audio.volume = Math.max(0, outStart - outD * outN);
+        if (outN >= steps) { clearInterval(this._fades.xfade_out); audio.volume = 0; audio.pause(); }
+      }, INTERVAL);
 
-        if (!oldDone) audio.volume = Math.max(0, audio.volume - STEP);
-        if (!newDone) xfade.volume = Math.min(targetVolume, xfade.volume + STEP);
+      // FADE IN — xfade entra de forma independente; ao terminar, transfere para audio
+      const inD = targetVolume / steps;
+      let inN = 0;
+      this._fades.xfade_in = setInterval(() => {
+        if (this._fadeKey !== xfadeKey) { clearInterval(this._fades.xfade_in); return; }
+        inN++;
+        xfade.volume = Math.min(targetVolume, inD * inN);
+        if (inN >= steps) {
+          clearInterval(this._fades.xfade_in);
+          clearInterval(this._fades.xfade_out);
+          xfade.volume = targetVolume;
 
-        if (oldDone && newDone) {
-          clearInterval(fade);
+          // Promove xfade para elemento principal — sem reload nem seek.
+          // audio.load() causava: timeupdate com currentTime=0 → slide de título,
+          // e play() antes do seek completar → engasgo/gargalo.
           audio.pause();
-          audio.src = newUrl;
-          audio.volume = targetVolume;
-          audio.addEventListener("canplay", () => {
-            audio.currentTime = xfade.currentTime;
-            audio.play().catch(() => {});
-            xfade.pause();
-            xfade.src = "";
-            xfade.remove();
-            $appdata.set("modules.media.config.is_fading", false);
-          }, { once: true });
-          audio.load();
+          audio.src = "";
+          audio.removeAttribute("id");
+
+          xfade.id = "__audio";
+          xfade.setAttribute("preload", "auto");
+          xfade.setAttribute("autoplay", "true");
+          xfade.addEventListener("timeupdate", this.timeUpdate.bind(this));
+          xfade.addEventListener("progress", this.timeUpdate.bind(this));
+
+          audio.remove();
+          $appdata.set("modules.media.config.is_fading", false);
         }
       }, INTERVAL);
     }, { once: true });
@@ -350,18 +416,22 @@ export default {
 
     const popup = $appdata.get("popup");
     const popupModule = $appdata.get("popup_module");
-    const outputIsMedia = popup && popupModule === "media";
-
-    $appdata.set("modules.media.show", false);
-    $appdata.set("modules.media.minimized", false);
+    // No Electron, o output pode ter sido aberto via barra do sistema sem passar pelo
+    // $popup.open(), deixando popup=null. Verificamos isElectron() como fallback para
+    // garantir que closeOutput() seja chamado — main process ignora se não estiver aberto.
+    const outputIsMedia = (popup || $electron.isElectron()) && popupModule === "media";
 
     if (outputIsMedia) {
-      // Dispara o fade-out na janela projetada enquanto os dados ainda estão
-      // presentes, evitando o flash de tela preta antes do fechamento suave.
+      // Envia output-closing ANTES de qualquer mudança de estado para que o popup
+      // inicie o fade-out enquanto o slide ainda está renderizado sem modificações.
       $electron.closeOutput();
-      // Limpa os dados após a animação de fade terminar (~450ms no Electron)
-      setTimeout(() => this.clearVariables(), 500);
+      $appdata.set("modules.media.show", false);
+      $appdata.set("modules.media.minimized", false);
+      // Limpa dados somente após a janela estar destruída (animação 400ms + destruição).
+      setTimeout(() => this.clearVariables(), 1200);
     } else {
+      $appdata.set("modules.media.show", false);
+      $appdata.set("modules.media.minimized", false);
       this.clearVariables();
     }
   },
@@ -699,12 +769,19 @@ export default {
     $appdata.set("modules.media.config.is_fading", true);
     const max_volume = $appdata.get("modules.media.config.volume") / 100;
 
-    const interval = setInterval(() => {
+    // Cancela qualquer fade de pausa/play em andamento (não altera _fadeKey — pertence ao crossfade)
+    if (this._pauseInterval) clearInterval(this._pauseInterval);
+    const myCrossKey = this._fadeKey || 0;
+
+    this._pauseInterval = setInterval(() => {
+      if ((this._fadeKey || 0) !== myCrossKey) {
+        clearInterval(this._pauseInterval); this._pauseInterval = null; return;
+      }
       if (audio.volume < max_volume) {
         audio.volume = Math.min(audio.volume + 0.05, max_volume);
       } else {
         $appdata.set("modules.media.config.is_fading", false);
-        clearInterval(interval);
+        clearInterval(this._pauseInterval); this._pauseInterval = null;
         if (callback) callback();
       }
     }, 60);
@@ -719,12 +796,19 @@ export default {
 
     $appdata.set("modules.media.config.is_fading", true);
 
-    const interval = setInterval(() => {
+    // Cancela qualquer fade de pausa/play em andamento (não altera _fadeKey — pertence ao crossfade)
+    if (this._pauseInterval) clearInterval(this._pauseInterval);
+    const myCrossKey = this._fadeKey || 0;
+
+    this._pauseInterval = setInterval(() => {
+      if ((this._fadeKey || 0) !== myCrossKey) {
+        clearInterval(this._pauseInterval); this._pauseInterval = null; return;
+      }
       if (audio.volume > 0) {
         audio.volume = Math.max(audio.volume - 0.05, 0);
       } else {
         $appdata.set("modules.media.config.is_fading", false);
-        clearInterval(interval);
+        clearInterval(this._pauseInterval); this._pauseInterval = null;
         if (callback) callback();
       }
     }, 60);
