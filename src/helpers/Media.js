@@ -89,13 +89,18 @@ export default {
 
     let data = await $database.get(`music_${id_music}`);
     if (data == null) {
-      // Modo offline ativo mas música não baixada → abre o Download Center (Coletâneas)
-      if ($database.isLocalEnabled()) {
-        window.dispatchEvent(
-          new CustomEvent('open-download-center', { detail: { section: 'collections' } })
-        );
+      if (typeof this._autoCloseCallback === 'function') {
+        // Modo "reproduzir todos": pula para a próxima faixa silenciosamente
+        this._autoCloseCallback();
+      } else {
+        // Modo single: sugere download se offline
+        if ($database.isLocalEnabled()) {
+          window.dispatchEvent(
+            new CustomEvent('open-download-center', { detail: { section: 'collections' } })
+          );
+        }
+        this.close(true);
       }
-      this.close(true);
       return;
     }
     await this.resolveDataImages(data);
@@ -157,6 +162,14 @@ export default {
 
       // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar
       if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
+        $appdata.set("modules.media.config.mode", mode);
+        $appdata.set("modules.media.loading", false);
+        if (typeof this._autoCloseCallback === 'function') {
+          // Modo "reproduzir todos": pula para a próxima faixa silenciosamente
+          this._autoCloseCallback();
+          return;
+        }
+        // Modo single: mostra alerta com opção de download
         const albumName = (() => {
           if (data.albums?.length > 0) {
             const a = id_album ? data.albums.find((x) => x.id_album == id_album) : null;
@@ -185,8 +198,6 @@ export default {
             }
           }
         );
-        $appdata.set("modules.media.config.mode", mode);
-        $appdata.set("modules.media.loading", false);
         return;
       }
 
@@ -208,14 +219,16 @@ export default {
         try {
           request.open("GET", $appdata.get("modules.media.config.audio"), true);
         } catch (error) {
-          $alert.error(
-            { text: "modules.media.alerts.not_loaded", error },
-            function (a) {
-              if (a) {
-                self.open(id_music);
-              }
-            },
-          );
+          if (typeof self._autoCloseCallback === 'function') {
+            self._autoCloseCallback();
+          } else {
+            $alert.error(
+              { text: "modules.media.alerts.not_loaded", error },
+              function (a) {
+                if (a) { self.open(id_music); }
+              },
+            );
+          }
           return;
         }
 
@@ -226,32 +239,35 @@ export default {
             audio.load();
             self.play();
           } else {
+            if (typeof self._autoCloseCallback === 'function') {
+              self._autoCloseCallback();
+            } else {
+              $alert.error(
+                {
+                  text: "modules.media.alerts.not_loaded",
+                  error: request.statusText || "",
+                },
+                function (a) {
+                  if (a) { self.open(id_music); }
+                },
+              );
+            }
+          }
+        };
+        request.onerror = function () {
+          if (typeof self._autoCloseCallback === 'function') {
+            self._autoCloseCallback();
+          } else {
             $alert.error(
               {
                 text: "modules.media.alerts.not_loaded",
                 error: request.statusText || "",
               },
               function (a) {
-                if (a) {
-                  self.open(id_music);
-                }
+                if (a) { self.open(id_music); }
               },
             );
           }
-        };
-        request.onerror = function () {
-          $alert.error(
-            {
-              text: "modules.media.alerts.not_loaded",
-              error: request.statusText || "",
-            },
-            function (a) {
-              if (a) {
-                self.open(id_music);
-              }
-            },
-          );
-          return;
         };
 
         request.send();
@@ -752,6 +768,11 @@ export default {
     } else {
       let self = this;
       audio.play().catch((e) => {
+        // Modo "reproduzir todos": pula para a próxima faixa sem exibir alerta
+        if (typeof self._autoCloseCallback === 'function') {
+          self._autoCloseCallback();
+          return;
+        }
         const audioSrc = $appdata.get("modules.media.config.audio") || "";
         if (audioSrc.startsWith("app-local://") || audioSrc.startsWith("file://")) {
           $alert.show(
