@@ -41,8 +41,9 @@ app.commandLine.appendSwitch('renderer-process-limit', '4');
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-let mainWindow   = null;
-let outputWindow = null;
+let mainWindow    = null;
+let outputWindow  = null;
+let returnWindow  = null;
 let loadingWindow = null;
 
 // Previne múltiplas instâncias
@@ -196,6 +197,7 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.close();
+    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
     tryGC();
   });
 }
@@ -261,6 +263,61 @@ function createOutputWindow(moduleId, displayId) {
   return outputWindow;
 }
 
+// ── Janela de retorno (monitor de palco) ──────────────────────────────────────
+function createReturnWindow(displayId) {
+  if (returnWindow && !returnWindow.isDestroyed()) {
+    returnWindow.focus();
+    return returnWindow;
+  }
+
+  const allDisplays = screen.getAllDisplays();
+  const primary     = screen.getPrimaryDisplay();
+
+  const targetId = displayId || Store.get('return_display_id');
+  if (displayId) Store.set('return_display_id', displayId);
+
+  let target = targetId ? allDisplays.find(d => d.id === targetId) : null;
+  if (!target) target = primary;
+
+  const { x, y, width, height } = target.bounds;
+
+  returnWindow = new BrowserWindow({
+    x, y, width, height,
+    frame: false,
+    closable: false,
+    alwaysOnTop: !isDev,
+    icon: path.join(__dirname, '../public/ico/favicon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: !isDev,
+      spellcheck: false,
+      backgroundThrottling: false,
+    },
+    show: false,
+  });
+
+  returnWindow.loadURL(getAppUrl('#/return-screen'));
+
+  returnWindow.once('ready-to-show', () => {
+    returnWindow.show();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('return-window-opened');
+    }
+  });
+
+  returnWindow.on('closed', () => {
+    returnWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('return-window-closed');
+    }
+    tryGC();
+  });
+
+  return returnWindow;
+}
+
 // ── Registrar handlers IPC ────────────────────────────────────────────────────
 function registerIpcHandlers() {
   ipcMain.handle('window:minimize',     () => mainWindow?.minimize());
@@ -278,7 +335,11 @@ function registerIpcHandlers() {
     return true;
   });
   ipcMain.handle('output:close', async () => {
+    if (returnWindow && !returnWindow.isDestroyed()) {
+      returnWindow.webContents.send('return-closing');
+    }
     await fadeOutAndClose(outputWindow);
+    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
     return true;
   });
   ipcMain.handle('output:is-open', () => {
@@ -291,9 +352,24 @@ function registerIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle('return:open', (_, displayId) => {
+    createReturnWindow(displayId);
+    return true;
+  });
+  ipcMain.handle('return:close', () => {
+    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
+    return true;
+  });
+  ipcMain.handle('return:is-open', () => {
+    return !!(returnWindow && !returnWindow.isDestroyed());
+  });
+
   ipcMain.on('state-update', (_, data) => {
     if (outputWindow && !outputWindow.isDestroyed()) {
       outputWindow.webContents.send('state-update', data);
+    }
+    if (returnWindow && !returnWindow.isDestroyed()) {
+      returnWindow.webContents.send('state-update', data);
     }
   });
 

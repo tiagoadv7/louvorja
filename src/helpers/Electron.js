@@ -211,6 +211,18 @@ export default {
       ? window.electron.downloadMissingFiles(missingList, filesBaseUrl, token)
       : Promise.resolve({ success: false, error: 'not-electron' }),
 
+  // ── Tela de Retorno ────────────────────────────────────────────────────────
+  openReturnScreen: (displayId) =>
+    isElectron() ? window.electron.openReturnScreen(displayId) : Promise.resolve(false),
+  closeReturnScreen: () =>
+    isElectron() ? window.electron.closeReturnScreen() : Promise.resolve(false),
+  isReturnScreenOpen: () =>
+    isElectron() ? window.electron.isReturnScreenOpen() : Promise.resolve(false),
+
+  // ── Sistema ───────────────────────────────────────────────────────────
+  getHostname: () =>
+    isElectron() ? window.electron.getHostname() : Promise.resolve(window.location.hostname || ''),
+
   // ── Telas ──────────────────────────────────────────────────────────────
   getScreens: () =>
     isElectron() ? window.electron.getScreens() : Promise.resolve([]),

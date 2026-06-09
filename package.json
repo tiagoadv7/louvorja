@@ -82,7 +82,7 @@
   },
   "build": {
     "appId": "louvorja.com.br",
-    "productName": "LouvorJA",
+    "productName": "Louvor JA",
     "copyright": "Copyright © 2026 Louvor JA",
     "directories": {
       "output": "release",

@@ -8,6 +8,9 @@ const RECEIVE_CHANNELS = [
   'output-window-opened',
   'output-ready',
   'output-closing',
+  'return-window-opened',
+  'return-window-closed',
+  'return-closing',
   'menu:open-output',
   'menu:close-output',
   'menu:save-data',
@@ -106,6 +109,14 @@ contextBridge.exposeInMainWorld('electron', {
   scanAlbumsFiles: () => ipcRenderer.invoke('files:scan-albums'),
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
     ipcRenderer.invoke('files:download-missing', missingList, filesBaseUrl, token),
+
+  // ── Tela de Retorno (monitor de palco) ──────────────────────────────────────
+  openReturnScreen:  (displayId) => ipcRenderer.invoke('return:open', displayId),
+  closeReturnScreen: ()          => ipcRenderer.invoke('return:close'),
+  isReturnScreenOpen: ()         => ipcRenderer.invoke('return:is-open'),
+
+  // ── Sistema ───────────────────────────────────────────────────────────────
+  getHostname: () => ipcRenderer.invoke('app:hostname'),
 
   // ── Telas / displays ─────────────────────────────────────────────────────
   getScreens: () => ipcRenderer.invoke('screen:get-all'),

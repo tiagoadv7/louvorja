@@ -1,91 +1,117 @@
 <template>
-  <!-- ── Popup de confirmação (igual ao LouvorJA Delphi) ────────────────────── -->
-  <v-dialog v-model="confirmShow" max-width="460" persistent>
-    <v-card rounded="lg" elevation="8">
-      <v-card-title class="d-flex align-center pa-4 pb-2 text-subtitle-1 font-weight-semibold">
-        <img src="/ico/favicon.png" width="20" class="mr-2" style="object-fit:contain" />
-        LouvorJA
-      </v-card-title>
-      <v-card-text class="d-flex align-start gap-3 pa-4 pt-2">
-        <v-icon color="primary" size="36" class="mt-1 flex-shrink-0">mdi-help-circle-outline</v-icon>
+  <!-- ── Confirmação ─────────────────────────────────────────────────────────── -->
+  <v-dialog v-model="confirmShow" max-width="420" persistent>
+    <v-card rounded="lg" elevation="12" style="overflow:hidden">
+      <div class="fcd-confirm-header">
+        <v-avatar color="warning" size="48" variant="tonal" class="flex-shrink-0">
+          <v-icon size="26">mdi-folder-alert-outline</v-icon>
+        </v-avatar>
         <div>
-          <div class="text-body-2 font-weight-medium mb-1">
-            Sua coletânea possui <strong>{{ totalMissing }}</strong> arquivo(s) faltando ou danificado(s)!
-          </div>
-          <div class="text-body-2 text-medium-emphasis">
-            Deseja baixar estes arquivos agora? (necessário conexão com a internet)
-          </div>
+          <div class="text-subtitle-1 font-weight-bold">Arquivos em falta</div>
+          <div class="text-caption text-medium-emphasis">Coletânea incompleta detectada</div>
+        </div>
+      </div>
+      <v-card-text class="px-5 pt-0 pb-3">
+        <div class="text-body-2">
+          Sua coletânea possui
+          <strong class="text-warning">{{ totalMissing }} arquivo(s)</strong>
+          faltando ou danificado(s).
+        </div>
+        <div class="text-body-2 text-medium-emphasis mt-1">
+          Deseja baixá-los agora? (requer conexão com a internet)
         </div>
       </v-card-text>
-      <v-card-actions class="pa-3 justify-center gap-3">
-        <v-btn variant="elevated" color="primary" min-width="80" @click="confirmYes">Sim</v-btn>
-        <v-btn variant="outlined" min-width="80" @click="confirmNo">Não</v-btn>
+      <v-divider />
+      <v-card-actions class="px-5 py-4 justify-end" style="gap: 24px">
+        <v-btn variant="text" class="px-5" prepend-icon="mdi-clock-outline" @click="confirmNo">Agora não</v-btn>
+        <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-download" @click="confirmYes">
+          Baixar agora
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
-  <!-- ── Dialog principal: lista de arquivos estilo Delphi ──────────────────── -->
-  <v-dialog v-model="show" max-width="920" :persistent="step === 'downloading'"
-            @update:modelValue="v => { if (!v) close(); }">
-    <v-card rounded="lg" elevation="8">
+  <!-- ── Dialog principal ────────────────────────────────────────────────────── -->
+  <v-dialog
+    v-model="show"
+    max-width="900"
+    :persistent="step === 'downloading'"
+    @update:modelValue="v => { if (!v) close(); }"
+  >
+    <v-card rounded="lg" elevation="8" style="overflow:hidden">
 
-      <!-- Título -->
-      <v-card-title class="d-flex align-center pa-3 pb-2 text-subtitle-2">
-        <v-icon size="18" color="primary" class="mr-2">mdi-folder-search-outline</v-icon>
-        Verificar arquivos em falta
-        <v-spacer />
-        <v-btn v-if="step !== 'downloading'" icon="mdi-close" variant="text" size="x-small" @click="close" />
-      </v-card-title>
-
-      <div class="text-caption text-medium-emphasis px-4 pb-1">
-        Verificação de arquivos da coletânea:
+      <!-- Cabeçalho -->
+      <div class="fcd-header">
+        <div class="d-flex align-center gap-3">
+          <v-avatar color="primary" variant="tonal" size="40">
+            <v-icon size="20">mdi-folder-sync-outline</v-icon>
+          </v-avatar>
+          <div>
+            <div class="text-subtitle-2 font-weight-bold">Sincronizar arquivos</div>
+            <div class="text-caption text-medium-emphasis">Verificação de integridade da coletânea</div>
+          </div>
+        </div>
+        <v-btn v-if="step !== 'downloading'" icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
       </div>
       <v-divider />
 
-      <!-- ── Escaneando ──────────────────────────────────────────────────── -->
-      <v-card-text v-if="step === 'scanning'" class="d-flex align-center justify-center py-8">
-        <v-progress-circular indeterminate size="36" width="3" color="primary" class="mr-4" />
-        <span class="text-body-2">Verificando arquivos locais...</span>
+      <!-- Barra de estatísticas -->
+      <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center gap-3 px-4 py-2">
+        <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle-outline">
+          Encontrados: <strong class="ml-1">{{ foundFiles }}</strong>
+        </v-chip>
+        <v-chip size="small" :color="totalMissing > 0 ? 'error' : 'success'" variant="tonal"
+                :prepend-icon="totalMissing > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-all'">
+          Em falta: <strong class="ml-1">{{ totalMissing }}</strong>
+        </v-chip>
+        <v-spacer />
+        <span class="text-caption text-medium-emphasis">
+          {{ totalScanned }} álbum(s) verificado(s)
+        </span>
+      </div>
+
+      <!-- ── Escaneando ── -->
+      <v-card-text v-if="step === 'scanning'" class="d-flex flex-column align-center justify-center py-12">
+        <div class="fcd-scan-ring mb-5">
+          <v-icon size="40" color="primary">mdi-folder-search-outline</v-icon>
+        </div>
+        <div class="text-body-1 font-weight-semibold mb-1">Verificando arquivos locais...</div>
+        <div class="text-caption text-medium-emphasis mb-5">Isso pode levar alguns segundos</div>
+        <v-progress-linear indeterminate color="primary" rounded height="4" style="max-width:220px;width:100%" />
       </v-card-text>
 
-      <!-- ── Lista de arquivos (estilo Delphi) ──────────────────────────── -->
-      <template v-else-if="step === 'results' || step === 'all-good'">
+      <!-- ── Lista de arquivos ── -->
+      <template v-else-if="step === 'results'">
+        <!-- Toolbar de seleção -->
+        <div class="fcd-toolbar d-flex align-center px-4 py-2" style="gap: 16px">
+          <span class="text-caption text-medium-emphasis">Selecionar:</span>
+          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-check-all" @click="selectAll">Todos</v-btn>
+          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
+          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
+          <v-spacer />
+          <v-chip size="small" color="primary" variant="tonal" prepend-icon="mdi-check">
+            {{ selectedCount }} / {{ fileList.length }} selecionado(s)
+          </v-chip>
+        </div>
+        <v-divider />
 
-        <!-- Ações de seleção (topo) -->
-        <div v-if="step === 'results'" class="d-flex gap-2 pa-2 pb-1">
-          <v-btn size="x-small" variant="outlined" prepend-icon="mdi-check-all" @click="selectAll">
-            Marcar Todos
-          </v-btn>
-          <v-btn size="x-small" variant="outlined" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">
-            Desmarcar Todos
-          </v-btn>
-          <v-btn size="x-small" variant="outlined" prepend-icon="mdi-swap-horizontal" @click="invertSelection">
-            Inverter Seleção
-          </v-btn>
+        <!-- Cabeçalho da lista -->
+        <div class="fcd-list-header">
+          <div class="fcd-col-check" />
+          <div class="fcd-col-name">Arquivo</div>
+          <div class="fcd-col-dir">Localização</div>
+          <div class="fcd-col-status">Status</div>
         </div>
 
-        <!-- Cabeçalho da tabela -->
-        <div class="file-list-header">
-          <div class="file-col-check"></div>
-          <div class="file-col-name">Arquivo</div>
-          <div class="file-col-dir">Diretório</div>
-          <div class="file-col-status">Status</div>
-        </div>
-
-        <!-- Lista de arquivos faltando (virtual scroll para performance) -->
-        <v-virtual-scroll
-          v-if="step === 'results' && fileList.length > 0"
-          :items="fileList"
-          :height="360"
-          :item-height="28"
-        >
+        <!-- Linhas (virtual scroll) -->
+        <v-virtual-scroll :items="fileList" :height="310" :item-height="36">
           <template #default="{ item }">
             <div
-              class="file-list-row"
-              :class="{ 'file-list-row--selected': selectedDests.has(item.dest) }"
+              class="fcd-list-row"
+              :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
               @click="toggleItem(item.dest)"
             >
-              <div class="file-col-check">
+              <div class="fcd-col-check">
                 <v-checkbox
                   :model-value="selectedDests.has(item.dest)"
                   density="compact"
@@ -94,95 +120,104 @@
                   @click.stop="toggleItem(item.dest)"
                 />
               </div>
-              <div class="file-col-name text-truncate" :title="item.name">{{ item.name }}</div>
-              <div class="file-col-dir text-truncate text-medium-emphasis" :title="item.relPath">
+              <div class="fcd-col-name">
+                <v-icon size="13" color="warning" class="me-1 flex-shrink-0">mdi-file-music-outline</v-icon>
+                <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
+              </div>
+              <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
                 {{ item.relPath }}
               </div>
-              <div class="file-col-status text-error text-caption">Não encontrado</div>
+              <div class="fcd-col-status">
+                <v-chip size="x-small" color="error" variant="tonal">faltando</v-chip>
+              </div>
             </div>
           </template>
         </v-virtual-scroll>
-
-        <!-- Todos encontrados -->
-        <div v-else-if="step === 'all-good'" class="d-flex flex-column align-center justify-center py-6">
-          <v-icon color="success" size="48" class="mb-2">mdi-check-circle-outline</v-icon>
-          <div class="text-body-1 font-weight-medium">Todos os arquivos estão presentes!</div>
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ totalScanned }} álbum(s) · {{ foundFiles }} arquivo(s) verificado(s)
-          </div>
-        </div>
       </template>
 
-      <!-- ── Baixando ─────────────────────────────────────────────────────── -->
-      <v-card-text v-else-if="step === 'downloading'" class="pa-4">
-        <div class="d-flex align-center mb-2">
-          <v-progress-circular size="20" width="2" indeterminate color="primary" class="mr-3" />
-          <span class="text-body-2 font-weight-medium">Baixando arquivos...</span>
-          <v-spacer />
-          <span class="text-caption text-medium-emphasis">{{ dlCurrent }}/{{ dlTotal }}</span>
-        </div>
-        <v-progress-linear :model-value="dlPercent" height="6" rounded color="primary" class="mb-2" />
-        <div class="d-flex align-center gap-3">
-          <div class="text-caption text-medium-emphasis text-truncate flex-grow-1">{{ dlMessage }}</div>
-          <div v-if="dlFileSize" class="text-caption text-medium-emphasis flex-shrink-0">{{ dlFileSize }}</div>
-          <div v-if="dlSpeed" class="text-caption text-medium-emphasis flex-shrink-0 font-weight-medium">{{ dlSpeed }}</div>
+      <!-- ── Tudo ok ── -->
+      <v-card-text v-else-if="step === 'all-good'" class="d-flex flex-column align-center justify-center py-10">
+        <v-avatar color="success" variant="tonal" size="72" class="mb-4">
+          <v-icon size="40">mdi-check-circle-outline</v-icon>
+        </v-avatar>
+        <div class="text-h6 font-weight-bold mb-1">Tudo em ordem!</div>
+        <div class="text-body-2 text-medium-emphasis mb-6">Todos os arquivos da coletânea estão presentes.</div>
+        <div class="d-flex gap-6">
+          <div class="text-center">
+            <div class="text-h4 font-weight-black text-primary">{{ totalScanned }}</div>
+            <div class="text-caption text-medium-emphasis">álbuns</div>
+          </div>
+          <v-divider vertical />
+          <div class="text-center">
+            <div class="text-h4 font-weight-black text-success">{{ foundFiles }}</div>
+            <div class="text-caption text-medium-emphasis">arquivos</div>
+          </div>
         </div>
       </v-card-text>
 
-      <!-- ── Concluído ────────────────────────────────────────────────────── -->
-      <v-card-text v-else-if="step === 'done'" class="d-flex flex-column align-center justify-center py-6">
-        <v-icon color="success" size="48" class="mb-2">mdi-check-circle-outline</v-icon>
-        <div class="text-body-1 font-weight-medium">Download concluído!</div>
-        <div class="text-caption text-medium-emphasis mt-1">{{ dlTotal }} arquivo(s) processado(s)</div>
+      <!-- ── Baixando ── -->
+      <v-card-text v-else-if="step === 'downloading'" class="pa-6">
+        <div class="d-flex align-center gap-4 mb-5">
+          <v-progress-circular size="38" width="3" indeterminate color="primary" />
+          <div class="flex-grow-1 min-w-0">
+            <div class="text-body-2 font-weight-semibold mb-1">Baixando arquivos...</div>
+            <div class="text-caption text-medium-emphasis text-truncate">{{ dlMessage }}</div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="text-subtitle-2 font-weight-bold">{{ dlCurrent }}<span class="text-medium-emphasis font-weight-regular">/{{ dlTotal }}</span></div>
+            <div class="text-caption text-primary font-weight-medium">{{ dlPercent }}%</div>
+          </div>
+        </div>
+        <v-progress-linear :model-value="dlPercent" height="8" rounded color="primary" class="mb-3" />
+        <div class="d-flex justify-space-between">
+          <span class="text-caption text-medium-emphasis">{{ dlFileSize }}</span>
+          <span class="text-caption text-primary font-weight-semibold">{{ dlSpeed }}</span>
+        </div>
+      </v-card-text>
+
+      <!-- ── Concluído ── -->
+      <v-card-text v-else-if="step === 'done'" class="d-flex flex-column align-center justify-center py-10">
+        <v-avatar color="success" variant="tonal" size="72" class="mb-4">
+          <v-icon size="40">mdi-download-circle-outline</v-icon>
+        </v-avatar>
+        <div class="text-h6 font-weight-bold mb-1">Download concluído!</div>
+        <div class="text-body-2 text-medium-emphasis">
+          {{ dlTotal }} arquivo(s) processado(s) com sucesso.
+        </div>
       </v-card-text>
 
       <v-divider />
 
-      <!-- Barra inferior: contadores + botões ────────────────────────────── -->
-      <div class="d-flex align-center pa-2 gap-2">
-        <!-- Contadores estilo Delphi -->
-        <div class="text-caption pl-2 flex-grow-1">
-          <template v-if="step === 'results' || step === 'all-good'">
-            <span class="text-success mr-3">Encontrados: <strong>{{ foundFiles }}</strong></span>
-            <span class="text-error">Em falta/danificado(s): <strong>{{ totalMissing }}</strong></span>
-          </template>
-        </div>
+      <!-- Barra de ações -->
+      <div class="fcd-actions d-flex align-center px-5 py-3" style="gap: 12px">
+        <div class="flex-grow-1" />
 
-        <!-- Botões estilo Delphi -->
         <template v-if="step === 'results'">
           <v-btn
             size="small"
             color="primary"
-            variant="elevated"
+            variant="flat"
+            class="px-5"
             prepend-icon="mdi-download"
             :disabled="selectedCount === 0"
             @click="startDownload"
           >
-            Baixar Arquivos Selecionados
+            Baixar {{ selectedCount === 1 ? 'selecionado' : 'selecionados' }} ({{ selectedCount }})
           </v-btn>
-          <v-btn
-            size="small"
-            variant="outlined"
-            prepend-icon="mdi-refresh"
-            @click="rescan"
-          >
-            Verificar Novamente
+          <v-divider vertical style="height:28px; align-self:center" />
+          <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
+            Verificar novamente
           </v-btn>
-          <v-btn size="small" variant="text" @click="close">Fechar</v-btn>
+          <v-divider vertical style="height:28px; align-self:center" />
+          <v-btn variant="text" size="small" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
         </template>
 
-        <template v-else-if="step === 'all-good'">
-          <v-btn size="small" variant="outlined" prepend-icon="mdi-refresh" @click="rescan">
-            Verificar Novamente
+        <template v-else-if="step === 'all-good' || step === 'done'">
+          <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
+            Verificar novamente
           </v-btn>
-          <v-btn size="small" variant="text" @click="close">Fechar</v-btn>
-        </template>
-
-        <template v-else-if="step === 'done'">
-          <v-btn size="small" variant="outlined" prepend-icon="mdi-refresh" @click="rescan">
-            Verificar Novamente
-          </v-btn>
-          <v-btn size="small" variant="text" @click="close">Fechar</v-btn>
+          <v-divider vertical style="height:28px; align-self:center" />
+          <v-btn size="small" color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
         </template>
       </div>
 
@@ -199,6 +234,7 @@ export default {
     show:        false,
     confirmShow: false,
     step:        'scanning',   // scanning | all-good | results | downloading | done
+    _autoOpen:   false,        // true = aberto automaticamente no startup
 
     // Scan results
     totalScanned: 0,   // álbuns verificados
@@ -232,6 +268,7 @@ export default {
     async open(force = false) {
       if (import.meta.env.DEV || force) {
         // Dev ou trigger manual: mostra diálogo completo com spinner de scanning
+        this._autoOpen = false;
         this.show = true;
         this.step = 'scanning';
         this.fileList = [];
@@ -239,6 +276,7 @@ export default {
         await this.scan();
       } else {
         // Produção (startup): scan silencioso em background
+        this._autoOpen = true;
         await this._scanSilent();
       }
     },
@@ -387,8 +425,11 @@ export default {
       this.startDownload();
     },
     confirmNo() {
-      this.confirmShow = false;
-      // Mantém a lista visível para seleção manual
+      if (this._autoOpen) {
+        this.close();
+      } else {
+        this.confirmShow = false;
+      }
     },
 
     // ── Seleção ─────────────────────────────────────────────────────────
@@ -468,40 +509,87 @@ export default {
 </script>
 
 <style scoped>
-/* Cabeçalho da tabela */
-.file-list-header {
+/* ── Confirmação ─────────────────────────────────────────────────────────── */
+.fcd-confirm-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 20px 14px;
+}
+
+/* ── Cabeçalho principal ─────────────────────────────────────────────────── */
+.fcd-header {
   display: flex;
   align-items: center;
-  background: rgba(0,0,0,0.06);
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+/* ── Barra de estatísticas ───────────────────────────────────────────────── */
+.fcd-stats {
+  background: rgba(var(--v-theme-surface-variant), 0.25);
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
-/* Linha de arquivo */
-.file-list-row {
+/* ── Scanning ring ───────────────────────────────────────────────────────── */
+.fcd-scan-ring {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border: 2px solid rgba(var(--v-theme-primary), 0.2);
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  height: 28px;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
-  transition: background 0.1s;
-}
-.file-list-row:hover {
-  background: rgba(var(--v-theme-primary), 0.06);
-}
-.file-list-row--selected {
-  background: rgba(var(--v-theme-primary), 0.08);
+  justify-content: center;
+  animation: fcd-pulse 2s ease-in-out infinite;
 }
 
-/* Colunas */
-.file-col-check  { width: 36px; flex-shrink: 0; }
-.file-col-name   { width: 220px; flex-shrink: 0; font-size: 12px; padding-right: 8px; }
-.file-col-dir    { flex: 1; font-size: 11px; padding-right: 8px; }
-.file-col-status { width: 110px; flex-shrink: 0; font-size: 11px; text-align: center; }
+@keyframes fcd-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--v-theme-primary), 0.25); }
+  50%       { box-shadow: 0 0 0 12px rgba(var(--v-theme-primary), 0); }
+}
+
+/* ── Toolbar de seleção ──────────────────────────────────────────────────── */
+.fcd-toolbar {
+  background: rgba(var(--v-theme-surface-variant), 0.15);
+}
+
+/* ── Cabeçalho da lista ──────────────────────────────────────────────────── */
+.fcd-list-header {
+  display: flex;
+  align-items: center;
+  padding: 5px 16px;
+  background: rgba(var(--v-theme-surface-variant), 0.35);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+/* ── Linhas ──────────────────────────────────────────────────────────────── */
+.fcd-list-row {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 36px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
+  transition: background 0.1s;
+}
+.fcd-list-row:hover       { background: rgba(var(--v-theme-primary), 0.05); }
+.fcd-list-row--on         { background: rgba(var(--v-theme-primary), 0.09); }
+.fcd-list-row--on:hover   { background: rgba(var(--v-theme-primary), 0.13); }
+
+/* ── Colunas ─────────────────────────────────────────────────────────────── */
+.fcd-col-check  { width: 38px; flex-shrink: 0; }
+.fcd-col-name   { display: flex; align-items: center; width: 250px; flex-shrink: 0; padding-right: 12px; overflow: hidden; }
+.fcd-col-dir    { flex: 1; padding-right: 12px; overflow: hidden; }
+.fcd-col-status { width: 84px; flex-shrink: 0; display: flex; justify-content: center; }
+
+/* ── Barra de ações ──────────────────────────────────────────────────────── */
+.fcd-actions {
+  background: rgba(var(--v-theme-surface-variant), 0.1);
+}
 </style>

@@ -106,17 +106,36 @@
                   color="primary"
                   @click="restore"
                 />
-                <v-text-field
+                <div
                   v-else-if="item?.type == 'image'"
-                  v-model="userdata[item.property]"
-                  :label="item?.label"
-                  :width="200"
-                  type="text"
-                  prepend-inner-icon="mdi-image-area"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
+                  class="d-flex align-center"
+                  style="gap: 4px; width: 210px"
+                >
+                  <v-btn
+                    :prepend-icon="userdata[item.property] ? 'mdi-image-check' : 'mdi-image-area'"
+                    :color="userdata[item.property] ? 'primary' : undefined"
+                    size="small"
+                    variant="tonal"
+                    :title="item?.label"
+                    :loading="pickingImage[item.property]"
+                    @click="pickImage(item)"
+                  >
+                    <span
+                      class="text-truncate"
+                      style="max-width: 120px; display: inline-block"
+                    >
+                      {{ userdata[item.property] ? getFileName(userdata[item.property]) : item?.label }}
+                    </span>
+                  </v-btn>
+                  <v-btn
+                    v-if="userdata[item.property]"
+                    icon="mdi-close-circle"
+                    size="x-small"
+                    variant="plain"
+                    :title="$t('components.customization.clear_image')"
+                    @click="clearImage(item)"
+                  />
+                </div>
                 <v-select
                   v-else-if="item?.type == 'object-fit'"
                   v-model="userdata[item.property]"
@@ -176,6 +195,7 @@ export default {
     items: Array,
   },
   data: () => ({
+    pickingImage: {},
     fonts: [
       { label: "Arial", value: "Arial, sans-serif" },
       { label: "Helvetica", value: "Helvetica, sans-serif" },
@@ -289,6 +309,33 @@ export default {
     },
     properties(item) {
       return this.module?.manifest?.customization[item];
+    },
+    async pickImage(item) {
+      if (!this.$electron) return;
+      this.pickingImage = { ...this.pickingImage, [item.property]: true };
+      try {
+        const fp = await this.$electron.selectFile({
+          title: 'Selecionar imagem de fundo',
+          filters: [{ name: 'Imagens', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] }],
+        });
+        if (fp) {
+          this.userdata[item.property] = this.toFileUrl(fp);
+        }
+      } finally {
+        this.pickingImage = { ...this.pickingImage, [item.property]: false };
+      }
+    },
+    toFileUrl(fp) {
+      if (!fp) return '';
+      if (fp.startsWith('file://')) return fp;
+      return 'file:///' + fp.replace(/\\/g, '/');
+    },
+    getFileName(url) {
+      if (!url) return '';
+      return url.split(/[/\\]/).pop() || url;
+    },
+    clearImage(item) {
+      this.userdata[item.property] = '';
     },
     restore() {
       let self = this;

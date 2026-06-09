@@ -9,9 +9,10 @@
     :image-size="125"
     :color="module?.data?.color"
     @close="onClose()"
+    @minimize="onMinimize()"
     slot-left-class="w-100"
   >
-    <!-- Botão de download: abre o Centro de Downloads na seção Coletâneas -->
+    <!-- Botões de sistema: Download -->
     <template v-slot:system_buttons>
       <v-tooltip location="bottom" :text="downloaded ? 'Disponível offline — ir ao Centro de Downloads' : 'Baixar álbum — Centro de Downloads'">
         <template v-slot:activator="{ props }">
@@ -60,9 +61,19 @@
             >
               {{ t("table.duration") }}
             </th>
-            <th
-              :style="{ backgroundColor: module.data.color, color: '#FFF' }"
-            />
+            <th :style="{ backgroundColor: module.data.color, color: '#FFF' }">
+              <div class="d-flex justify-end align-center">
+                <v-btn
+                  variant="tonal"
+                  size="x-small"
+                  :color="playingAll ? 'error' : 'white'"
+                  :prepend-icon="playingAll ? 'mdi-stop-circle-outline' : 'mdi-play-circle-outline'"
+                  @click="togglePlayAll"
+                >
+                  {{ playingAll ? 'Parar' : 'Reproduzir todos' }}
+                </v-btn>
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -105,6 +116,8 @@ export default {
 
   data: () => ({
     downloaded: false,
+    playingAll: false,
+    _playAllIdx: -1,
   }),
 
   computed: {
@@ -139,6 +152,14 @@ export default {
     albumId() {
       return this.$appdata.get("modules.album.id_album");
     },
+
+    albumMusics() {
+      return this.module?.data?.musics || [];
+    },
+
+    mediaShow() {
+      return !!this.$appdata.get("modules.media.show");
+    },
   },
 
   watch: {
@@ -147,6 +168,13 @@ export default {
       handler(id) {
         if (id) this.checkDownloaded(id);
       },
+    },
+    mediaShow(now, prev) {
+      // Fecha manual do player enquanto playAll está ativo → para a sequência
+      if (prev && !now && this.playingAll) {
+        const isMinimized = !!this.$appdata.get('modules.media.minimized');
+        if (!isMinimized) this._stopPlayAll();
+      }
     },
   },
 
@@ -181,7 +209,62 @@ export default {
     },
 
     onClose() {
+      this._stopPlayAll();
       this.$media.closeAlbum();
+    },
+
+    onMinimize() {
+      // Apenas oculta a janela do álbum sem interromper a reprodução contínua
+      this.$modules.close(this.module_id);
+    },
+
+    togglePlayAll() {
+      if (this.playingAll) {
+        this._stopPlayAll();
+      } else {
+        this._startPlayAll();
+      }
+    },
+
+    _startPlayAll() {
+      if (!this.albumMusics.length) return;
+      this.playingAll = true;
+
+      // Captura snapshot para que a sequência sobreviva a qualquer
+      // mudança de estado reativo do componente entre faixas.
+      const musics = [...this.albumMusics];
+      const albumId = this.albumId;
+      const self = this;
+      let idx = 0;
+
+      const playNext = () => {
+        if (idx >= musics.length) {
+          self._stopPlayAll();
+          self.$media.close(true);
+          return;
+        }
+        const music = musics[idx];
+        const keepMinimized = !!self.$appdata.get('modules.media.minimized');
+        self._playAllIdx = idx;
+        idx++;
+        self.$media.open({
+          id_music: music.id_music,
+          mode: 'audio',
+          id_album: albumId,
+          ...(keepMinimized ? { minimized: true } : {}),
+        });
+      };
+
+      // A própria presença do callback é o "está tocando" — anulá-lo em
+      // _stopPlayAll() é o suficiente para interromper a sequência.
+      this.$media._autoCloseCallback = playNext;
+      playNext();
+    },
+
+    _stopPlayAll() {
+      this.playingAll = false;
+      this._playAllIdx = -1;
+      if (this.$media) this.$media._autoCloseCallback = null;
     },
   },
 };

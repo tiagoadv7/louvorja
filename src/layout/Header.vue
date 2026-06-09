@@ -36,15 +36,25 @@
 
     <v-divider v-if="remote" vertical />
 
+    <v-tooltip location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn v-bind="props" icon="mdi-magnify" @click="quickSearchOpen = true" />
+      </template>
+      Busca rápida (Ctrl+F)
+    </v-tooltip>
+    <QuickSearch v-model="quickSearchOpen" />
+
     <v-btn
       :icon="layout == 'apps' ? 'mdi-tab' : 'mdi-apps'"
       @click="changeLayout()"
     />
 
-    <v-btn
-      icon="mdi-download-box-outline"
-      @click="openDownload()"
-    />
+    <v-tooltip location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn v-bind="props" icon="mdi-cloud-download-outline" @click="openDownload()" />
+      </template>
+      Centro de Downloads
+    </v-tooltip>
     <DownloadCenter v-model="downloadDialog" :initial-section="downloadSection" />
 
     <MonitorSelector />
@@ -57,6 +67,7 @@
 import LanguageSelector from "@/components/LanguageSelector.vue";
 import MonitorSelector from "@/components/MonitorSelector.vue";
 import DownloadCenter from "@/components/DownloadCenter.vue";
+import QuickSearch from "@/components/QuickSearch.vue";
 
 export default {
   name: "HeaderLayout",
@@ -64,11 +75,14 @@ export default {
     LanguageSelector,
     MonitorSelector,
     DownloadCenter,
+    QuickSearch,
   },
   data: () => ({
     downloadDialog: false,
     downloadSection: 'home',
+    quickSearchOpen: false,
     _downloadHandler: null,
+    _quickSearchHandler: null,
   }),
   computed: {
     layout() {
@@ -90,10 +104,19 @@ export default {
       this.downloadDialog = true;
     };
     window.addEventListener('open-download-center', this._downloadHandler);
+
+    this._quickSearchHandler = (e) => {
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        this.quickSearchOpen = !this.quickSearchOpen;
+      }
+    };
+    window.addEventListener('keydown', this._quickSearchHandler);
   },
 
   beforeUnmount() {
     window.removeEventListener('open-download-center', this._downloadHandler);
+    window.removeEventListener('keydown', this._quickSearchHandler);
   },
 
   methods: {

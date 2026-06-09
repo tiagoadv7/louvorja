@@ -113,47 +113,58 @@
         </div>
       </div>
 
-      <!-- ── Console bar ─────────────────────────────────────────────────── -->
+      <!-- ── Now Playing bar ───────────────────────────────────────────── -->
       <div class="sm-console">
-        <!-- Left: shortcuts -->
-        <div class="sm-console-left">
-          <span class="sm-shortcuts-label">ATALHOS:</span><br />
-          <span class="sm-shortcuts-value">F1-F10 FX &bull; 1-0 PADS &bull; Espaço Play &bull; T Talk &bull; S Stop</span>
+
+        <!-- Left: track info -->
+        <div class="sm-console-track">
+          <div class="sm-track-art">
+            <div v-if="isPlaying" class="sm-bars sm-bars--sm">
+              <span v-for="i in 3" :key="i" class="sm-bar" />
+            </div>
+            <v-icon v-else size="18" style="opacity:0.28">mdi-music-note</v-icon>
+          </div>
+          <div class="sm-track-info">
+            <div class="sm-track-name">{{ activeTrackName || '—' }}</div>
+            <div class="sm-track-time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</div>
+          </div>
         </div>
 
-        <!-- Center: progress + controls -->
+        <!-- Center: controls + progress bar -->
         <div class="sm-console-center">
-          <div class="sm-time-row">
-            <span class="sm-time">{{ formatTime(currentTime) }}</span>
-            <div class="sm-progress-bar" @click="seekTo">
-              <div class="sm-progress-fill" :style="{ width: (progress * 100) + '%' }" />
-              <div class="sm-progress-thumb" :style="{ left: (progress * 100) + '%' }" />
-            </div>
-            <span class="sm-time">{{ formatTime(duration) }}</span>
-          </div>
           <div class="sm-controls">
-            <button class="sm-ctrl-btn sm-ctrl-stop" @click="stopAll" title="Parar tudo (S)">
-              <v-icon size="18">mdi-stop</v-icon>
+            <button class="sm-ctrl-btn sm-ctrl-stop" @click="stopAll" title="Parar (S)">
+              <v-icon size="16">mdi-stop</v-icon>
             </button>
             <button class="sm-ctrl-btn sm-ctrl-play" @click="togglePlay" :title="isPlaying ? 'Pausar (Espaço)' : 'Play (Espaço)'">
-              <v-icon size="22">{{ isPlaying ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+              <v-icon size="20">{{ isPlaying ? 'mdi-pause' : 'mdi-play' }}</v-icon>
             </button>
-            <button class="sm-ctrl-btn sm-ctrl-vol" :class="{ active: isMuted }" @click="toggleMute" title="Mudo">
-              <v-icon size="18">{{ isMuted ? 'mdi-volume-off' : 'mdi-volume-high' }}</v-icon>
-            </button>
+          </div>
+          <div class="sm-progress-bar" @click="seekTo">
+            <div class="sm-progress-fill" :style="{ width: (progress * 100) + '%' }" />
+            <div class="sm-progress-thumb" :style="{ left: (progress * 100) + '%' }" />
           </div>
         </div>
 
-        <!-- Right: talkover + master volume -->
+        <!-- Right: talkover + volume -->
         <div class="sm-console-right">
-          <v-btn
-            size="small" density="compact"
-            :color="isTalkover ? 'warning' : undefined"
-            :variant="isTalkover ? 'tonal' : 'text'"
-            icon="mdi-microphone"
-            @click="toggleTalkover"
-            title="Talkover (T)"
-          />
+          <v-tooltip location="top" :text="isTalkover ? 'Talkover ativo (T)' : 'Talkover (T)'">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                size="small" density="compact"
+                :color="isTalkover ? 'warning' : undefined"
+                :variant="isTalkover ? 'tonal' : 'text'"
+                icon="mdi-microphone"
+                @click="toggleTalkover"
+              />
+            </template>
+          </v-tooltip>
+          <v-tooltip v-if="_mediaDuck" location="top" text="Volume reduzido — áudio do álbum em reprodução">
+            <template #activator="{ props }">
+              <v-icon v-bind="props" size="14" color="warning" class="ml-1" style="opacity:0.7">mdi-music-note-plus</v-icon>
+            </template>
+          </v-tooltip>
           <v-icon size="16" class="ml-2 mr-1" style="opacity:0.4">mdi-volume-high</v-icon>
           <div class="sm-vol-track" @click="setMasterVol">
             <div class="sm-vol-fill" :style="{ width: (masterVolume * 100) + '%' }" />
@@ -211,6 +222,7 @@ export default {
     isPlaying:     false,
     dragOverId:    null,
     showSettings:  false,
+    _mediaDuck:    false,
     _mainAudio:    null,
     _fxAudios:     {},
     _fades:        {},
@@ -226,6 +238,22 @@ export default {
         get: (_, k) => this.$userdata.get(`modules.${this.module_id}.${k}`, null),
         set: (_, k, v) => { this.$userdata.set(`modules.${this.module_id}.${k}`, v); return true; },
       });
+    },
+    activeTrackName() {
+      return this.mainPads.find(p => p.id === this.activeMainId)?.name || '';
+    },
+    mediaPlaying() {
+      return !!this.$appdata.get('modules.media.show') && !this.$appdata.get('modules.media.config.is_paused');
+    },
+  },
+
+  watch: {
+    mediaPlaying(nowPlaying) {
+      this._mediaDuck = nowPlaying;
+      if (!this._mainAudio) return;
+      const pad = this.mainPads.find(p => p.id === this.activeMainId);
+      const target = this.effVol(pad?.volume ?? 1, true);
+      this.fade('main', this._mainAudio, this._mainAudio.volume, target, 1000);
     },
   },
 
@@ -291,7 +319,7 @@ export default {
     effVol(padVol, isMain) {
       if (this.isMuted) return 0;
       let v = padVol * this.masterVolume;
-      if (isMain && (this.activeFxIds.size > 0 || this.isTalkover)) v *= this.duckingLevel;
+      if (isMain && (this.activeFxIds.size > 0 || this.isTalkover || this._mediaDuck)) v *= this.duckingLevel;
       return Math.max(0, Math.min(1, v));
     },
 
@@ -346,7 +374,18 @@ export default {
 
     toggleTalkover() {
       this.isTalkover = !this.isTalkover;
-      this.applyVolumes();
+      this._applySmooth(700);
+    },
+
+    _applySmooth(fadeMs) {
+      if (this._mainAudio) {
+        const pad = this.mainPads.find(p => p.id === this.activeMainId);
+        this.fade('main', this._mainAudio, this._mainAudio.volume, this.effVol(pad?.volume ?? 1, true), fadeMs);
+      }
+      Object.entries(this._fxAudios).forEach(([id, a]) => {
+        const p = this.fxPads.find(f => f.id === +id);
+        this.fade(`fx${id}`, a, a.volume, this.effVol(p?.volume ?? 1, false), fadeMs);
+      });
     },
 
     togglePlay() {
@@ -691,28 +730,65 @@ export default {
 .sm-console {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  padding: 8px 14px;
   background: rgba(var(--v-theme-on-surface), 0.04);
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  gap: 16px;
+  gap: 14px;
   flex-shrink: 0;
   border-radius: 12px;
   margin: 0 10px 10px;
 }
 
-.sm-console-left { flex: 0 0 auto; }
-.sm-shortcuts-label { font-size: 9px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.38); letter-spacing: 1px; }
-.sm-shortcuts-value { font-size: 9px; color: rgba(var(--v-theme-on-surface), 0.24); letter-spacing: 0.3px; }
-
-.sm-console-center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-
-.sm-time-row {
+/* Track info */
+.sm-console-track {
   display: flex;
   align-items: center;
-  width: 100%;
   gap: 10px;
+  flex: 0 0 180px;
+  min-width: 0;
 }
-.sm-time { font-size: 11px; font-family: monospace; color: rgba(var(--v-theme-on-surface), 0.48); flex-shrink: 0; }
+.sm-track-art {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sm-track-info { min-width: 0; }
+.sm-track-name {
+  font-size: 12px; font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 130px;
+}
+.sm-track-time {
+  font-size: 10px; font-family: monospace;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  margin-top: 1px;
+}
+
+.sm-console-center { flex: 1; display: flex; align-items: center; gap: 12px; }
+
+.sm-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sm-ctrl-btn {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: none; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  color: rgb(var(--v-theme-on-surface));
+}
+.sm-ctrl-btn:active { transform: scale(0.92); }
+.sm-ctrl-stop {
+  width: 30px; height: 30px;
+  background: rgba(var(--v-theme-on-surface), 0.10);
+}
+.sm-ctrl-stop:hover { background: rgba(var(--v-theme-on-surface), 0.18); }
+.sm-ctrl-play {
+  width: 40px; height: 40px;
+  background: #6366f1;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+  color: #ffffff !important;
+}
+.sm-ctrl-play:hover { background: #4f46e5; }
 
 .sm-progress-bar {
   flex: 1;
@@ -737,38 +813,6 @@ export default {
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgb(var(--v-theme-surface));
 }
-
-.sm-controls { display: flex; align-items: center; gap: 8px; }
-.sm-ctrl-btn {
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
-  color: rgb(var(--v-theme-on-surface));
-}
-.sm-ctrl-btn:active { transform: scale(0.92); }
-
-.sm-ctrl-stop {
-  width: 36px; height: 36px;
-  background: rgba(var(--v-theme-on-surface), 0.10);
-}
-.sm-ctrl-stop:hover { background: rgba(var(--v-theme-on-surface), 0.18); }
-
-.sm-ctrl-play {
-  width: 48px; height: 48px;
-  background: #6366f1;
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
-  color: #ffffff !important;
-}
-.sm-ctrl-play:hover { background: #4f46e5; box-shadow: 0 0 22px rgba(99, 102, 241, 0.6); }
-
-.sm-ctrl-vol {
-  width: 36px; height: 36px;
-  background: rgba(var(--v-theme-on-surface), 0.10);
-}
-.sm-ctrl-vol:hover { background: rgba(var(--v-theme-on-surface), 0.18); }
-.sm-ctrl-vol.active { color: rgb(var(--v-theme-warning, 245, 158, 11)); }
 
 .sm-console-right {
   flex: 0 0 auto;

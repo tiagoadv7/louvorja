@@ -56,8 +56,9 @@ export default {
 
   mounted() {
     if (!this.$electron.isElectron()) return;
-    // Janela de saída (popup) não precisa de verificação de arquivos
-    if (window.location.hash.includes('/popup')) return;
+    // Janelas de projeção não precisam de verificação de arquivos nem notificações
+    const _hash = window.location.hash;
+    if (_hash.includes('/popup') || _hash.includes('/return-screen')) return;
 
     // Garante que o fundo personalizado não persista de sessões anteriores.
     // O slide sempre inicia com a imagem padrão do álbum (globalBg = null).

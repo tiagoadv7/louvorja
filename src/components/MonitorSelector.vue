@@ -15,7 +15,7 @@
       </v-tooltip>
     </template>
 
-    <v-list density="compact" min-width="260">
+    <v-list density="compact" min-width="280">
       <v-list-subheader>Monitor de saída</v-list-subheader>
 
       <v-progress-linear v-if="loading" indeterminate height="2" class="mb-1" />
@@ -27,17 +27,20 @@
         :active="selectedId === s.id"
         color="primary"
         rounded="lg"
-        @click="select(s.id)"
+        @click="lock(s.id)"
       >
-        <v-list-item-title>
-          {{ s.label || (s.primary ? 'Monitor Principal' : `Monitor ${i + 1}`) }}
-        </v-list-item-title>
+        <v-list-item-title>{{ s.label }}</v-list-item-title>
         <v-list-item-subtitle>
           {{ s.bounds.width }}×{{ s.bounds.height }}
-          <span v-if="s.primary"> · Principal</span>
         </v-list-item-subtitle>
         <template v-slot:append>
-          <v-icon v-if="selectedId === s.id" color="primary" size="18">mdi-check</v-icon>
+          <v-icon
+            :color="selectedId === s.id ? 'primary' : undefined"
+            :style="selectedId !== s.id ? 'opacity: 0.25' : ''"
+            size="18"
+          >
+            {{ selectedId === s.id ? 'mdi-lock' : 'mdi-lock-open-outline' }}
+          </v-icon>
         </template>
       </v-list-item>
 
@@ -79,8 +82,7 @@ export default {
       const idx = this.screens.findIndex(s => s.id === this.selectedId);
       const s = this.screens[idx];
       if (!s) return 'Monitor de saída';
-      const label = s.label || (s.primary ? 'Principal' : `Monitor ${idx + 1}`);
-      return `Monitor de saída — ${label} (${s.bounds.width}×${s.bounds.height})`;
+      return `Saída: ${s.label}`;
     },
   },
   async mounted() {
@@ -102,11 +104,11 @@ export default {
         this.loading = false;
       }
     },
-    async select(id) {
+    async lock(id) {
+      if (this.selectedId === id) return;
       this.selectedId = id;
       await this.$electron.storeSet('output_display_id', id);
       this.$userdata.set('modules.theme.output_display_id', id);
-      this.menu = false;
     },
     async identify() {
       this.menu = false;

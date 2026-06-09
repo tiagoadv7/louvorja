@@ -19,11 +19,12 @@
 !macro customInstall
   ; Cria estrutura de pastas config/
   CreateDirectory "$INSTDIR\config"
-  CreateDirectory "$INSTDIR\config\musicas"
-  CreateDirectory "$INSTDIR\config\imagens"
   CreateDirectory "$INSTDIR\config\capas"
   CreateDirectory "$INSTDIR\config\fontes"
   CreateDirectory "$INSTDIR\config\ico"
+  CreateDirectory "$INSTDIR\config\imagens"
+  CreateDirectory "$INSTDIR\config\musicas"
+  CreateDirectory "$INSTDIR\config\server"
 
   ; Se o usuário tiver um database.db customizado (baixado via app ou copiado
   ; manualmente) em AppData, preserva — não sobrescreve com o bundled.

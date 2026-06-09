@@ -75,15 +75,22 @@ function findLocalFile(dirs, fileName) {
 
 // ── SQLiteReader ─────────────────────────────────────────────────────────────
 
+// Normaliza um valor de dir para array deduplicado (aceita string ou array)
+function normalizeDirs(val) {
+  if (!val) return [];
+  const arr = Array.isArray(val) ? val : [val];
+  return [...new Set(arr.filter(Boolean))];
+}
+
 class SQLiteReader {
   constructor() {
-    this._db         = null; // instância sql.js Database
-    this._dbPath     = null;
-    this._capasDir   = null;
-    this._musicasDir = null;
-    this._imagensDir = null;
-    this._schema     = null; // cache de schema detectado
-    this._SQL        = null; // módulo sql.js carregado
+    this._db          = null; // instância sql.js Database
+    this._dbPath      = null;
+    this._capasDirs   = []; // array de dirs onde buscar capas
+    this._musicasDirs = []; // array de dirs onde buscar músicas
+    this._imagensDirs = []; // array de dirs onde buscar imagens
+    this._schema      = null; // cache de schema detectado
+    this._SQL         = null; // módulo sql.js carregado
   }
 
   isAvailable() {
@@ -127,10 +134,10 @@ class SQLiteReader {
     this._db     = new this._SQL.Database(new Uint8Array(buf));
     this._dbPath = dbPath;
 
-    this._capasDir   = mediaDirs.capasDir   || null;
-    this._musicasDir = mediaDirs.musicasDir || null;
-    this._imagensDir = mediaDirs.imagensDir || null;
-    this._schema     = null;
+    this._capasDirs   = normalizeDirs(mediaDirs.capasDir   || mediaDirs.capasDirs);
+    this._musicasDirs = normalizeDirs(mediaDirs.musicasDir || mediaDirs.musicasDirs);
+    this._imagensDirs = normalizeDirs(mediaDirs.imagensDir || mediaDirs.imagensDirs);
+    this._schema      = null;
 
     console.log('[SQLiteReader] Aberto:', dbPath);
   }
@@ -231,7 +238,7 @@ class SQLiteReader {
 
   _resolveCapa(fileName) {
     if (!fileName) return '';
-    const local = findLocalFile([this._capasDir, this._imagensDir], fileName);
+    const local = findLocalFile([...this._capasDirs, ...this._imagensDirs], fileName);
     return local || `app-local://capas/${encodeURIComponent(fileName)}`;
   }
 
@@ -242,9 +249,11 @@ class SQLiteReader {
    */
   _resolveAudio(fileName, albumFolder) {
     if (!fileName) return '';
-    const albumDir = albumFolder && this._musicasDir
-      ? path.join(this._musicasDir, albumFolder) : null;
-    const local = findLocalFile([albumDir, this._musicasDir], fileName);
+    // Expande cada musicasDir com a subpasta do álbum
+    const albumDirs = albumFolder
+      ? this._musicasDirs.map(d => path.join(d, albumFolder))
+      : [];
+    const local = findLocalFile([...albumDirs, ...this._musicasDirs], fileName);
     if (local) return local;
     // URL com subpasta: app-local://musicas/2017 - Eu Creio/Arquivo.mp3
     if (albumFolder) {
@@ -255,7 +264,7 @@ class SQLiteReader {
 
   _resolveImage(fileName) {
     if (!fileName) return '';
-    const local = findLocalFile([this._imagensDir, this._capasDir], fileName);
+    const local = findLocalFile([...this._imagensDirs, ...this._capasDirs], fileName);
     return local || `app-local://imagens/${encodeURIComponent(fileName)}`;
   }
 

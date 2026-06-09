@@ -399,18 +399,6 @@
 
             <v-divider class="mb-4" />
 
-            <div class="d-flex justify-end">
-              <v-btn
-                variant="outlined"
-                color="error"
-                size="small"
-                :disabled="localFiles.length === 0 || clearing"
-                :loading="clearing"
-                prepend-icon="mdi-delete-outline"
-                @click="clearAll"
-              >Limpar downloads</v-btn>
-            </div>
-
             <!-- ── Modal de confirmação ─────────────────────────────────── -->
             <v-dialog v-model="confirmDialog" max-width="460" persistent>
               <v-card rounded="lg">
@@ -507,15 +495,6 @@
                       </div>
                     </div>
                     <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
-                    <v-btn
-                      icon
-                      variant="text"
-                      size="x-small"
-                      color="error"
-                      @click="deleteFile(`album_${album.id_album}`)"
-                    >
-                      <v-icon size="16">mdi-delete-outline</v-icon>
-                    </v-btn>
                   </div>
                 </div>
               </template>
@@ -549,15 +528,6 @@
                       </div>
                     </div>
                     <div class="dc-album-name" :title="h.label">{{ h.label }}</div>
-                    <v-btn
-                      icon
-                      variant="text"
-                      size="x-small"
-                      color="error"
-                      @click="deleteFile(h.name)"
-                    >
-                      <v-icon size="16">mdi-delete-outline</v-icon>
-                    </v-btn>
                   </div>
                 </div>
               </template>
@@ -577,9 +547,6 @@
                       <div class="text-caption text-medium-emphasis">{{ formatSize(b.totalSize) }}</div>
                     </div>
                     <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
-                    <v-btn icon size="x-small" variant="text" color="error" @click="deleteFiles(b.files)">
-                      <v-icon size="14">mdi-delete-outline</v-icon>
-                    </v-btn>
                   </div>
                 </div>
               </template>
@@ -596,9 +563,6 @@
                     <v-icon size="14" color="success" class="mr-2 flex-shrink-0">mdi-check-circle</v-icon>
                     <span class="text-body-2 flex-grow-1">{{ f.name }}</span>
                     <span class="text-caption text-medium-emphasis">{{ formatSize(f.size) }}</span>
-                    <v-btn icon size="x-small" variant="text" color="error" class="ml-1" @click="deleteFile(f.name)">
-                      <v-icon size="14">mdi-delete-outline</v-icon>
-                    </v-btn>
                   </div>
                 </div>
               </template>

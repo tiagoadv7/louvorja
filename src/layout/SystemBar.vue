@@ -24,7 +24,7 @@
           @click="openOutput"
         />
       </template>
-      Abrir saída
+      Projetar
     </v-tooltip>
 
     <!-- Janela de saída: quando aberta mostra botão de fechar -->
@@ -40,7 +40,7 @@
           @click="closeOutputWindow"
         />
       </template>
-      Fechar saída
+      Parar projeção
     </v-tooltip>
 
     <v-divider vertical class="mx-1" />

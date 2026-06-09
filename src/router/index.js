@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, createWebHashHistory } from "vue-router";
 import Main from "@/views/Main.vue";
 import Popup from "@/views/Popup.vue";
+import ReturnScreen from "@/views/ReturnScreen.vue";
 
 const routes = [
   {
@@ -12,6 +13,11 @@ const routes = [
     path: "/popup",
     name: "Popup",
     component: Popup,
+  },
+  {
+    path: "/return-screen",
+    name: "ReturnScreen",
+    component: ReturnScreen,
   },
 ];
 

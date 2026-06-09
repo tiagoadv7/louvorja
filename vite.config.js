@@ -76,6 +76,11 @@ export default ({ mode }) => {
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "true",
       __IS_ELECTRON__: JSON.stringify(isElectronBuild),
     },
+    build: isElectronBuild ? {
+      // O polyfill de modulePreload injeta <link rel="preload"> que o Electron
+      // bloqueia via file:// — desativa para evitar "Unable to preload CSS"
+      modulePreload: { polyfill: false },
+    } : {},
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

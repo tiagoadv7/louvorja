@@ -69,13 +69,21 @@ export default {
       return;
     }
 
+    // Crossfade: se havia áudio tocando ao trocar de música, faz fade-out independente
+    const _newMode = params.mode || "no_audio";
+    const _wasPlayingAudio = !$appdata.get("modules.media.config.is_paused") &&
+      ["audio", "instrumental"].includes($appdata.get("modules.media.config.mode"));
+    if (_wasPlayingAudio && (_newMode === "audio" || _newMode === "instrumental")) {
+      this._detachAndFadeOut();
+    }
+
     this.stopAudio();
     this.clearVariables();
 
     const id_music = params.id_music;
     const minimized = params.minimized ? params.minimized : false;
     const id_album = params.id_album ? params.id_album : null;
-    let mode = params.mode ? params.mode : "no_audio";
+    let mode = _newMode;
 
     $appdata.set("modules.media.loading", true);
 
@@ -558,6 +566,36 @@ export default {
     $appdata.set("loading", false);
   },
 
+  _detachAndFadeOut() {
+    const audio = this.getElement();
+    if (!audio || audio.paused) return;
+    const existing = document.getElementById("__audio_fadeout");
+    if (existing) { existing.pause(); existing.remove(); }
+    const ghost = document.createElement("audio");
+    ghost.id = "__audio_fadeout";
+    ghost.src = audio.src;
+    ghost.currentTime = audio.currentTime;
+    ghost.volume = audio.volume;
+    document.body.appendChild(ghost);
+    // Pausa a fonte imediatamente (stopAudio vai encontrá-la pausada e pular seu próprio fade)
+    audio.pause();
+    ghost.play().catch(() => {});
+    const startVol = ghost.volume;
+    const STEPS = Math.max(1, Math.round(900 / 40));
+    const d = startVol / STEPS;
+    let n = 0;
+    const t = setInterval(() => {
+      n++;
+      ghost.volume = Math.max(0, startVol - d * n);
+      if (n >= STEPS) {
+        clearInterval(t);
+        ghost.pause();
+        ghost.src = "";
+        ghost.remove();
+      }
+    }, 40);
+  },
+
   stopAudio() {
     const audio = this.getElement();
     this.pause(true, () => {
@@ -935,7 +973,13 @@ export default {
     const current_time = $appdata.get("modules.media.config.current_time");
     const duration = $appdata.get("modules.media.config.duration");
     if (!is_paused && current_time >= duration && duration > 0) {
-      this.close(true);
+      if (typeof this._autoCloseCallback === 'function') {
+        // Reprodução contínua ativa: delega ao chamador (ex: "Reproduzir todos")
+        // sem destruir o output — a próxima faixa abre sobre o mesmo output.
+        this._autoCloseCallback();
+      } else {
+        this.close(true);
+      }
     }
   },
   getElement() {

@@ -53,17 +53,27 @@ function setupIpc(mainWindow) {
     shell.showItemInFolder(filePath);
   });
 
+  // ── Sistema ───────────────────────────────────────────────────────────────
+  ipcMain.handle('app:hostname', () => {
+    return require('os').hostname().split('.')[0];
+  });
+
   // ── Telas / displays ───────────────────────────────────────────────────────
   ipcMain.handle('screen:get-all', () => {
     const primary = screen.getPrimaryDisplay();
-    return screen.getAllDisplays().map((d) => ({
-      id: d.id,
-      label: d.label || `Display ${d.id}`,
-      bounds: d.bounds,
-      workArea: d.workArea,
-      scaleFactor: d.scaleFactor,
-      primary: d.id === primary.id,
-    }));
+    let nonPrimaryIdx = 0;
+    return screen.getAllDisplays().map((d) => {
+      const isPrimary = d.id === primary.id;
+      const label = isPrimary ? 'Principal' : `Monitor ${++nonPrimaryIdx}`;
+      return {
+        id: d.id,
+        label,
+        bounds: d.bounds,
+        workArea: d.workArea,
+        scaleFactor: d.scaleFactor,
+        primary: isPrimary,
+      };
+    });
   });
 
   // ── Operações de arquivo ───────────────────────────────────────────────────
@@ -158,26 +168,41 @@ function setupIpc(mainWindow) {
     const primary = screen.getPrimaryDisplay();
     const primaryScale = primary.scaleFactor || 1;
 
-    // Tamanho base da janela em pixels físicos (referência: monitor primário)
+    // Tamanho base da janela em pixels físicos (referência: 1920×1080)
     const BASE_W_PHYS = 220;
     const BASE_H_PHYS = 140;
 
-    const wins = allDisplays.map((display, index) => {
+    let nonPrimaryIdx = 0;
+    const wins = allDisplays.map((display) => {
       const { x, y, width, height } = display.bounds;
       const scale = display.scaleFactor || 1;
 
+      // Escala proporcional à resolução física do display (referência 1920px de largura)
+      // Clampado entre 1× (monitores pequenos) e 3× (painéis LED/TV 4K+)
+      const physW = width * scale;
+      const sizeFactor = Math.max(1, Math.min(3, physW / 1920));
+
+      const wPhys = Math.round(BASE_W_PHYS * sizeFactor);
+      const hPhys = Math.round(BASE_H_PHYS * sizeFactor);
+
       // Converte pixels físicos para DIP do monitor atual
-      // para que o tamanho físico final seja sempre igual ao do monitor primário
-      const winW = Math.round(BASE_W_PHYS * primaryScale / scale);
-      const winH = Math.round(BASE_H_PHYS * primaryScale / scale);
+      const winW = Math.round(wPhys * primaryScale / scale);
+      const winH = Math.round(hPhys * primaryScale / scale);
 
       const cx = x + Math.floor(width  / 2) - Math.floor(winW / 2);
       const cy = y + Math.floor(height / 2) - Math.floor(winH / 2);
 
-      const label = display.id === primary.id ? 'Principal' : `Monitor ${index + 1}`;
-      const num   = index + 1;
-      // Ajusta zoom do HTML para compensar DPI diferente do monitor primário
+      const isPrimary = display.id === primary.id;
+      const label = isPrimary ? 'Principal' : `Monitor ${++nonPrimaryIdx}`;
+      const num   = isPrimary ? 0 : nonPrimaryIdx;
       const zoom  = primaryScale / scale;
+
+      // Fontes escaladas proporcionalmente ao display
+      const fsNum   = Math.round(52  * sizeFactor);
+      const fsLabel = Math.round(13  * sizeFactor);
+      const fsRes   = Math.round(11  * sizeFactor);
+      const border  = Math.max(2, Math.round(2.5 * sizeFactor));
+      const radius  = Math.round(14  * sizeFactor);
 
       const win = new BW({
         x: cx, y: cy, width: winW, height: winH,
@@ -194,14 +219,14 @@ function setupIpc(mainWindow) {
   <div style="
     width:100%;height:100%;box-sizing:border-box;
     background:rgba(12,12,14,0.92);
-    border:2.5px solid rgba(255,255,255,0.75);
-    border-radius:14px;
+    border:${border}px solid rgba(255,255,255,0.75);
+    border-radius:${radius}px;
     box-shadow:0 0 0 1px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-    <div style="font-size:52px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>
-    <div style="font-size:13px;margin-top:8px;opacity:0.85;font-weight:500">${label}</div>
-    <div style="font-size:11px;opacity:0.45;margin-top:4px;letter-spacing:0.3px">${width}×${height}</div>
+    <div style="font-size:${fsNum}px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>
+    <div style="font-size:${fsLabel}px;margin-top:${Math.round(8*sizeFactor)}px;opacity:0.85;font-weight:500">${label}</div>
+    <div style="font-size:${fsRes}px;opacity:0.45;margin-top:${Math.round(4*sizeFactor)}px;letter-spacing:0.3px">${width}×${height}</div>
   </div>
 </body></html>`;
 
@@ -392,7 +417,7 @@ function setupIpc(mainWindow) {
   });
 
   // ── Estrutura de pastas config/ ───────────────────────────────────────────
-  const CONFIG_SUBFOLDERS = ['capas', 'fontes', 'help', 'ico', 'imagens', 'imagens_dxl', 'imagens_hlp', 'imagens_onl', 'musicas'];
+  const CONFIG_SUBFOLDERS = ['capas', 'fontes', 'ico', 'imagens', 'musicas', 'server'];
 
   // config/ para LEITURA: instalação original (pode ser Program Files)
   const getConfigDir = () => path.join(getInstallDir(), 'config');
@@ -432,13 +457,28 @@ function setupIpc(mainWindow) {
   initConfigFolders();
 
   // ── Helpers de mídia para SQLiteReader ────────────────────────────────────
-  // Monta o objeto mediaDirs com as pastas locais de capas/músicas/imagens,
-  // preferindo as pastas graváveis (userData) e usando as da instalação como fallback.
-  const buildSqliteMediaDirs = () => ({
-    capasDir:   getAutoCapasDir(true)  || getAutoCapasDir(false),
-    musicasDir: getAutoMediaDir(null, true) || getAutoMediaDir(null, false),
-    imagensDir: getAutoImagesDir(true) || getAutoImagesDir(false),
-  });
+  // Retorna a pasta config/ do banco Delphi aberto (ex: C:\LouvorJA\config).
+  // É o parent do database.db que o usuário selecionou.
+  const getSqliteConfigDir = () => {
+    const p = sqliteReader.getPath();
+    return p ? path.dirname(p) : null;
+  };
+
+  // Monta o objeto mediaDirs como arrays de diretórios por tipo, incluindo:
+  //   • pasta gravável do app (downloads feitos pelo app)
+  //   • pasta de instalação do app (fallback build anterior)
+  //   • pasta config/ da instalação Delphi (config\capas, config\musicas, config\imagens)
+  const buildSqliteMediaDirs = (dbPath) => {
+    const configDir = dbPath ? path.dirname(dbPath) : getSqliteConfigDir();
+    const delphiCapas   = configDir ? path.join(configDir, 'capas')   : null;
+    const delphiMusicas = configDir ? path.join(configDir, 'musicas') : null;
+    const delphiImagens = configDir ? path.join(configDir, 'imagens') : null;
+    return {
+      capasDirs:   [getAutoCapasDir(true),        getAutoCapasDir(false),        delphiCapas].filter(Boolean),
+      musicasDirs: [getAutoMediaDir(null, true),   getAutoMediaDir(null, false),  delphiMusicas].filter(Boolean),
+      imagensDirs: [getAutoImagesDir(true),        getAutoImagesDir(false),       delphiImagens].filter(Boolean),
+    };
+  };
 
   // Tenta abrir o SQLite configurado (persiste entre sessões via Store).
   // Na primeira execução sem caminho salvo, auto-detecta config/database.db do LouvorJA Delphi.
@@ -448,7 +488,7 @@ function setupIpc(mainWindow) {
     const saved = Store.get('sqlite_db_path');
     if (saved && fs.existsSync(saved)) {
       try {
-        await sqliteReader.open(saved, buildSqliteMediaDirs());
+        await sqliteReader.open(saved, buildSqliteMediaDirs(saved));
         console.log('[IPC] SQLite auto-aberto:', saved);
         return;
       } catch (e) {
@@ -464,7 +504,7 @@ function setupIpc(mainWindow) {
     for (const p of autoCandidates) {
       if (fs.existsSync(p)) {
         try {
-          await sqliteReader.open(p, buildSqliteMediaDirs());
+          await sqliteReader.open(p, buildSqliteMediaDirs(p));
           Store.set('sqlite_db_path', p);
           console.log('[IPC] SQLite auto-detectado na inicialização:', p);
           return;
@@ -484,7 +524,7 @@ function setupIpc(mainWindow) {
       return { success: false, error: 'Arquivo não encontrado: ' + dbPath };
     }
     try {
-      await sqliteReader.open(dbPath, buildSqliteMediaDirs());
+      await sqliteReader.open(dbPath, buildSqliteMediaDirs(dbPath));
       Store.set('sqlite_db_path', dbPath);
       return { success: true, path: dbPath };
     } catch (e) {
@@ -617,9 +657,12 @@ function setupIpc(mainWindow) {
         //    ou quando o exe foi movido para outro diretório após o download.
         //    Para musicas, usa busca recursiva pois ficam em subpastas (ANO - ALBUM).
         const userDataConfigDir = path.join(app.getPath('userData'), 'config');
+        const delphiConfigDir   = getSqliteConfigDir(); // pasta config/ da instalação Delphi
+        const baseDirs = [getWritableConfigDir(), userDataConfigDir, getConfigDir()];
+        if (delphiConfigDir) baseDirs.push(delphiConfigDir);
         if (folder === 'musicas') {
-          // Busca recursiva em ambas as raízes de musicas
-          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+          // Busca recursiva em todas as raízes de musicas
+          for (const base of baseDirs) {
             const musicasRoot = path.join(base, 'musicas');
             const found = findFileInTree(musicasRoot, path.basename(filename));
             if (found) {
@@ -627,7 +670,7 @@ function setupIpc(mainWindow) {
             }
           }
         } else {
-          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+          for (const base of baseDirs) {
             const p = path.join(base, subpath);
             if (fs.existsSync(p)) {
               return new Response(fs.readFileSync(p), { headers: { 'Content-Type': mime } });
@@ -664,16 +707,22 @@ function setupIpc(mainWindow) {
         const folder = rel.slice(0, slash);
         const name = path.basename(decodeURIComponent(rel.slice(slash + 1)));
         if (!name) return false;
-        const userDataConfigDir = path.join(app.getPath('userData'), 'config');
+        const userDataConfigDir2 = path.join(app.getPath('userData'), 'config');
+        const delphiConfigDir2   = getSqliteConfigDir();
+        const baseDirs2 = [getWritableConfigDir(), userDataConfigDir2, getConfigDir()];
+        if (delphiConfigDir2) baseDirs2.push(delphiConfigDir2);
         if (folder === 'imagens' || folder === 'capas') {
-          for (const base of [getWritableConfigDir(), userDataConfigDir, getConfigDir()]) {
+          for (const base of baseDirs2) {
             if (fs.existsSync(path.join(base, folder, name))) return true;
           }
           return false;
         }
         if (folder === 'musicas') {
-          // Para áudio: verifica flat primeiro, depois recursivo
-          return !!findFileInTree(getAutoMediaDir(null, true), name) || !!findFileInTree(getAutoMediaDir(), name);
+          // Para áudio: busca recursiva em todas as raízes de musicas
+          for (const base of baseDirs2) {
+            if (findFileInTree(path.join(base, 'musicas'), name)) return true;
+          }
+          return false;
         }
         return false;
       } catch (_) { return false; }
@@ -1146,6 +1195,13 @@ function setupIpc(mainWindow) {
     const installFound = search(getAutoMediaDir(), 0);
     if (installFound) return toFileUrl(installFound);
 
+    // 5. Pasta config/ da instalação Delphi (config\musicas\ com subpastas por álbum)
+    const delphiCfg = getSqliteConfigDir();
+    if (delphiCfg) {
+      const delphiFound = search(path.join(delphiCfg, 'musicas'), 0);
+      if (delphiFound) return toFileUrl(delphiFound);
+    }
+
     return null;
   });
 
@@ -1186,12 +1242,17 @@ function setupIpc(mainWindow) {
     // Inclui userData como fallback para imagens baixadas em dev ou em build anterior.
     const userDataImgsDir  = path.join(app.getPath('userData'), 'config', 'imagens');
     const userDataCapasDir = path.join(app.getPath('userData'), 'config', 'capas');
+    const delphiCfgImg    = getSqliteConfigDir();
+    const delphiImgsDir   = delphiCfgImg ? path.join(delphiCfgImg, 'imagens') : null;
+    const delphiCapasDir  = delphiCfgImg ? path.join(delphiCfgImg, 'capas')   : null;
 
     // Caminhos diretos O(1): imagens primeiro, depois capas
-    for (const dir of [getAutoImagesDir(true), userDataImgsDir, getAutoImagesDir()]) {
+    const imgsDirs  = [getAutoImagesDir(true), userDataImgsDir, getAutoImagesDir(), delphiImgsDir].filter(Boolean);
+    const capasDirs = [getAutoCapasDir(true),  userDataCapasDir, getAutoCapasDir(),  delphiCapasDir].filter(Boolean);
+    for (const dir of imgsDirs) {
       if (fs.existsSync(path.join(dir, name))) return asAppLocal('imagens');
     }
-    for (const dir of [getAutoCapasDir(true), userDataCapasDir, getAutoCapasDir()]) {
+    for (const dir of capasDirs) {
       if (fs.existsSync(path.join(dir, name))) return asAppLocal('capas');
     }
 
@@ -1203,10 +1264,10 @@ function setupIpc(mainWindow) {
     if (mediaFolder && searchDir(mediaFolder, 0)) return asAppLocal('imagens');
 
     // Scan recursivo: imagens depois capas
-    for (const dir of [getAutoImagesDir(true), userDataImgsDir, getAutoImagesDir()]) {
+    for (const dir of imgsDirs) {
       if (searchDir(dir, 0)) return asAppLocal('imagens');
     }
-    for (const dir of [getAutoCapasDir(true), userDataCapasDir, getAutoCapasDir()]) {
+    for (const dir of capasDirs) {
       if (searchDir(dir, 0)) return asAppLocal('capas');
     }
 
@@ -1942,6 +2003,11 @@ document.getElementById('f').onsubmit=async(e)=>{
         const musicasR = getAutoMediaDir();
         const capasR   = getAutoCapasDir();
         const imgsR    = getAutoImagesDir();
+        // Pasta config/ da instalação Delphi (onde o banco SQLite está)
+        const delphiCfgAlbum  = getSqliteConfigDir();
+        const delphiMusicasR  = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'musicas') : null;
+        const delphiCapasR    = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'capas')   : null;
+        const delphiImgsR     = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'imagens') : null;
 
         const missingItems = [];
 
@@ -1956,10 +2022,18 @@ document.getElementById('f').onsubmit=async(e)=>{
           totalFiles++;
           let exists = fileUrlExists(rawUrl) || fs.existsSync(dest);
           if (!exists) {
-            // Áudio: busca recursiva em userData (subpastas baixadas) e instalação (Delphi)
-            if (type === 'audio') exists = !!findFileInTree(getAutoMediaDir(null, true), name) || !!findFileInTree(musicasR, name);
-            else if (type === 'cover') exists = fs.existsSync(path.join(capasR, name));
-            else if (type === 'image') exists = fs.existsSync(path.join(imgsR, name));
+            if (type === 'audio') {
+              // Busca recursiva em writable, instalação app e pasta Delphi
+              exists = !!findFileInTree(getAutoMediaDir(null, true), name)
+                    || !!findFileInTree(musicasR, name)
+                    || !!(delphiMusicasR && findFileInTree(delphiMusicasR, name));
+            } else if (type === 'cover') {
+              exists = fs.existsSync(path.join(capasR, name))
+                    || !!(delphiCapasR && fs.existsSync(path.join(delphiCapasR, name)));
+            } else if (type === 'image') {
+              exists = fs.existsSync(path.join(imgsR, name))
+                    || !!(delphiImgsR && fs.existsSync(path.join(delphiImgsR, name)));
+            }
           }
           if (exists) {
             foundFiles++;
