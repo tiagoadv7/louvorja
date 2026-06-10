@@ -718,6 +718,9 @@ function setupIpc(mainWindow) {
           return false;
         }
         if (folder === 'musicas') {
+          // Pasta customizada do usuário (mesma prioridade do media:resolve-file)
+          const userMediaFolder = Store.get('media_base_folder');
+          if (userMediaFolder && findFileInTree(userMediaFolder, name)) return true;
           // Para áudio: busca recursiva em todas as raízes de musicas
           for (const base of baseDirs2) {
             if (findFileInTree(path.join(base, 'musicas'), name)) return true;
@@ -2023,8 +2026,10 @@ document.getElementById('f').onsubmit=async(e)=>{
           let exists = fileUrlExists(rawUrl) || fs.existsSync(dest);
           if (!exists) {
             if (type === 'audio') {
-              // Busca recursiva em writable, instalação app e pasta Delphi
-              exists = !!findFileInTree(getAutoMediaDir(null, true), name)
+              // Busca recursiva: pasta customizada do usuário (prioridade), writable, instalação e Delphi
+              const userMediaFolder = Store.get('media_base_folder');
+              exists = !!(userMediaFolder && findFileInTree(userMediaFolder, name))
+                    || !!findFileInTree(getAutoMediaDir(null, true), name)
                     || !!findFileInTree(musicasR, name)
                     || !!(delphiMusicasR && findFileInTree(delphiMusicasR, name));
             } else if (type === 'cover') {
