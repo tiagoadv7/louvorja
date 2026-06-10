@@ -49,13 +49,13 @@
       @click="changeLayout()"
     />
 
-    <v-tooltip location="bottom">
+    <v-tooltip v-if="is_online" location="bottom">
       <template v-slot:activator="{ props }">
         <v-btn v-bind="props" icon="mdi-cloud-download-outline" @click="openDownload()" />
       </template>
       Centro de Downloads
     </v-tooltip>
-    <DownloadCenter v-model="downloadDialog" :initial-section="downloadSection" />
+    <DownloadCenter v-if="is_online" v-model="downloadDialog" :initial-section="downloadSection" />
 
     <MonitorSelector />
 
@@ -96,6 +96,9 @@ export default {
     },
     remote_url() {
       return this.$userdata.get("remote.url");
+    },
+    is_online() {
+      return this.$appdata.get("is_online");
     },
   },
   mounted() {
