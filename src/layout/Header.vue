@@ -49,13 +49,13 @@
       @click="changeLayout()"
     />
 
-    <v-tooltip v-if="is_online" location="bottom">
+    <v-tooltip v-if="isOnline" location="bottom">
       <template v-slot:activator="{ props }">
         <v-btn v-bind="props" icon="mdi-cloud-download-outline" @click="openDownload()" />
       </template>
       Centro de Downloads
     </v-tooltip>
-    <DownloadCenter v-if="is_online" v-model="downloadDialog" :initial-section="downloadSection" />
+    <DownloadCenter v-if="isOnline" v-model="downloadDialog" :initial-section="downloadSection" />
 
     <MonitorSelector />
 
@@ -81,8 +81,11 @@ export default {
     downloadDialog: false,
     downloadSection: 'home',
     quickSearchOpen: false,
+    isOnline: navigator.onLine,
     _downloadHandler: null,
     _quickSearchHandler: null,
+    _onlineHandler: null,
+    _offlineHandler: null,
   }),
   computed: {
     layout() {
@@ -96,9 +99,6 @@ export default {
     },
     remote_url() {
       return this.$userdata.get("remote.url");
-    },
-    is_online() {
-      return this.$appdata.get("is_online");
     },
   },
   mounted() {
@@ -115,11 +115,18 @@ export default {
       }
     };
     window.addEventListener('keydown', this._quickSearchHandler);
+
+    this._onlineHandler  = () => { this.isOnline = true; };
+    this._offlineHandler = () => { this.isOnline = false; };
+    window.addEventListener('online',  this._onlineHandler);
+    window.addEventListener('offline', this._offlineHandler);
   },
 
   beforeUnmount() {
     window.removeEventListener('open-download-center', this._downloadHandler);
     window.removeEventListener('keydown', this._quickSearchHandler);
+    window.removeEventListener('online',  this._onlineHandler);
+    window.removeEventListener('offline', this._offlineHandler);
   },
 
   methods: {
