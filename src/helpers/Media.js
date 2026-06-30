@@ -414,6 +414,7 @@ export default {
           xfade.setAttribute("autoplay", "true");
           xfade.addEventListener("timeupdate", this.timeUpdate.bind(this));
           xfade.addEventListener("progress", this.timeUpdate.bind(this));
+          xfade.addEventListener("ended", this._onAudioEnded.bind(this));
 
           audio.remove();
           $appdata.set("modules.media.config.is_fading", false);
@@ -437,27 +438,22 @@ export default {
     }
 
     this.stopAudio();
+    $appdata.set("modules.media.show", false);
+    $appdata.set("modules.media.minimized", false);
+    // Não chama clearVariables() aqui: os dados do slide ficam intactos para
+    // que a projeção continue exibindo o último slide até ser fechada (F5).
+    // clearVariables() é chamado no próximo open().
+  },
 
-    const popup = $appdata.get("popup");
-    const popupModule = $appdata.get("popup_module");
-    // No Electron, o output pode ter sido aberto via barra do sistema sem passar pelo
-    // $popup.open(), deixando popup=null. Verificamos isElectron() como fallback para
-    // garantir que closeOutput() seja chamado — main process ignora se não estiver aberto.
-    const outputIsMedia = (popup || $electron.isElectron()) && popupModule === "media";
-
-    if (outputIsMedia) {
-      // Envia output-closing ANTES de qualquer mudança de estado para que o popup
-      // inicie o fade-out enquanto o slide ainda está renderizado sem modificações.
-      $electron.closeOutput();
-      $appdata.set("modules.media.show", false);
-      $appdata.set("modules.media.minimized", false);
-      // Limpa dados somente após a janela estar destruída (animação 400ms + destruição).
-      setTimeout(() => this.clearVariables(), 1200);
-    } else {
-      $appdata.set("modules.media.show", false);
-      $appdata.set("modules.media.minimized", false);
-      this.clearVariables();
-    }
+  // Chamado quando o áudio termina naturalmente (fim da música ou dos slides).
+  // Diferente de close(): para o áudio e oculta o módulo no app, mas mantém
+  // a janela de projeção aberta exibindo o último slide projetado.
+  endSong() {
+    this.stopAudio();
+    $appdata.set("modules.media.show", false);
+    $appdata.set("modules.media.minimized", false);
+    // Não chama clearVariables() nem closeOutput() — dados e janela de projeção
+    // permanecem para que o último slide continue visível no monitor de saída.
   },
 
   async openLyric(params) {
@@ -560,26 +556,11 @@ export default {
     if (typeof params != "object") {
       params = { id_music: params };
     }
-    $dev.write("open audio", params);
-
-    const id_music = params.id_music;
-    let mode = params.mode ? params.mode : "audio";
-
-    $appdata.set("loading", true);
-
-    let data = await $database.get(`music_${id_music}`);
-    if (data == null) {
-      $appdata.set("loading", false);
-      return;
-    }
-
-    const rawAudioUrl = mode == "instrumental" ? data.url_instrumental_music : data.url_music;
-    const localAudioUrl = await $electron.mediaResolveFile(rawAudioUrl);
-    const url = localAudioUrl || $path.file(rawAudioUrl);
-
-    window.open(url, "_blank");
-
-    $appdata.set("loading", false);
+    $dev.write("open audio (minimized)", params);
+    // Reproduz o áudio usando o player interno minimizado (rodapé) em vez de abrir
+    // o arquivo diretamente no navegador. Mesmos controles e efeitos do player de slides,
+    // porém sem exibir a janela de apresentação.
+    await this.open({ id_music: params.id_music, mode: params.mode || "audio", minimized: true });
   },
 
   _detachAndFadeOut() {
@@ -636,7 +617,10 @@ export default {
     $appdata.set("modules.media.config.slide_progress", 0);
     $appdata.set("modules.media.config.buffered", 0);
     $appdata.set("modules.media.config.volume", 100);
-    $appdata.set("modules.media.config.is_paused", false);
+    // Não reseta is_paused aqui: stopAudio() já o define como true antes de clearVariables().
+    // Manter true durante a transição garante que checkTime() e _onAudioEnded() não disparem
+    // novamente para a faixa que acabou. open() chama pause(true) e depois play() para
+    // restaurar o estado correto conforme a reprodução avança.
     $appdata.set("modules.media.config.is_fading", false);
   },
 
@@ -999,8 +983,23 @@ export default {
         // sem destruir o output — a próxima faixa abre sobre o mesmo output.
         this._autoCloseCallback();
       } else {
-        this.close(true);
+        this.endSong();
       }
+    }
+  },
+  _onAudioEnded() {
+    // Fallback para quando o último timeupdate não chegou a current_time >= duration
+    // (comum em arquivos locais). Se checkTime() já processou o fim, is_paused estará
+    // true (stopAudio define is_paused=true imediatamente) — evita duplo disparo.
+    // Guarda adicional: clearVariables() zera duration antes do primeiro await de open(),
+    // então se duration===0 significa que checkTime() já acionou o callback e a próxima
+    // faixa está carregando — não dispara de novo.
+    if ($appdata.get("modules.media.config.is_paused")) return;
+    if ($appdata.get("modules.media.config.duration") === 0) return;
+    if (typeof this._autoCloseCallback === 'function') {
+      this._autoCloseCallback();
+    } else {
+      this.endSong();
     }
   },
   getElement() {
@@ -1013,6 +1012,7 @@ export default {
       document.body.appendChild(el);
       el.addEventListener("timeupdate", this.timeUpdate.bind(this));
       el.addEventListener("progress", this.timeUpdate.bind(this));
+      el.addEventListener("ended", this._onAudioEnded.bind(this));
     } else {
       el = document.getElementById(id);
     }

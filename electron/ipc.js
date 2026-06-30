@@ -1502,12 +1502,16 @@ function setupIpc(mainWindow) {
       const hasLShowSlide  = lCols.includes('show_slide');
       const hasLOrder      = lCols.includes('order');
       const hasLLang       = lCols.includes('id_language');
+      const hasLTime       = lCols.includes('time');
+      const hasLInstrTime  = lCols.includes('instrumental_time');
 
       const lyricRows = query(`
         SELECT l.id_music, l.lyric,
-               ${hasLAuxLyric  ? 'l.aux_lyric'    : "'' AS aux_lyric"},
-               ${hasLOrder     ? 'l."order"'       : '0 AS "order"'},
-               ${hasLShowSlide ? 'l.show_slide'    : '1 AS show_slide'}
+               ${hasLAuxLyric  ? 'l.aux_lyric'         : "'' AS aux_lyric"},
+               ${hasLOrder     ? 'l."order"'            : '0 AS "order"'},
+               ${hasLShowSlide ? 'l.show_slide'         : '1 AS show_slide'},
+               ${hasLTime      ? 'l.time'               : "'00:00' AS time"},
+               ${hasLInstrTime ? 'l.instrumental_time'  : "'00:00' AS instrumental_time"}
                ${hasFilesT && hasLFileImg ? ', f.file_name AS img_name' : ", NULL AS img_name"}
                ${hasLImgPos    ? ', l.image_position' : ", 'center' AS image_position"}
         FROM lyrics l
@@ -1525,11 +1529,13 @@ function setupIpc(mainWindow) {
           imgUrl = toLocalFileUrl(imgFull);
         }
         slidesMap[r.id_music].push({
-          cover: r.order === 0 || r.order === null,
-          lyric: r.lyric || '',
-          aux_lyric: r.aux_lyric || '',
-          url_image: imgUrl,
-          image_position: r.image_position || 'center',
+          cover:             r.order === 0 || r.order === null,
+          lyric:             r.lyric              || '',
+          aux_lyric:         r.aux_lyric          || '',
+          url_image:         imgUrl,
+          image_position:    r.image_position     || 'center',
+          time:              r.time               || '00:00',
+          instrumental_time: r.instrumental_time  || '00:00',
         });
       });
 
@@ -1966,20 +1972,203 @@ document.getElementById('f').onsubmit=async(e)=>{
 
   // Retorna álbuns com arquivos faltando + lista flat de todos os itens.
   // Igual ao ARQUIVOS_SISTEMA do LouvorJA Delphi: Arquivo | Diretório | Status
-  ipcMain.handle('files:scan-albums', async () => {
+  ipcMain.handle('files:scan-albums', async (event) => {
+    const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
+    const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });
+
+    // ── Emite progresso e cede controle ────────────────────────────────────
+    const sendProgress = async (current, total, albumName) => {
+      try {
+        if (!event.sender.isDestroyed())
+          event.sender.send('files:scan-progress', { current, total, albumName });
+      } catch (_) {}
+      await new Promise(resolve => setImmediate(resolve));
+    };
+
+    // ── Scan via ARQUIVOS_SISTEMA (fonte Delphi — contagem idêntica ao Delphi) ──
+    if (sqliteReader.isOpen() && sqliteReader.hasArquivosSistema()) {
+      try {
+        const rows = sqliteReader.getArquivosSistema();
+        if (rows.length > 0) {
+          const configDir    = getSqliteConfigDir();
+          const installRoot  = configDir ? path.dirname(configDir) : null;
+          const writableRoot = getWritableBase();
+          const userMedia    = Store.get('media_base_folder') || null;
+
+          // Mapeia TIPO Delphi → tipo interno
+          const tipoMap = {
+            MUSICA: 'audio', MUSICA_PB: 'audio',
+            IMAGEM_ALBUM: 'cover',
+            IMAGEM_FUNDO: 'image', IMAGEM_FUNDO_CAPA: 'image',
+          };
+
+          // Pré-conta álbuns de áudio únicos para barra de progresso
+          const uniqueAudioAlbums = new Set();
+          for (const r of rows) {
+            if (r.TIPO === 'MUSICA' || r.TIPO === 'MUSICA_PB') {
+              const chave = (r.CHAVE || '').replace(/\\/g, '/');
+              const slash = chave.indexOf('/');
+              if (slash > 0) uniqueAudioAlbums.add(chave.slice(0, slash));
+            }
+          }
+          const totalAlbums = uniqueAudioAlbums.size;
+
+          const typeStats   = emptyStats();
+          const albumMap    = new Map(); // key → { name, totalFiles, foundFiles, items[] }
+          const seen        = new Set();
+          let totalFiles    = 0;
+          let foundFiles    = 0;
+          let currentAlbum  = '';
+          let albumProgress = 0;
+          let delphiYield   = 0;
+
+          const getGroup = (key, name) => {
+            if (!albumMap.has(key)) albumMap.set(key, { name, totalFiles: 0, foundFiles: 0, items: [] });
+            return albumMap.get(key);
+          };
+
+          for (const row of rows) {
+            const type = tipoMap[row.TIPO];
+            if (!type) continue; // ignora ARQUIVOS_ADICIONAIS
+
+            const urlNorm = (row.URL || '').replace(/\\/g, path.sep);
+            const dedupKey = urlNorm.toLowerCase();
+            if (seen.has(dedupKey)) continue;
+            seen.add(dedupKey);
+
+            totalFiles++;
+            typeStats[type]; // acesso para garantir init (já feito no emptyStats)
+
+            // Determina grupo
+            let groupKey, groupName;
+            if (type === 'audio') {
+              const chave = (row.CHAVE || '').replace(/\\/g, '/');
+              const slash = chave.indexOf('/');
+              groupKey  = slash > 0 ? chave.slice(0, slash) : 'Sem álbum';
+              groupName = groupKey;
+              // Emite progresso ao mudar de álbum
+              if (groupKey !== currentAlbum) {
+                currentAlbum = groupKey;
+                albumProgress++;
+                await sendProgress(albumProgress, totalAlbums, groupName);
+              }
+            } else if (type === 'cover') {
+              groupKey = '__capas__'; groupName = 'Capas de álbuns';
+            } else {
+              groupKey = '__imagens__'; groupName = 'Imagens de fundo';
+            }
+
+            // Verifica existência do arquivo
+            let exists = false;
+            const fileName = row.ARQUIVO || path.basename(urlNorm);
+            if (installRoot)  exists = fs.existsSync(path.join(installRoot, urlNorm));
+            if (!exists)      exists = fs.existsSync(path.join(writableRoot, urlNorm));
+            if (!exists && type === 'audio') {
+              if (userMedia)  exists = !!findFileInTree(userMedia, fileName);
+              if (!exists)    exists = !!findFileInTree(getAutoMediaDir(null, true), fileName)
+                                    || !!findFileInTree(getAutoMediaDir(), fileName);
+            }
+            if (!exists && type === 'cover') {
+              exists = !!findFileInTree(getAutoCapasDir(), fileName)
+                    || !!findFileInTree(getAutoCapasDir(true), fileName);
+            }
+            if (!exists && type === 'image') {
+              exists = !!findFileInTree(getAutoImagesDir(), fileName)
+                    || !!findFileInTree(getAutoImagesDir(true), fileName);
+            }
+
+            // Cede o event loop a cada 10 entradas para não travar a UI
+            if (++delphiYield % 10 === 0) await new Promise(resolve => setImmediate(resolve));
+
+            const group = getGroup(groupKey, groupName);
+            group.totalFiles++;
+            if (exists) {
+              foundFiles++;
+              typeStats[type].found++;
+              group.foundFiles++;
+            } else {
+              typeStats[type].missing++;
+              // URL para download (formato app-local:// compatível com files:download-missing)
+              let dlUrl = '';
+              const chaveNorm = (row.CHAVE || '').replace(/\\/g, '/');
+              const slash = chaveNorm.indexOf('/');
+              if (type === 'audio' && slash > 0) {
+                dlUrl = `app-local://musicas/${encodeURIComponent(chaveNorm.slice(0, slash))}/${encodeURIComponent(fileName)}`;
+              } else if (type === 'audio') {
+                dlUrl = `app-local://musicas/${encodeURIComponent(fileName)}`;
+              } else if (type === 'cover') {
+                dlUrl = `app-local://capas/${encodeURIComponent(fileName)}`;
+              } else {
+                dlUrl = `app-local://imagens/${encodeURIComponent(fileName)}`;
+              }
+              group.items.push({
+                url:     dlUrl,
+                dest:    path.join(writableRoot, urlNorm),
+                type,
+                name:    fileName,
+                relPath: row.URL || urlNorm,
+              });
+            }
+          }
+
+          // Monta allAlbums (álbuns reais primeiro, grupos virtuais por último)
+          const isVirtual = (k) => k === '__capas__' || k === '__imagens__';
+          const allAlbums   = [];
+          const withMissing = [];
+          for (const [key, grp] of albumMap) {
+            const entry = {
+              id_album:   null,
+              name:       isVirtual(key) ? grp.name : key,
+              url_image:  '',
+              totalFiles: grp.totalFiles,
+              foundFiles: grp.foundFiles,
+              missing:    grp.items.length,
+              items:      grp.items,
+            };
+            allAlbums.push(entry);
+            if (grp.items.length > 0) withMissing.push(entry);
+          }
+          withMissing.sort((a, b) => {
+            const av = a.name === 'Capas de álbuns' || a.name === 'Imagens de fundo';
+            const bv = b.name === 'Capas de álbuns' || b.name === 'Imagens de fundo';
+            if (av !== bv) return av ? 1 : -1;
+            return b.missing - a.missing || a.name.localeCompare(b.name);
+          });
+          const allMissing = withMissing.flatMap(a => a.items)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+          return {
+            total:      uniqueAudioAlbums.size,  // álbuns de áudio únicos (igual ao Delphi)
+            totalFiles,
+            foundFiles,
+            albums:     withMissing,
+            allAlbums,
+            allMissing,
+            stats:      typeStats,
+            source:     'delphi',
+          };
+        }
+      } catch (e) {
+        console.error('[IPC] files:scan-albums (delphi) error:', e.message);
+        // cai no scan JSON abaixo
+      }
+    }
+
+    // ── Scan via JSON (fallback quando banco Delphi não está disponível) ────
     try {
       const dbDir = getDbDir();
-      if (!fs.existsSync(dbDir)) return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] };
+      if (!fs.existsSync(dbDir)) return emptyResult();
 
       const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
-      if (!albumFiles.length) return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] };
+      if (!albumFiles.length) return emptyResult();
 
       const seen        = new Set();
       const withMissing = [];
+      const allAlbums   = [];
+      const typeStats   = emptyStats();
       let totalFiles = 0;
       let foundFiles = 0;
 
-      // Calcula caminho relativo à raiz de instalação (ex: config\musicas\Álbum\file.mp3)
       const toRelPath = (destAbs) => {
         for (const base of [getWritableBase(), getInstallDir()]) {
           if (destAbs.toLowerCase().startsWith(base.toLowerCase() + path.sep) ||
@@ -1991,30 +2180,59 @@ document.getElementById('f').onsubmit=async(e)=>{
         return idx >= 0 ? destAbs.slice(idx) : path.basename(destAbs);
       };
 
-      for (const af of albumFiles) {
+      // Pré-constrói índice de nomes de arquivos de áudio em todos os diretórios conhecidos.
+      // Evita chamar findFileInTree (busca recursiva lenta) para cada arquivo individualmente.
+      const buildAudioIndex = () => {
+        const index = new Set();
+        const delphiCfg = getSqliteConfigDir();
+        const dirs = [
+          Store.get('media_base_folder'),
+          getAutoMediaDir(null, true),
+          getAutoMediaDir(),
+          delphiCfg ? path.join(delphiCfg, 'musicas') : null,
+        ].filter(Boolean);
+        const addDir = (dir, depth = 0) => {
+          if (!dir || !fs.existsSync(dir)) return;
+          try {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (entry.isFile()) {
+                const lower = entry.name.toLowerCase();
+                index.add(lower);
+                index.add(lower.replace(/\.[^.]+$/, ''));
+              } else if (entry.isDirectory() && depth < 3) {
+                addDir(path.join(dir, entry.name), depth + 1);
+              }
+            }
+          } catch (_) {}
+        };
+        for (const d of dirs) addDir(d);
+        return index;
+      };
+      const audioIndex = buildAudioIndex();
+
+      const delphiCfgAlbum = getSqliteConfigDir();
+      const capasR         = getAutoCapasDir();
+      const imgsR          = getAutoImagesDir();
+      const delphiCapasR   = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'capas')   : null;
+      const delphiImgsR    = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'imagens') : null;
+
+      for (let i = 0; i < albumFiles.length; i++) {
+        const af = albumFiles[i];
         let albumData;
         try { albumData = JSON.parse(fs.readFileSync(path.join(dbDir, af), 'utf8')); }
         catch (_) { continue; }
 
         const albumName = albumData.name || af.replace(/\.json$/, '');
-        // Destinos graváveis (download)
-        const capasW  = getAutoCapasDir(true);
-        // Usa folder_name (ex: "2010 - Geração Esperança") para criar subpasta correta
-        const audioW  = getAutoMediaDir(albumData.folder_name || albumName, true);
-        const imgsW   = getAutoImagesDir(true);
-        // Leitura: instalação original (subpastas musicas/ com nomes do SQLite Delphi)
-        const musicasR = getAutoMediaDir();
-        const capasR   = getAutoCapasDir();
-        const imgsR    = getAutoImagesDir();
-        // Pasta config/ da instalação Delphi (onde o banco SQLite está)
-        const delphiCfgAlbum  = getSqliteConfigDir();
-        const delphiMusicasR  = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'musicas') : null;
-        const delphiCapasR    = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'capas')   : null;
-        const delphiImgsR     = delphiCfgAlbum ? path.join(delphiCfgAlbum, 'imagens') : null;
+        await sendProgress(i + 1, albumFiles.length, albumName);
 
-        const missingItems = [];
+        const capasW   = getAutoCapasDir(true);
+        const audioW   = getAutoMediaDir(albumData.folder_name || albumName, true);
+        const imgsW    = getAutoImagesDir(true);
 
-        // Verifica existência e registra com relPath para exibição estilo Delphi
+        const missingItems    = [];
+        const albumStartTotal = totalFiles;
+        const albumStartFound = foundFiles;
+
         const chk = (rawUrl, destW, type) => {
           if (!rawUrl) return;
           const name = safeBasename(rawUrl);
@@ -2026,12 +2244,8 @@ document.getElementById('f').onsubmit=async(e)=>{
           let exists = fileUrlExists(rawUrl) || fs.existsSync(dest);
           if (!exists) {
             if (type === 'audio') {
-              // Busca recursiva: pasta customizada do usuário (prioridade), writable, instalação e Delphi
-              const userMediaFolder = Store.get('media_base_folder');
-              exists = !!(userMediaFolder && findFileInTree(userMediaFolder, name))
-                    || !!findFileInTree(getAutoMediaDir(null, true), name)
-                    || !!findFileInTree(musicasR, name)
-                    || !!(delphiMusicasR && findFileInTree(delphiMusicasR, name));
+              const lower = name.toLowerCase();
+              exists = audioIndex.has(lower) || audioIndex.has(lower.replace(/\.[^.]+$/, ''));
             } else if (type === 'cover') {
               exists = fs.existsSync(path.join(capasR, name))
                     || !!(delphiCapasR && fs.existsSync(path.join(delphiCapasR, name)));
@@ -2042,13 +2256,15 @@ document.getElementById('f').onsubmit=async(e)=>{
           }
           if (exists) {
             foundFiles++;
+            typeStats[type].found++;
           } else {
+            typeStats[type].missing++;
             missingItems.push({ url: rawUrl, dest, type, name, relPath: toRelPath(dest) });
           }
         };
 
         chk(albumData.url_image, capasW, 'cover');
-
+        let musicIdx = 0;
         for (const music of (albumData.musics || [])) {
           const mFile = path.join(dbDir, `music_${music.id_music}.json`);
           if (!fs.existsSync(mFile)) continue;
@@ -2060,35 +2276,34 @@ document.getElementById('f').onsubmit=async(e)=>{
           chk(md.url_image, imgsW, 'image');
           const slides = Array.isArray(md.slides) ? md.slides : [];
           for (const s of slides) chk(s?.url_image, imgsW, 'image');
+          // Cede o event loop a cada 5 músicas para manter a UI responsiva
+          if (++musicIdx % 5 === 0) await new Promise(resolve => setImmediate(resolve));
         }
 
+        const albumTotal = totalFiles - albumStartTotal;
+        const albumFound = foundFiles - albumStartFound;
+        allAlbums.push({
+          id_album: albumData.id_album, name: albumName, url_image: albumData.url_image || '',
+          totalFiles: albumTotal, foundFiles: albumFound, missing: missingItems.length, items: missingItems,
+        });
         if (missingItems.length > 0) {
           withMissing.push({
-            id_album:  albumData.id_album,
-            name:      albumName,
-            url_image: albumData.url_image || '',
-            missing:   missingItems.length,
-            items:     missingItems,
+            id_album: albumData.id_album, name: albumName, url_image: albumData.url_image || '',
+            missing: missingItems.length, items: missingItems,
           });
         }
       }
 
       withMissing.sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name));
-
-      // Lista flat de todos os itens faltando (para exibição estilo Delphi)
-      const allMissing = withMissing.flatMap(a => a.items)
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const allMissing = withMissing.flatMap(a => a.items).sort((a, b) => a.name.localeCompare(b.name));
 
       return {
-        total:      albumFiles.length,  // álbuns verificados
-        totalFiles,                     // total de arquivos checados
-        foundFiles,                     // arquivos encontrados
-        albums:     withMissing,        // álbuns com faltando (para exibição em grade)
-        allMissing,                     // lista flat de arquivos faltando (estilo Delphi)
+        total: albumFiles.length, totalFiles, foundFiles,
+        albums: withMissing, allAlbums, allMissing, stats: typeStats, source: 'json',
       };
     } catch (e) {
       console.error('[IPC] files:scan-albums error:', e.message);
-      return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [], error: e.message };
+      return { ...emptyResult(), error: e.message };
     }
   });
 

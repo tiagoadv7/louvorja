@@ -48,7 +48,11 @@
           </v-avatar>
           <div>
             <div class="text-subtitle-2 font-weight-bold">Sincronizar arquivos</div>
-            <div class="text-caption text-medium-emphasis">Verificação de integridade da coletânea</div>
+            <div class="text-caption text-medium-emphasis">
+              Verificação de integridade da coletânea
+              <v-chip v-if="scanSource === 'delphi'" size="x-small" color="success" variant="tonal" class="ms-2">banco Delphi</v-chip>
+              <v-chip v-else-if="scanSource === 'json'" size="x-small" color="info" variant="tonal" class="ms-2">biblioteca local</v-chip>
+            </div>
           </div>
         </div>
         <v-btn v-if="step !== 'downloading'" icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
@@ -56,7 +60,7 @@
       <v-divider />
 
       <!-- Barra de estatísticas -->
-      <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center gap-3 px-4 py-2">
+      <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center flex-wrap gap-2 px-4 py-2">
         <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle-outline">
           Encontrados: <strong class="ml-1">{{ foundFiles }}</strong>
         </v-chip>
@@ -64,9 +68,19 @@
                 :prepend-icon="totalMissing > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-all'">
           Em falta: <strong class="ml-1">{{ totalMissing }}</strong>
         </v-chip>
+        <template v-if="stats">
+          <v-chip v-if="stats.audio.missing > 0" size="x-small" color="warning" variant="tonal" prepend-icon="mdi-music">
+            {{ stats.audio.missing }} áudio(s)
+          </v-chip>
+          <v-chip v-if="stats.cover.missing + stats.image.missing > 0" size="x-small" color="secondary" variant="tonal" prepend-icon="mdi-image-outline">
+            {{ stats.cover.missing + stats.image.missing }} imagem(ns)
+          </v-chip>
+        </template>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">
-          {{ totalScanned }} álbum(s) verificado(s)
+          {{ totalScanned }} álbum(s) · {{ totalFiles }} arquivo(s)
+          <template v-if="albumsOK > 0"> · {{ albumsOK }} ok</template>
+          <template v-if="albumsWithIssues > 0"> · {{ albumsWithIssues }} incompleto(s)</template>
         </span>
       </div>
 
@@ -76,63 +90,141 @@
           <v-icon size="40" color="primary">mdi-folder-search-outline</v-icon>
         </div>
         <div class="text-body-1 font-weight-semibold mb-1">Verificando arquivos locais...</div>
-        <div class="text-caption text-medium-emphasis mb-5">Isso pode levar alguns segundos</div>
-        <v-progress-linear indeterminate color="primary" rounded height="4" style="max-width:220px;width:100%" />
+        <div v-if="scanAlbum.total > 0" class="text-caption text-medium-emphasis mb-2 text-center" style="max-width:320px">
+          {{ scanAlbum.current }}/{{ scanAlbum.total }} — {{ scanAlbum.name }}
+        </div>
+        <div v-else class="text-caption text-medium-emphasis mb-2">Isso pode levar alguns segundos</div>
+        <v-progress-linear
+          :indeterminate="scanAlbum.total === 0"
+          :model-value="scanAlbum.total > 0 ? Math.round((scanAlbum.current / scanAlbum.total) * 100) : 0"
+          color="primary" rounded height="4" style="max-width:220px;width:100%"
+        />
       </v-card-text>
 
       <!-- ── Lista de arquivos ── -->
       <template v-else-if="step === 'results'">
         <!-- Toolbar de seleção -->
-        <div class="fcd-toolbar d-flex align-center px-4 py-2" style="gap: 16px">
+        <div class="fcd-toolbar d-flex align-center px-4 py-2" style="gap: 12px">
           <span class="text-caption text-medium-emphasis">Selecionar:</span>
-          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-check-all" @click="selectAll">Todos</v-btn>
-          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
-          <v-btn size="small" variant="outlined" class="px-5" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
+          <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-check-all" @click="selectAll">Todos</v-btn>
+          <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
+          <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
           <v-spacer />
+          <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg">
+            <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="'Agrupado por álbum'" />
+            <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="'Lista simples'" />
+          </v-btn-toggle>
           <v-chip size="small" color="primary" variant="tonal" prepend-icon="mdi-check">
             {{ selectedCount }} / {{ fileList.length }} selecionado(s)
           </v-chip>
         </div>
         <v-divider />
 
-        <!-- Cabeçalho da lista -->
-        <div class="fcd-list-header">
-          <div class="fcd-col-check" />
-          <div class="fcd-col-name">Arquivo</div>
-          <div class="fcd-col-dir">Localização</div>
-          <div class="fcd-col-status">Status</div>
-        </div>
-
-        <!-- Linhas (virtual scroll) -->
-        <v-virtual-scroll :items="fileList" :height="310" :item-height="36">
-          <template #default="{ item }">
-            <div
-              class="fcd-list-row"
-              :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
-              @click="toggleItem(item.dest)"
+        <!-- Vista agrupada por álbum -->
+        <template v-if="viewMode === 'grouped'">
+          <v-expansion-panels v-model="expandedAlbums" multiple flat style="max-height:346px;overflow-y:auto">
+            <v-expansion-panel
+              v-for="album in albumsIncomplete"
+              :key="album.id_album || album.name"
+              :value="album.id_album || album.name"
+              rounded="0"
             >
-              <div class="fcd-col-check">
-                <v-checkbox
-                  :model-value="selectedDests.has(item.dest)"
-                  density="compact"
-                  hide-details
-                  color="primary"
-                  @click.stop="toggleItem(item.dest)"
-                />
+              <v-expansion-panel-title class="fcd-album-header" hide-actions>
+                <template #default="{ isOpen }">
+                  <v-icon size="16" class="me-2 flex-shrink-0">
+                    {{ isOpen ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                  </v-icon>
+                  <span class="text-body-2 font-weight-medium text-truncate flex-grow-1">{{ album.name }}</span>
+                  <v-chip size="x-small" color="error" variant="tonal" class="mx-2 flex-shrink-0">
+                    {{ album.missing }} em falta
+                  </v-chip>
+                  <span class="text-caption text-medium-emphasis flex-shrink-0 me-2">
+                    {{ album.foundFiles }}/{{ album.totalFiles }} arquivo(s)
+                  </span>
+                </template>
+              </v-expansion-panel-title>
+              <v-expansion-panel-text class="pa-0">
+                <div
+                  v-for="item in album.items"
+                  :key="item.dest"
+                  class="fcd-list-row fcd-list-row--indent"
+                  :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
+                  @click="toggleItem(item.dest)"
+                >
+                  <div class="fcd-col-check">
+                    <v-checkbox
+                      :model-value="selectedDests.has(item.dest)"
+                      density="compact"
+                      hide-details
+                      color="primary"
+                      @click.stop="toggleItem(item.dest)"
+                    />
+                  </div>
+                  <div class="fcd-col-name">
+                    <v-icon size="13" :color="item.type === 'audio' ? 'warning' : 'secondary'" class="me-1 flex-shrink-0">
+                      {{ item.type === 'audio' ? 'mdi-file-music-outline' : 'mdi-image-outline' }}
+                    </v-icon>
+                    <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
+                  </div>
+                  <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
+                    {{ item.relPath }}
+                  </div>
+                  <div class="fcd-col-status">
+                    <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
+                      {{ item.type === 'audio' ? 'áudio' : item.type === 'cover' ? 'capa' : 'imagem' }}
+                    </v-chip>
+                  </div>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </template>
+
+        <!-- Vista lista plana -->
+        <template v-else>
+          <!-- Cabeçalho da lista -->
+          <div class="fcd-list-header">
+            <div class="fcd-col-check" />
+            <div class="fcd-col-name">Arquivo</div>
+            <div class="fcd-col-dir">Localização</div>
+            <div class="fcd-col-status">Tipo</div>
+          </div>
+
+          <!-- Linhas (virtual scroll) -->
+          <v-virtual-scroll :items="fileList" :height="310" :item-height="36">
+            <template #default="{ item }">
+              <div
+                class="fcd-list-row"
+                :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
+                @click="toggleItem(item.dest)"
+              >
+                <div class="fcd-col-check">
+                  <v-checkbox
+                    :model-value="selectedDests.has(item.dest)"
+                    density="compact"
+                    hide-details
+                    color="primary"
+                    @click.stop="toggleItem(item.dest)"
+                  />
+                </div>
+                <div class="fcd-col-name">
+                  <v-icon size="13" :color="item.type === 'audio' ? 'warning' : 'secondary'" class="me-1 flex-shrink-0">
+                    {{ item.type === 'audio' ? 'mdi-file-music-outline' : 'mdi-image-outline' }}
+                  </v-icon>
+                  <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
+                </div>
+                <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
+                  {{ item.relPath }}
+                </div>
+                <div class="fcd-col-status">
+                  <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
+                    {{ item.type === 'audio' ? 'áudio' : item.type === 'cover' ? 'capa' : 'imagem' }}
+                  </v-chip>
+                </div>
               </div>
-              <div class="fcd-col-name">
-                <v-icon size="13" color="warning" class="me-1 flex-shrink-0">mdi-file-music-outline</v-icon>
-                <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
-              </div>
-              <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
-                {{ item.relPath }}
-              </div>
-              <div class="fcd-col-status">
-                <v-chip size="x-small" color="error" variant="tonal">faltando</v-chip>
-              </div>
-            </div>
-          </template>
-        </v-virtual-scroll>
+            </template>
+          </v-virtual-scroll>
+        </template>
       </template>
 
       <!-- ── Tudo ok ── -->
@@ -149,9 +241,23 @@
           </div>
           <v-divider vertical />
           <div class="text-center">
-            <div class="text-h4 font-weight-black text-success">{{ foundFiles }}</div>
+            <div class="text-h4 font-weight-black text-success">{{ totalFiles }}</div>
             <div class="text-caption text-medium-emphasis">arquivos</div>
           </div>
+          <template v-if="stats && stats.audio.found > 0">
+            <v-divider vertical />
+            <div class="text-center">
+              <div class="text-h4 font-weight-black text-warning">{{ stats.audio.found }}</div>
+              <div class="text-caption text-medium-emphasis">áudios</div>
+            </div>
+          </template>
+          <template v-if="stats && (stats.cover.found + stats.image.found) > 0">
+            <v-divider vertical />
+            <div class="text-center">
+              <div class="text-h4 font-weight-black text-secondary">{{ stats.cover.found + stats.image.found }}</div>
+              <div class="text-caption text-medium-emphasis">imagens</div>
+            </div>
+          </template>
         </div>
       </v-card-text>
 
@@ -237,11 +343,22 @@ export default {
     _autoOpen:   false,        // true = aberto automaticamente no startup
 
     // Scan results
-    totalScanned: 0,   // álbuns verificados
-    totalFiles:   0,   // total arquivos checados
-    foundFiles:   0,   // encontrados
-    totalMissing: 0,   // faltando
-    fileList:     [],  // lista flat de arquivos faltando (estilo Delphi)
+    totalScanned:   0,    // álbuns verificados
+    totalFiles:     0,    // total arquivos checados
+    foundFiles:     0,    // encontrados
+    totalMissing:   0,    // faltando
+    fileList:       [],   // lista flat de arquivos faltando
+    albumList:      [],   // todos os álbuns (incluindo completos)
+    stats:          null, // {audio, cover, image} contagem por tipo
+    scanSource:     null, // 'delphi' | 'json' | null
+
+    // Progresso do scan
+    scanAlbum: { current: 0, total: 0, name: '' },
+    _scanProgressHandler: null,
+
+    // Vista
+    viewMode:       'grouped',  // 'grouped' | 'flat'
+    expandedAlbums: [],         // painéis expandidos no modo agrupado
 
     // Seleção
     selectedDests: new Set(),
@@ -257,8 +374,11 @@ export default {
   }),
 
   computed: {
-    selectedCount() { return this.selectedDests.size; },
-    allSelected()   { return this.fileList.length > 0 && this.selectedDests.size === this.fileList.length; },
+    selectedCount()    { return this.selectedDests.size; },
+    allSelected()      { return this.fileList.length > 0 && this.selectedDests.size === this.fileList.length; },
+    albumsOK()         { return this.albumList.filter(a => a.missing === 0).length; },
+    albumsWithIssues() { return this.albumList.filter(a => a.missing > 0).length; },
+    albumsIncomplete() { return this.albumList.filter(a => a.missing > 0); },
   },
 
   methods: {
@@ -267,52 +387,70 @@ export default {
     // force=false (padrão) → em produção faz scan silencioso e só abre se houver faltando.
     async open(force = false) {
       if (import.meta.env.DEV || force) {
-        // Dev ou trigger manual: mostra diálogo completo com spinner de scanning
         this._autoOpen = false;
         this.show = true;
         this.step = 'scanning';
         this.fileList = [];
+        this.albumList = [];
+        this.stats = null;
         this.selectedDests = new Set();
+        this.scanAlbum = { current: 0, total: 0, name: '' };
         await this.scan();
       } else {
-        // Produção (startup): scan silencioso em background
         this._autoOpen = true;
         await this._scanSilent();
       }
     },
 
-    // Scan silencioso para produção: não exibe diálogo durante o scan.
-    // Só abre o diálogo (na etapa 'results') se houver arquivos faltando.
     async _scanSilent() {
-      this.fileList     = [];
+      this.fileList  = [];
+      this.albumList = [];
+      this.stats     = null;
       this.selectedDests = new Set();
 
       let result = null;
       try {
+        this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
+          this.scanAlbum = { current, total, name: albumName };
+        });
         result = await this.$electron.scanAlbumsFiles();
-      } catch (_) { return; } // erro de IPC — silencioso
+      } catch (_) {
+        return;
+      } finally {
+        if (this._scanProgressHandler) {
+          this.$electron.off('files:scan-progress', this._scanProgressHandler);
+          this._scanProgressHandler = null;
+        }
+      }
 
-      if (!result || result.total === 0) return; // nenhum álbum baixado — OK
+      if (!result || result.total === 0) return;
 
       this.totalScanned = result.total      || 0;
       this.totalFiles   = result.totalFiles || 0;
       this.foundFiles   = result.foundFiles || 0;
       this.fileList     = result.allMissing || [];
+      this.albumList    = result.allAlbums  || [];
+      this.stats        = result.stats      || null;
+      this.scanSource   = result.source     || null;
       this.totalMissing = this.fileList.length;
 
-      if (this.totalMissing === 0) return; // tudo presente — sem diálogo
+      if (this.totalMissing === 0) return;
 
-      // Há arquivos faltando: abre diálogo direto na etapa de resultados
-      this.selectedDests = new Set(this.fileList.map(f => f.dest));
-      this.show          = true;
-      this.step          = 'results';
-      this.confirmShow   = true; // exibe popup de confirmação imediatamente
+      this.selectedDests  = new Set(this.fileList.map(f => f.dest));
+      this.expandedAlbums = this.albumsIncomplete.map(a => a.id_album || a.name);
+      this.show           = true;
+      this.step           = 'results';
+      this.confirmShow    = true;
     },
 
     close() {
       if (this._dlHandler) {
         this.$electron.off('files:download-progress', this._dlHandler);
         this._dlHandler = null;
+      }
+      if (this._scanProgressHandler) {
+        this.$electron.off('files:scan-progress', this._scanProgressHandler);
+        this._scanProgressHandler = null;
       }
       this.show = false;
       this.confirmShow = false;
@@ -321,13 +459,19 @@ export default {
     async scan() {
       let result = null;
       try {
+        this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
+          this.scanAlbum = { current, total, name: albumName };
+        });
         result = await this.$electron.scanAlbumsFiles();
       } catch (_) {
-        // Em produção, fecha silenciosamente em caso de erro no IPC
         if (!import.meta.env.DEV) { this.show = false; return; }
+      } finally {
+        if (this._scanProgressHandler) {
+          this.$electron.off('files:scan-progress', this._scanProgressHandler);
+          this._scanProgressHandler = null;
+        }
       }
 
-      // Dev: injeta dados mock quando db/ está vazio ou IPC falhou
       if (import.meta.env.DEV && (!result || result.total === 0)) {
         result = this._mockScanResult();
       }
@@ -336,19 +480,25 @@ export default {
       this.totalFiles   = result?.totalFiles || 0;
       this.foundFiles   = result?.foundFiles || 0;
       this.fileList     = result?.allMissing || [];
+      this.albumList    = result?.allAlbums  || [];
+      this.stats        = result?.stats      || null;
+      this.scanSource   = result?.source     || null;
       this.totalMissing = this.fileList.length;
+
+      // Usuário pode ter fechado o dialog enquanto o scan rodava em background.
+      if (!this.show) return;
 
       if (this.totalMissing === 0) {
         this.step = 'all-good';
       } else {
-        this.step = 'results';
-        this.selectedDests = new Set(this.fileList.map(f => f.dest));
-        this.confirmShow = true;
+        this.step           = 'results';
+        this.selectedDests  = new Set(this.fileList.map(f => f.dest));
+        this.expandedAlbums = this.albumsIncomplete.map(a => a.id_album || a.name);
+        this.confirmShow    = true;
       }
     },
 
     _mockScanResult() {
-      // Nomes reais do banco SQLite (files.file_name + files.dir último segmento)
       const albums = [
         {
           name: '1992 - Brilha Jesus',
@@ -393,43 +543,46 @@ export default {
       ];
 
       const allMissing = [];
+      const allAlbums  = [];
+      const stats = { audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } };
       let totalFiles = 0;
       let foundFiles = 0;
 
-      albums.forEach(album => {
-        totalFiles += album.all.length;
+      albums.forEach((album, idx) => {
         const missingSet = new Set(album.missing);
+        const albumMissingItems = album.missing.map(fileName => ({
+          name:    fileName,
+          relPath: album.name,
+          dest:    `config/musicas/${album.name}/${fileName}`,
+          url:     `https://api.louvorja.com.br/file/musics/pt/${encodeURIComponent(album.name)}/${encodeURIComponent(fileName)}`,
+          type:    'audio',
+        }));
+        totalFiles += album.all.length;
         foundFiles += album.all.length - album.missing.length;
-        album.missing.forEach(fileName => {
-          allMissing.push({
-            name:    fileName,
-            relPath: album.name,
-            dest:    `config/musicas/${album.name}/${fileName}`,
-            url:     `https://api.louvorja.com.br/file/musics/pt/${encodeURIComponent(album.name)}/${encodeURIComponent(fileName)}`,
-          });
+        stats.audio.found   += album.all.length - album.missing.length;
+        stats.audio.missing += album.missing.length;
+        allMissing.push(...albumMissingItems);
+        allAlbums.push({
+          id_album:   idx + 1,
+          name:       album.name,
+          url_image:  '',
+          totalFiles: album.all.length,
+          foundFiles: album.all.length - album.missing.length,
+          missing:    album.missing.length,
+          items:      albumMissingItems,
         });
       });
 
-      return {
-        total:      albums.length,
-        totalFiles,
-        foundFiles,
-        allMissing,
-      };
+      return { total: albums.length, totalFiles, foundFiles, allMissing, allAlbums, stats };
     },
 
     // ── Popup de confirmação ────────────────────────────────────────────
     confirmYes() {
       this.confirmShow = false;
-      // Inicia download dos selecionados automaticamente
       this.startDownload();
     },
     confirmNo() {
-      if (this._autoOpen) {
-        this.close();
-      } else {
-        this.confirmShow = false;
-      }
+      this.close();
     },
 
     // ── Seleção ─────────────────────────────────────────────────────────
@@ -442,8 +595,7 @@ export default {
     selectAll()      { this.selectedDests = new Set(this.fileList.map(f => f.dest)); },
     deselectAll()    { this.selectedDests = new Set(); },
     invertSelection() {
-      const s = new Set(this.fileList.filter(f => !this.selectedDests.has(f.dest)).map(f => f.dest));
-      this.selectedDests = s;
+      this.selectedDests = new Set(this.fileList.filter(f => !this.selectedDests.has(f.dest)).map(f => f.dest));
     },
 
     // ── Download ─────────────────────────────────────────────────────────
@@ -459,7 +611,6 @@ export default {
       this.dlSpeed    = '';
       this.step       = 'downloading';
 
-      // Registra listener de progresso já no estado "downloading"
       this._dlHandler = this.$electron.on('files:download-progress', ({ current, total, message, fileSize, speed }) => {
         this.dlCurrent  = current;
         this.dlTotal    = total || this.dlTotal;
@@ -470,11 +621,7 @@ export default {
       });
 
       try {
-        // JSON round-trip remove os Proxy reativos do Vue antes de passar ao IPC.
-        // ipcRenderer.invoke usa structured-clone; Proxies Vue podem falhar na
-        // serialização em algumas versões do Electron, causando falha silenciosa.
         const plainItems = JSON.parse(JSON.stringify(items));
-
         const result = await this.$electron.downloadMissingFiles(
           plainItems,
           import.meta.env.VITE_URL_FILES,
@@ -502,6 +649,7 @@ export default {
       this.step          = 'scanning';
       this.selectedDests = new Set();
       this.confirmShow   = false;
+      this.scanAlbum     = { current: 0, total: 0, name: '' };
       await this.scan();
     },
   },
@@ -578,9 +726,18 @@ export default {
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
   transition: background 0.1s;
 }
+.fcd-list-row--indent { padding-left: 32px; }
 .fcd-list-row:hover       { background: rgba(var(--v-theme-primary), 0.05); }
 .fcd-list-row--on         { background: rgba(var(--v-theme-primary), 0.09); }
 .fcd-list-row--on:hover   { background: rgba(var(--v-theme-primary), 0.13); }
+
+/* ── Cabeçalho de álbum (expansion panel) ────────────────────────────────── */
+.fcd-album-header {
+  padding: 0 16px;
+  min-height: 40px !important;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+}
 
 /* ── Colunas ─────────────────────────────────────────────────────────────── */
 .fcd-col-check  { width: 38px; flex-shrink: 0; }
@@ -591,5 +748,10 @@ export default {
 /* ── Barra de ações ──────────────────────────────────────────────────────── */
 .fcd-actions {
   background: rgba(var(--v-theme-surface-variant), 0.1);
+}
+
+/* ── Expansion panels sem padding extra ─────────────────────────────────── */
+:deep(.v-expansion-panel-text__wrapper) {
+  padding: 0 !important;
 }
 </style>

@@ -46,7 +46,7 @@
           rounded="lg"
           class="__qs-item"
           @mouseenter="selectedIdx = idx"
-          @click.stop="selectedIdx = idx"
+          @click.stop="openItem(idx)"
         >
           <template v-slot:prepend>
             <v-icon size="16" class="me-1 opacity-60">mdi-music-note</v-icon>
@@ -76,6 +76,7 @@
               <MusicMenuTable
                 :id_music="item.id_music"
                 :has_instrumental_music="item.has_instrumental_music"
+                @action="dialog = false"
               />
             </div>
           </template>
@@ -140,10 +141,7 @@ export default {
       const q = this.$string.clean(this.search.trim());
       if (!q) return [];
       return this.allData
-        .filter(item =>
-          this.$string.clean(item.name).includes(q) ||
-          (item.albums_names && this.$string.clean(item.albums_names).includes(q))
-        )
+        .filter(item => item._nc.includes(q) || item._ac.includes(q))
         .slice(0, 10);
     },
   },
@@ -154,6 +152,8 @@ export default {
         this.search = '';
         this.selectedIdx = 0;
         if (!this.allData.length) await this.loadData();
+      } else {
+        this.search = '';
       }
     },
     results() {
@@ -166,8 +166,13 @@ export default {
       this.loading = true;
       try {
         const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
-        this.allData = await this.$database.get(`${locale}_musics`) || [];
-        this.allData.sort((a, b) => this.$string.sort(a.name, b.name));
+        const raw = await this.$database.get(`${locale}_musics`) || [];
+        raw.sort((a, b) => this.$string.sort(a.name, b.name));
+        this.allData = raw.map(item => ({
+          ...item,
+          _nc: this.$string.clean(item.name),
+          _ac: item.albums_names ? this.$string.clean(item.albums_names) : '',
+        }));
       } finally {
         this.loading = false;
       }
@@ -182,9 +187,16 @@ export default {
       this.selectedIdx = Math.max(0, Math.min(max, this.selectedIdx + dir));
     },
 
+    openItem(idx) {
+      this.selectedIdx = idx;
+      this.openSelected();
+    },
+
     openSelected() {
       const item = this.results[this.selectedIdx];
-      if (item) this.$media.open({ id_music: item.id_music, mode: 'audio' });
+      if (!item) return;
+      this.$media.open({ id_music: item.id_music, mode: 'audio' });
+      this.dialog = false;
     },
   },
 };

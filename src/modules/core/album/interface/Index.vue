@@ -4,6 +4,7 @@
     :title="module?.data?.name"
     :image="module?.data?.url_image ? $path.file(module.data.url_image) : ''"
     closable
+    minimizable
     compact
     title-class="text-h4 font-weight-light"
     :image-size="125"
@@ -12,22 +13,20 @@
     @minimize="onMinimize()"
     slot-left-class="w-100"
   >
-    <!-- Botões de sistema: Download -->
+    <!-- Botões de sistema: Download (só exibe quando online e não baixado) -->
     <template v-slot:system_buttons>
-      <v-tooltip location="bottom" :text="downloaded ? 'Disponível offline — ir ao Centro de Downloads' : 'Baixar álbum — Centro de Downloads'">
+      <v-tooltip v-if="!downloaded && is_online" location="bottom" text="Baixar álbum — Centro de Downloads">
         <template v-slot:activator="{ props }">
           <v-btn
             v-bind="props"
             icon
             variant="text"
             size="small"
-            :color="downloaded ? 'success' : 'white'"
+            color="white"
             class="ms-1"
             @click="openDownloadCenter"
           >
-            <v-icon size="20">
-              {{ downloaded ? 'mdi-check-circle' : 'mdi-download-circle-outline' }}
-            </v-icon>
+            <v-icon size="20">mdi-download-circle-outline</v-icon>
           </v-btn>
         </template>
       </v-tooltip>
@@ -61,11 +60,11 @@
             >
               {{ t("table.duration") }}
             </th>
-            <th :style="{ backgroundColor: module.data.color, color: '#FFF' }">
-              <div class="d-flex justify-end align-center">
+            <th :style="{ backgroundColor: module.data.color, color: '#FFF', borderLeft: 'none' }">
+              <div class="d-flex justify-end align-center pe-1">
                 <v-btn
-                  variant="tonal"
-                  size="x-small"
+                  variant="text"
+                  density="compact"
                   :color="playingAll ? 'error' : 'white'"
                   :prepend-icon="playingAll ? 'mdi-stop-circle-outline' : 'mdi-play-circle-outline'"
                   @click="togglePlayAll"
@@ -157,6 +156,10 @@ export default {
       return this.module?.data?.musics || [];
     },
 
+    is_online() {
+      return !!this.$appdata.get("is_online");
+    },
+
     mediaShow() {
       return !!this.$appdata.get("modules.media.show");
     },
@@ -209,6 +212,15 @@ export default {
     },
 
     onClose() {
+      if (this.playingAll) {
+        // Fechar durante reprodução contínua: oculta a janela e minimiza o player
+        // para que a sequência continue na barra inferior sem interrupção.
+        this.$modules.close(this.module_id);
+        if (!this.$appdata.get('modules.media.minimized')) {
+          this.$media.minimize();
+        }
+        return;
+      }
       this._stopPlayAll();
       this.$media.closeAlbum();
     },
@@ -240,7 +252,7 @@ export default {
       const playNext = () => {
         if (idx >= musics.length) {
           self._stopPlayAll();
-          self.$media.close(true);
+          self.$media.endSong();
           return;
         }
         const music = musics[idx];

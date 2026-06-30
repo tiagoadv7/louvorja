@@ -22,6 +22,7 @@ const RECEIVE_CHANNELS = [
   'regserver:registration',
   'album:download-progress',
   'files:download-progress',
+  'files:scan-progress',
 ];
 
 contextBridge.exposeInMainWorld('electron', {

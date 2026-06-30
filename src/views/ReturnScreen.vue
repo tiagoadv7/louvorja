@@ -236,7 +236,7 @@ export default {
   position: relative;
 }
 .rs-main-text {
-  font-size: clamp(32px, 9vh, 128px);
+  font-size: clamp(38px, 11vh, 148px);
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;

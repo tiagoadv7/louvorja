@@ -248,7 +248,7 @@
                       {{ localEnabled ? 'Modo Offline' : 'Modo Online' }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ localFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}
+                      {{ userFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}
                     </div>
                   </div>
                   <v-switch
@@ -705,8 +705,13 @@ export default {
       return (cat?.albums || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
 
+    userFiles() {
+      // Exclui arquivos gerados automaticamente pelo sistema (não são downloads do usuário)
+      return this.localFiles.filter(f => !this._isSystemFile(f.name));
+    },
+
     totalSize() {
-      const t = this.localFiles.reduce((s, f) => s + (f.size || 0), 0);
+      const t = this.userFiles.reduce((s, f) => s + (f.size || 0), 0);
       return this.formatSize(t);
     },
 
@@ -741,7 +746,7 @@ export default {
         ...HYMNAL_ITEMS.map(h => h.file),
         ...BIBLE_ITEMS.flatMap(b => b.files),
       ]);
-      return this.localFiles.filter(f =>
+      return this.userFiles.filter(f =>
         !f.name.startsWith('album_') &&
         !f.name.startsWith('music_') &&
         !known.has(f.name)
@@ -750,6 +755,12 @@ export default {
   },
 
   methods: {
+    _isSystemFile(name) {
+      // Arquivos gerados automaticamente — índice de músicas/categorias por locale
+      // e cache individual de músicas. Não representam downloads do usuário.
+      return /_(musics|categories)$/.test(name) || name.startsWith('music_');
+    },
+
     onToggle(open) {
       if (open) {
         // Usa a seção solicitada (ex: 'collections' quando vem do botão do álbum)

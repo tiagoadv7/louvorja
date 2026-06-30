@@ -84,6 +84,7 @@ export default {
     outputOpen: false,
     menuHandler: null,
     outputHandlers: [],
+    _f5Handler: null,
     logoUrl: `${import.meta.env.BASE_URL}ico/favicon.svg`,
   }),
   computed: {
@@ -122,11 +123,16 @@ export default {
     async openOutput() {
       let moduleId = this.$appdata.get('popup_module');
 
-      // Se não há módulo definido para o popup, usar o módulo ativo no momento
+      // Se não há módulo definido para o popup, usar o módulo ativo no momento.
+      // Media minimizado (modo áudio) é ativo mesmo que show=false.
       if (!moduleId) {
         const modules = this.$appdata.get('modules') || {};
-        for (const [id, mod] of Object.entries(modules)) {
-          if (mod && mod.show) { moduleId = id; break; }
+        if (modules?.media?.minimized) {
+          moduleId = 'media';
+        } else {
+          for (const [id, mod] of Object.entries(modules)) {
+            if (mod && mod.show) { moduleId = id; break; }
+          }
         }
         if (moduleId) {
           this.$appdata.set('popup_module', moduleId);
@@ -145,6 +151,19 @@ export default {
 
     this.isMaximized = await this.$electron.windowIsMaximized();
     this.outputOpen = await this.$electron.isOutputOpen();
+
+    // Atalho F5: abre/fecha a janela de projeção
+    this._f5Handler = (e) => {
+      if (e.key === 'F5') {
+        e.preventDefault();
+        if (this.outputOpen) {
+          this.closeOutputWindow();
+        } else {
+          this.openOutput();
+        }
+      }
+    };
+    window.addEventListener('keydown', this._f5Handler);
 
     // Escuta eventos de menu
     this.menuHandler = this.$electron.on("menu:open-output", () => {
@@ -181,6 +200,7 @@ export default {
     ].filter(Boolean);
   },
   beforeUnmount() {
+    if (this._f5Handler) window.removeEventListener('keydown', this._f5Handler);
     if (this.menuHandler) this.$electron.off("menu:open-output", this.menuHandler);
     this.outputHandlers.forEach(({ channel, handler }) => this.$electron.off(channel, handler));
   },

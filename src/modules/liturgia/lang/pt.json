@@ -1,26 +1,4 @@
 {
   "title": "Liturgia",
-  "description": "Ordem de louvor para cultos e eventos",
-  "buttons": {
-    "add": "Adicionar música",
-    "clear": "Limpar lista",
-    "close": "Fechar"
-  },
-  "table": {
-    "order": "Ordem",
-    "name": "Música",
-    "duration": "Duração"
-  },
-  "dialog": {
-    "title": "Adicionar música",
-    "search": "Buscar música...",
-    "no_results": "Nenhuma música encontrada",
-    "loading": "Carregando...",
-    "add": "Adicionar",
-    "cancel": "Cancelar"
-  },
-  "empty": "Nenhuma música na liturgia. Clique em 'Adicionar música' para começar.",
-  "alerts": {
-    "cleared": "Liturgia limpa com sucesso."
-  }
+  "description": "Ordem de louvor para cultos e eventos"
 }

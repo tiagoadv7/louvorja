@@ -9,8 +9,22 @@
   ${ElseIf} $1 != ""
     StrCpy $INSTDIR "$1"
   ${Else}
-    ; Primeira instalação: padrão em Program Files (x86)
-    StrCpy $INSTDIR "$PROGRAMFILES32\Louvor JA"
+    ; Primeira instalação: força C:\Program Files (x86) mesmo no Windows 64-bit.
+    ;
+    ; Problema: electron-builder compila o instalador em modo NSIS x64 (SetRegView 64),
+    ; o que faz $PROGRAMFILES32 resolver para C:\Program Files em alguns ambientes.
+    ;
+    ; Solução: lê "ProgramFilesDir (x86)" da visão 64-bit do registro, que SEMPRE
+    ; aponta para C:\Program Files (x86) no Windows 64-bit (campo exclusivo do x64).
+    ; No Windows 32-bit esse campo não existe, então cai no $PROGRAMFILES normal.
+    ReadRegStr $2 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion" "ProgramFilesDir (x86)"
+    ${If} $2 != ""
+      ; Windows 64-bit: usa C:\Program Files (x86)
+      StrCpy $INSTDIR "$2\Louvor JA"
+    ${Else}
+      ; Windows 32-bit: campo inexistente, usa Program Files padrão
+      StrCpy $INSTDIR "$PROGRAMFILES\Louvor JA"
+    ${EndIf}
   ${EndIf}
 !macroend
 

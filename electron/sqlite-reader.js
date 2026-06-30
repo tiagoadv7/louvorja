@@ -270,6 +270,28 @@ class SQLiteReader {
 
   // ── API pública ────────────────────────────────────────────────────────
 
+  /** Verifica se a tabela ARQUIVOS_SISTEMA (catálogo Delphi) existe no banco. */
+  hasArquivosSistema() {
+    if (!this.isOpen()) return false;
+    return this._hasTable('ARQUIVOS_SISTEMA');
+  }
+
+  /**
+   * Retorna todas as linhas da tabela ARQUIVOS_SISTEMA como array de objetos.
+   * Campos: TIPO, ARQUIVO, URL, CHAVE
+   * Ordenado por TIPO desc (MUSICA primeiro) e depois CHAVE para agrupar por álbum.
+   */
+  getArquivosSistema() {
+    if (!this.isOpen()) return [];
+    try {
+      return this._query(
+        "SELECT TIPO, ARQUIVO, URL, CHAVE FROM ARQUIVOS_SISTEMA ORDER BY TIPO, CHAVE"
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+
   /** Retorna dados para o "filename" lógico (ex: "pt_categories", "album_5", "music_23"). */
   get(filename) {
     if (!this.isOpen()) return null;
