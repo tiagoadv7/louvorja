@@ -25,6 +25,7 @@
     "git:tag": "git tag -a -f v%npm_package_version% -m \"Versão %npm_package_version%\" && git push origin -f v%npm_package_version% && git push -u origin main",
     "electron:dev": "concurrently -n VITE,ELECTRON -c yellow,blue \"vite --port 5002 --strictPort\" \"wait-on http://localhost:5002 && node electron/dev.js\"",
     "electron:build": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder",
+    "electron:publish": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder --publish always",
     "electron:preview": "cross-env ELECTRON_BUILD=true vite build && node electron/dev.js",
     "electron:pack": "cross-env ELECTRON_BUILD=true vite build && electron-builder --dir",
     "electron:rebuild": "echo better-sqlite3 nao necessario — usando sql.js",
@@ -38,6 +39,7 @@
     "basic-ftp": "^5.0.5",
     "core-js": "^3.40.0",
     "dotenv": "^17.3.1",
+    "electron-updater": "^6.8.9",
     "fs-extra": "^11.2.0",
     "qrcode": "^1.5.4",
     "roboto-fontface": "*",
@@ -129,10 +131,18 @@
       {
         "from": "bundled/config",
         "to": "config",
-        "filter": ["database.db", "capas/**/*"]
+        "filter": [
+          "database.db",
+          "capas/**/*"
+        ]
       }
     ],
-    "publish": null
+    "publish": {
+      "provider": "github",
+      "owner": "tiagoadv7",
+      "repo": "louvorja",
+      "releaseType": "release"
+    }
   },
   "browserslist": [
     "> 1%",

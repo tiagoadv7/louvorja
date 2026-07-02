@@ -12,6 +12,9 @@
   <!-- Verificador de arquivos locais -->
   <FileCheckDialog ref="fileCheck" />
 
+  <!-- Auto-updater -->
+  <UpdateDialog ref="updater" />
+
   <!-- Snackbar do auto-import SQLite -->
   <v-snackbar
     v-model="autoImportSnack"
@@ -40,10 +43,11 @@
 <script>
 import AppLoading    from "@/layout/Loading.vue";
 import FileCheckDialog from "@/components/FileCheckDialog.vue";
+import UpdateDialog    from "@/components/UpdateDialog.vue";
 
 export default {
   name: "App",
-  components: { AppLoading, FileCheckDialog },
+  components: { AppLoading, FileCheckDialog, UpdateDialog },
 
   data: () => ({
     autoImportSnack:     false,
@@ -111,6 +115,12 @@ export default {
     // 5. Ouve evento global para abrir o verificador de arquivos (disparado pelo Menu)
     this._syncFilesHandler = () => this.$refs.fileCheck?.open(true);
     window.addEventListener('sync-files', this._syncFilesHandler);
+
+    // 6. Ouve "Verificar atualizações" do menu nativo
+    const onCheckUpdates = this.$electron.on('menu:check-updates', () => {
+      this.$refs.updater?.checkNow();
+    });
+    if (onCheckUpdates) this._handlers.push(['menu:check-updates', onCheckUpdates]);
   },
 
   beforeUnmount() {

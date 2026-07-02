@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen, session, protocol } = require('electron');
+const { autoUpdater } = require('electron-updater');
 
 // Deve ser chamado ANTES de app.whenReady() — registra o esquema como seguro
 // para que <img src="app-local://capas/2026.bmp"> funcione no renderer
@@ -318,8 +319,48 @@ function createReturnWindow(displayId) {
   return returnWindow;
 }
 
+// ── Auto-updater ──────────────────────────────────────────────────────────────
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.logger = null; // silencia logs internos do electron-updater
+
+  const send = (channel, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, payload);
+    }
+  };
+
+  autoUpdater.on('checking-for-update',  ()       => send('updater:checking'));
+  autoUpdater.on('update-available',     (info)   => send('updater:available', info));
+  autoUpdater.on('update-not-available', (info)   => send('updater:not-available', info));
+  autoUpdater.on('download-progress',    (prog)   => send('updater:progress', prog));
+  autoUpdater.on('update-downloaded',    (info)   => send('updater:downloaded', info));
+  autoUpdater.on('error',                (err)    => send('updater:error', err?.message || String(err)));
+
+  ipcMain.handle('updater:check',    async () => {
+    try { await autoUpdater.checkForUpdates(); } catch (e) { send('updater:error', e.message); }
+  });
+  ipcMain.handle('updater:download', async () => {
+    try { await autoUpdater.downloadUpdate(); } catch (e) { send('updater:error', e.message); }
+  });
+  ipcMain.handle('updater:install',  () => {
+    setImmediate(() => autoUpdater.quitAndInstall());
+  });
+}
+
 // ── Registrar handlers IPC ────────────────────────────────────────────────────
 function registerIpcHandlers() {
+  // Auto-updater (registra handlers e eventos mesmo em dev para não dar erro de IPC)
+  if (!isDev && app.isPackaged) {
+    setupAutoUpdater();
+  } else {
+    // Dev: stubs para não quebrar os invoke do renderer
+    ipcMain.handle('updater:check',    () => {});
+    ipcMain.handle('updater:download', () => {});
+    ipcMain.handle('updater:install',  () => {});
+  }
+
   ipcMain.handle('window:minimize',     () => mainWindow?.minimize());
   ipcMain.handle('window:maximize',     () => {
     if (!mainWindow) return;
@@ -393,6 +434,13 @@ function registerIpcHandlers() {
       }
     };
     step();
+
+    // Verifica atualizações automaticamente em produção (15s de delay para não competir com o startup)
+    if (!isDev && app.isPackaged) {
+      setTimeout(() => {
+        try { autoUpdater.checkForUpdates().catch(() => {}); } catch (_) {}
+      }, 15000);
+    }
 
     // Após o fade-in: verifica se SQLite já foi aberto por trySqliteAutoOpen (ipc.js).
     // Se sim, notifica o renderer. Se não (race condition ou primeira execução sem banco salvo),

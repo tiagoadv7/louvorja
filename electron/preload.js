@@ -23,6 +23,12 @@ const RECEIVE_CHANNELS = [
   'album:download-progress',
   'files:download-progress',
   'files:scan-progress',
+  'updater:checking',
+  'updater:available',
+  'updater:not-available',
+  'updater:progress',
+  'updater:downloaded',
+  'updater:error',
 ];
 
 contextBridge.exposeInMainWorld('electron', {
@@ -118,6 +124,11 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Sistema ───────────────────────────────────────────────────────────────
   getHostname: () => ipcRenderer.invoke('app:hostname'),
+
+  // ── Auto-updater ─────────────────────────────────────────────────────────
+  updaterCheck:    () => ipcRenderer.invoke('updater:check'),
+  updaterDownload: () => ipcRenderer.invoke('updater:download'),
+  updaterInstall:  () => ipcRenderer.invoke('updater:install'),
 
   // ── Telas / displays ─────────────────────────────────────────────────────
   getScreens: () => ipcRenderer.invoke('screen:get-all'),
