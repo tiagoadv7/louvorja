@@ -54,8 +54,9 @@ export default {
     autoImportDone:      false,
     autoImportMessage:   '',
     _autoImportRunning:  false,
-    _handlers:           [],
-    _syncFilesHandler:   null,
+    _handlers:              [],
+    _syncFilesHandler:      null,
+    _checkUpdatesHandler:   null,
   }),
 
   mounted() {
@@ -116,6 +117,10 @@ export default {
     this._syncFilesHandler = () => this.$refs.fileCheck?.open(true);
     window.addEventListener('sync-files', this._syncFilesHandler);
 
+    // 5b. Ouve evento global de verificar atualizações (disparado pelo Menu lateral)
+    this._checkUpdatesHandler = () => this.$refs.updater?.checkNow();
+    window.addEventListener('check-updates', this._checkUpdatesHandler);
+
     // 6. Ouve "Verificar atualizações" do menu nativo
     const onCheckUpdates = this.$electron.on('menu:check-updates', () => {
       this.$refs.updater?.checkNow();
@@ -126,6 +131,7 @@ export default {
   beforeUnmount() {
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
+    window.removeEventListener('check-updates', this._checkUpdatesHandler);
   },
 
   methods: {

@@ -32,6 +32,13 @@
       >
         <v-list-item-title>Sincronizar arquivos</v-list-item-title>
       </v-list-item>
+      <v-list-item
+        v-if="$electron.isElectron()"
+        prepend-icon="mdi-update"
+        @click="$appdata.toogle('menu.show'); dispatchCheckUpdates()"
+      >
+        <v-list-item-title>Verificar atualizações</v-list-item-title>
+      </v-list-item>
     </v-list>
   </v-navigation-drawer>
 </template>
@@ -81,6 +88,9 @@ export default {
   methods: {
     dispatchSyncFiles() {
       window.dispatchEvent(new CustomEvent('sync-files'));
+    },
+    dispatchCheckUpdates() {
+      window.dispatchEvent(new CustomEvent('check-updates'));
     },
     moduleTitle(module) {
       if (!module.title) return module.manifest?.name || '';
