@@ -48,11 +48,7 @@
           </v-avatar>
           <div>
             <div class="text-subtitle-2 font-weight-bold">Sincronizar arquivos</div>
-            <div class="text-caption text-medium-emphasis">
-              Verificação de integridade da coletânea
-              <v-chip v-if="scanSource === 'delphi'" size="x-small" color="success" variant="tonal" class="ms-2">banco Delphi</v-chip>
-              <v-chip v-else-if="scanSource === 'json'" size="x-small" color="info" variant="tonal" class="ms-2">biblioteca local</v-chip>
-            </div>
+            <div class="text-caption text-medium-emphasis">Verificação de integridade da coletânea</div>
           </div>
         </div>
         <v-btn v-if="step !== 'downloading'" icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
@@ -355,6 +351,7 @@ export default {
     // Progresso do scan
     scanAlbum: { current: 0, total: 0, name: '' },
     _scanProgressHandler: null,
+    _scanId: 0,             // incrementado a cada scan; close() também incrementa para cancelar pendentes
 
     // Vista
     viewMode:       'grouped',  // 'grouped' | 'flat'
@@ -388,6 +385,7 @@ export default {
     async open(force = false) {
       if (import.meta.env.DEV || force) {
         this._autoOpen = false;
+        this._scanId++;  // cancela eventual _scanSilent() ainda em andamento
         this.show = true;
         this.step = 'scanning';
         this.fileList = [];
@@ -403,6 +401,7 @@ export default {
     },
 
     async _scanSilent() {
+      const myId = ++this._scanId;
       this.fileList  = [];
       this.albumList = [];
       this.stats     = null;
@@ -411,7 +410,7 @@ export default {
       let result = null;
       try {
         this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
-          this.scanAlbum = { current, total, name: albumName };
+          if (this._scanId === myId) this.scanAlbum = { current, total, name: albumName };
         });
         result = await this.$electron.scanAlbumsFiles();
       } catch (_) {
@@ -423,6 +422,8 @@ export default {
         }
       }
 
+      // Scan cancelado (close() ou novo scan iniciado)
+      if (this._scanId !== myId) return;
       if (!result || result.total === 0) return;
 
       this.totalScanned = result.total      || 0;
@@ -444,6 +445,7 @@ export default {
     },
 
     close() {
+      this._scanId++; // invalida qualquer scan em andamento — resultado será ignorado
       if (this._dlHandler) {
         this.$electron.off('files:download-progress', this._dlHandler);
         this._dlHandler = null;
@@ -457,10 +459,11 @@ export default {
     },
 
     async scan() {
+      const myId = ++this._scanId;
       let result = null;
       try {
         this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
-          this.scanAlbum = { current, total, name: albumName };
+          if (this._scanId === myId) this.scanAlbum = { current, total, name: albumName };
         });
         result = await this.$electron.scanAlbumsFiles();
       } catch (_) {
@@ -471,6 +474,9 @@ export default {
           this._scanProgressHandler = null;
         }
       }
+
+      // Scan cancelado (close() foi chamado durante a varredura)
+      if (this._scanId !== myId) return;
 
       if (import.meta.env.DEV && (!result || result.total === 0)) {
         result = this._mockScanResult();
@@ -485,7 +491,7 @@ export default {
       this.scanSource   = result?.source     || null;
       this.totalMissing = this.fileList.length;
 
-      // Usuário pode ter fechado o dialog enquanto o scan rodava em background.
+      // Usuário fechou o dialog enquanto o scan rodava
       if (!this.show) return;
 
       if (this.totalMissing === 0) {
