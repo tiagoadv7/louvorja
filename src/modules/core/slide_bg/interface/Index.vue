@@ -322,6 +322,7 @@ function syncToLocalStorage() {
     const bgData = {
       // Fundo
       type:             effectiveType,
+      bgType:           type,           // seleção real do usuário (restaurado no onMounted)
       url,
       opacity:          imageOpacity.value,
       fit:              ud.get(`modules.${ID}.image_fit`,        'cover')      || 'cover',
@@ -478,7 +479,13 @@ onMounted(() => {
   //   • Sessão ativa com bg personalizado (localStorage tem valor): botão correto
   try {
     const raw = localStorage.getItem('slide_global_bg');
-    bgType.value = raw ? (JSON.parse(raw)?.type ?? null) : null;
+    if (raw) {
+      const stored = JSON.parse(raw);
+      // bgType = seleção real do usuário; type = effectiveType (pode ser 'none' mesmo em modo 'image')
+      bgType.value = stored?.bgType ?? stored?.type ?? null;
+    } else {
+      bgType.value = null;
+    }
   } catch (_) {
     bgType.value = null;
   }
