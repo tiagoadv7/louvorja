@@ -336,10 +336,25 @@ function setupAutoUpdater() {
   autoUpdater.on('update-not-available', (info)   => send('updater:not-available', info));
   autoUpdater.on('download-progress',    (prog)   => send('updater:progress', prog));
   autoUpdater.on('update-downloaded',    (info)   => send('updater:downloaded', info));
-  autoUpdater.on('error',                (err)    => send('updater:error', err?.message || String(err)));
+  autoUpdater.on('error', (err) => {
+    const msg = err?.message || String(err);
+    // Sem releases publicados no GitHub → trata como "sem atualização disponível"
+    if (/no published versions|latest\.yml|HttpError.*404|ERR_CONNECTION|ENOTFOUND/i.test(msg)) {
+      send('updater:not-available', {});
+      return;
+    }
+    send('updater:error', msg);
+  });
 
-  ipcMain.handle('updater:check',    async () => {
-    try { await autoUpdater.checkForUpdates(); } catch (e) { send('updater:error', e.message); }
+  ipcMain.handle('updater:check', async () => {
+    try { await autoUpdater.checkForUpdates(); } catch (e) {
+      const msg = e.message || String(e);
+      if (/no published versions|latest\.yml|HttpError.*404|ERR_CONNECTION|ENOTFOUND/i.test(msg)) {
+        send('updater:not-available', {});
+      } else {
+        send('updater:error', msg);
+      }
+    }
   });
   ipcMain.handle('updater:download', async () => {
     try { await autoUpdater.downloadUpdate(); } catch (e) { send('updater:error', e.message); }
@@ -355,8 +370,13 @@ function registerIpcHandlers() {
   if (!isDev && app.isPackaged) {
     setupAutoUpdater();
   } else {
-    // Dev: stubs para não quebrar os invoke do renderer
-    ipcMain.handle('updater:check',    () => {});
+    // Dev: simula "sem atualização" para não travar o dialog em "checking"
+    ipcMain.handle('updater:check', () => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('updater:not-available', {});
+      }, 800);
+    });
     ipcMain.handle('updater:download', () => {});
     ipcMain.handle('updater:install',  () => {});
   }
