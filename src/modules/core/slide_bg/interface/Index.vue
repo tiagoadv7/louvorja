@@ -374,38 +374,25 @@ function setOpacity(v) {
   proxy?.$userdata?.set(`modules.${ID}.image_opacity`, v);
 }
 
-// Se o usuário ajusta fonte sem ter escolhido tipo de fundo, ativa "Sem Fundo"
-// automaticamente para que syncToLocalStorage() não retorne cedo.
-function ensureBgType() {
-  if (!bgType.value) {
-    bgType.value = 'none';
-    proxy?.$userdata?.set(`modules.${ID}.bg_type`, 'none');
-  }
-}
-
 function setFont(v) {
   font.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font`, v);
-  ensureBgType();
-  syncToLocalStorage();
+  if (bgType.value) syncToLocalStorage();
 }
 function setFontSize(v) {
   fontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_size`, v);
-  ensureBgType();
-  syncToLocalStorage();
+  if (bgType.value) syncToLocalStorage();
 }
 function setFontColor(v) {
   fontColor.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_color`, v);
-  ensureBgType();
-  syncToLocalStorage();
+  if (bgType.value) syncToLocalStorage();
 }
 function setPanelFontSize(v) {
   panelFontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.panel_font_size`, v);
-  ensureBgType();
-  syncToLocalStorage();
+  if (bgType.value) syncToLocalStorage();
 }
 
 // ── File picker via Electron ──────────────────────────────────────────────
