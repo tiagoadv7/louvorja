@@ -71,7 +71,7 @@ async function fadeOutAndClose(win) {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('output-closing');
   await sleep(FADE_DURATION_MS);
-  if (!win.isDestroyed()) win.close();
+  if (!win.isDestroyed()) win.destroy();
 }
 
 function tryGC() {
