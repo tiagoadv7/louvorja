@@ -163,6 +163,9 @@ export default {
     mediaShow() {
       return !!this.$appdata.get("modules.media.show");
     },
+    mediaMinimized() {
+      return !!this.$appdata.get("modules.media.minimized");
+    },
   },
 
   watch: {
@@ -173,12 +176,23 @@ export default {
       },
     },
     mediaShow(now, prev) {
-      // Fecha manual do player enquanto playAll está ativo → para a sequência
+      // Player fechado (não minimizado) enquanto playAll ativo → para a sequência
       if (prev && !now && this.playingAll) {
         const isMinimized = !!this.$appdata.get('modules.media.minimized');
         if (!isMinimized) this._stopPlayAll();
       }
     },
+    mediaMinimized(now, prev) {
+      // Mini-player fechado (minimized false→false com show já false) → para sequência
+      if (prev && !now && this.playingAll) {
+        const isShowing = !!this.$appdata.get('modules.media.show');
+        if (!isShowing) this._stopPlayAll();
+      }
+    },
+  },
+
+  beforeUnmount() {
+    if (this.playingAll) this._stopPlayAll();
   },
 
   methods: {
@@ -212,16 +226,12 @@ export default {
     },
 
     onClose() {
-      if (this.playingAll) {
-        // Fechar durante reprodução contínua: oculta a janela e minimiza o player
-        // para que a sequência continue na barra inferior sem interrupção.
-        this.$modules.close(this.module_id);
-        if (!this.$appdata.get('modules.media.minimized')) {
-          this.$media.minimize();
-        }
-        return;
-      }
+      const wasPlayingAll = this.playingAll;
       this._stopPlayAll();
+      if (wasPlayingAll) {
+        // Fechar o álbum enquanto reprodução contínua ativa: para a música imediatamente
+        this.$media.endSong();
+      }
       this.$media.closeAlbum();
     },
 
