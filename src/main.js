@@ -64,4 +64,9 @@ createI18nInstance().then(async (i18n) => {
   app.mount("#app");
   await nextTick();
   window.electron?.appLoaded?.();
+}).catch((err) => {
+  console.error('[App] Erro na inicialização:', err);
+  // Garante que a loading window feche mesmo em caso de erro,
+  // para não travar o app com a janela de carregamento presa na frente
+  window.electron?.appLoaded?.();
 });

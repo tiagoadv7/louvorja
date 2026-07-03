@@ -116,9 +116,12 @@ function createLoadingWindow() {
   loadingWindow.once('ready-to-show', () => {
     if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.show();
 
+    // Registra handlers IPC ANTES de createMainWindow para eliminar a janela de
+    // corrida onde o renderer envia app:loaded antes do handler estar registrado.
+    registerIpcHandlers();
+
     // Loading visível — agora inicia o carregamento da janela principal
     createMainWindow();
-    registerIpcHandlers();
     setupIpc(mainWindow);
     createMenu(mainWindow, isDev);
     try {
@@ -126,6 +129,16 @@ function createLoadingWindow() {
     } catch (e) {
       console.warn('[Main] Tray indisponível:', e.message);
     }
+
+    // Segurança: se app:loaded nunca chegar (falha silenciosa no renderer),
+    // fecha a loading window após 15s para o app não ficar travado.
+    setTimeout(() => {
+      if (loadingWindow && !loadingWindow.isDestroyed()) {
+        console.warn('[Main] Timeout: app:loaded não recebido — forçando fechamento da loading window');
+        loadingWindow.destroy();
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(1);
+      }
+    }, 15000);
   });
 
   loadingWindow.once('closed', () => { loadingWindow = null; });
@@ -451,7 +464,7 @@ function registerIpcHandlers() {
       if (opacity < 1) {
         setTimeout(step, 16);
       } else if (loadingWindow && !loadingWindow.isDestroyed()) {
-        loadingWindow.close();
+        loadingWindow.destroy();
       }
     };
     step();
