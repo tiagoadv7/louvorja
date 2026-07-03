@@ -197,7 +197,8 @@ function createMainWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    if (outputWindow && !outputWindow.isDestroyed()) outputWindow.close();
+    // Usa destroy() para garantir fechamento mesmo em fullscreen/alwaysOnTop
+    if (outputWindow && !outputWindow.isDestroyed()) outputWindow.destroy();
     if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
     tryGC();
   });
