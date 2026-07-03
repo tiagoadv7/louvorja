@@ -323,14 +323,14 @@ function syncToLocalStorage() {
       // Fundo
       type:             effectiveType,
       url,
-      opacity:          ud.get(`modules.${ID}.image_opacity`,   85)           ?? 85,
+      opacity:          imageOpacity.value,
       fit:              ud.get(`modules.${ID}.image_fit`,        'cover')      || 'cover',
       background_color: ud.get(`modules.${ID}.background_color`, '#000000')   || '#000000',
-      // Texto (controlado pelo CustomizationTools na barra inferior)
-      font:             ud.get(`modules.${ID}.font`,             '')           || '',
-      font_size:        ud.get(`modules.${ID}.font_size`,        20)           ?? 20,
-      font_color:       ud.get(`modules.${ID}.font_color`,       '')           || '',
-      panel_font_size:  ud.get(`modules.${ID}.panel_font_size`,  14)           ?? 14,
+      // Texto — lê direto dos refs para garantir valor mais recente (sem delay de Vuex)
+      font:             font.value            || '',
+      font_size:        fontSize.value,
+      font_color:       fontColor.value       || '',
+      panel_font_size:  panelFontSize.value,
       // Janela
       border_spacing:   ud.get(`modules.${ID}.border_spacing`,   5)            ?? 5,
     };
@@ -373,21 +373,39 @@ function setOpacity(v) {
   imageOpacity.value = v;
   proxy?.$userdata?.set(`modules.${ID}.image_opacity`, v);
 }
+
+// Se o usuário ajusta fonte sem ter escolhido tipo de fundo, ativa "Sem Fundo"
+// automaticamente para que syncToLocalStorage() não retorne cedo.
+function ensureBgType() {
+  if (!bgType.value) {
+    bgType.value = 'none';
+    proxy?.$userdata?.set(`modules.${ID}.bg_type`, 'none');
+  }
+}
+
 function setFont(v) {
   font.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font`, v);
+  ensureBgType();
+  syncToLocalStorage();
 }
 function setFontSize(v) {
   fontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_size`, v);
+  ensureBgType();
+  syncToLocalStorage();
 }
 function setFontColor(v) {
   fontColor.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_color`, v);
+  ensureBgType();
+  syncToLocalStorage();
 }
 function setPanelFontSize(v) {
   panelFontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.panel_font_size`, v);
+  ensureBgType();
+  syncToLocalStorage();
 }
 
 // ── File picker via Electron ──────────────────────────────────────────────
