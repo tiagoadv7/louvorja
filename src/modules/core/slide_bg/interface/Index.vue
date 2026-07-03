@@ -372,6 +372,7 @@ function setBgType(v) {
 function setOpacity(v) {
   imageOpacity.value = v;
   proxy?.$userdata?.set(`modules.${ID}.image_opacity`, v);
+  if (bgType.value) syncToLocalStorage();
 }
 
 function setFont(v) {
@@ -414,6 +415,7 @@ async function pickImage() {
       const url = toFileUrl(fp);
       imageUrl.value = url;
       proxy.$userdata.set(`modules.${ID}.image`, url);
+      if (bgType.value) syncToLocalStorage();
     }
   } finally { pickingImage.value = false; }
 }
@@ -430,6 +432,7 @@ async function pickVideo() {
       const url = toFileUrl(fp);
       videoUrl.value = url;
       proxy.$userdata.set(`modules.${ID}.video`, url);
+      if (bgType.value) syncToLocalStorage();
     }
   } finally { pickingVideo.value = false; }
 }
@@ -437,10 +440,12 @@ async function pickVideo() {
 function clearImage() {
   imageUrl.value = '';
   proxy?.$userdata?.set(`modules.${ID}.image`, '');
+  if (bgType.value) syncToLocalStorage();
 }
 function clearVideo() {
   videoUrl.value = '';
   proxy?.$userdata?.set(`modules.${ID}.video`, '');
+  if (bgType.value) syncToLocalStorage();
 }
 
 // Redefine para o padrão: remove o fundo personalizado do localStorage
