@@ -2022,6 +2022,27 @@ document.getElementById('f').onsubmit=async(e)=>{
           let albumProgress = 0;
           let delphiYield   = 0;
 
+          // Pré-constrói índices de nomes de arquivo em disco (uma varredura por diretório)
+          // em vez de chamar findFileInTree (busca recursiva síncrona) para cada linha do
+          // ARQUIVOS_SISTEMA — em coletâneas grandes isso travava o processo main inteiro.
+          const buildDirIndex = (dirs, maxDepth = 4) => {
+            const index = new Set();
+            const addDir = (dir, depth = 0) => {
+              if (!dir || !fs.existsSync(dir)) return;
+              try {
+                for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                  if (entry.isFile()) index.add(entry.name.toLowerCase());
+                  else if (entry.isDirectory() && depth < maxDepth) addDir(path.join(dir, entry.name), depth + 1);
+                }
+              } catch (_) {}
+            };
+            for (const d of dirs) addDir(d);
+            return index;
+          };
+          const audioIndex = buildDirIndex([userMedia, getAutoMediaDir(null, true), getAutoMediaDir()]);
+          const coverIndex = buildDirIndex([getAutoCapasDir(), getAutoCapasDir(true)]);
+          const imageIndex = buildDirIndex([getAutoImagesDir(), getAutoImagesDir(true)]);
+
           const getGroup = (key, name) => {
             if (!albumMap.has(key)) albumMap.set(key, { name, totalFiles: 0, foundFiles: 0, items: [] });
             return albumMap.get(key);
@@ -2058,24 +2079,15 @@ document.getElementById('f').onsubmit=async(e)=>{
               groupKey = '__imagens__'; groupName = 'Imagens de fundo';
             }
 
-            // Verifica existência do arquivo
+            // Verifica existência do arquivo (índices pré-construídos — sem busca recursiva por linha)
             let exists = false;
             const fileName = row.ARQUIVO || path.basename(urlNorm);
+            const fileNameLower = fileName.toLowerCase();
             if (installRoot)  exists = fs.existsSync(path.join(installRoot, urlNorm));
             if (!exists)      exists = fs.existsSync(path.join(writableRoot, urlNorm));
-            if (!exists && type === 'audio') {
-              if (userMedia)  exists = !!findFileInTree(userMedia, fileName);
-              if (!exists)    exists = !!findFileInTree(getAutoMediaDir(null, true), fileName)
-                                    || !!findFileInTree(getAutoMediaDir(), fileName);
-            }
-            if (!exists && type === 'cover') {
-              exists = !!findFileInTree(getAutoCapasDir(), fileName)
-                    || !!findFileInTree(getAutoCapasDir(true), fileName);
-            }
-            if (!exists && type === 'image') {
-              exists = !!findFileInTree(getAutoImagesDir(), fileName)
-                    || !!findFileInTree(getAutoImagesDir(true), fileName);
-            }
+            if (!exists && type === 'audio')  exists = audioIndex.has(fileNameLower);
+            if (!exists && type === 'cover')  exists = coverIndex.has(fileNameLower);
+            if (!exists && type === 'image')  exists = imageIndex.has(fileNameLower);
 
             // Cede o event loop a cada 10 entradas para não travar a UI
             if (++delphiYield % 10 === 0) await new Promise(resolve => setImmediate(resolve));
