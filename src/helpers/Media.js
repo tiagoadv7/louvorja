@@ -440,20 +440,23 @@ export default {
     this.stopAudio();
     $appdata.set("modules.media.show", false);
     $appdata.set("modules.media.minimized", false);
-    // Não chama clearVariables() aqui: os dados do slide ficam intactos para
-    // que a projeção continue exibindo o último slide até ser fechada (F5).
-    // clearVariables() é chamado no próximo open().
+    // show=false e minimized=false tiram a projeção do modo ativo (Popup.vue do módulo
+    // media passa a renderizar em standby/transparente), mas a janela de saída permanece
+    // aberta até o operador clicar em "Parar projeção". Não chama clearVariables() aqui:
+    // os dados do slide ficam intactos para reabertura rápida (F5); clearVariables() só
+    // roda no próximo open().
   },
 
   // Chamado quando o áudio termina naturalmente (fim da música ou dos slides).
-  // Diferente de close(): para o áudio e oculta o módulo no app, mas mantém
-  // a janela de projeção aberta exibindo o último slide projetado.
+  // Diferente de close(): para o áudio e oculta o módulo no app. show=false e
+  // minimized=false colocam a projeção em standby (transparente), mas a janela de
+  // saída continua aberta até o operador encerrar a projeção manualmente.
   endSong() {
     this.stopAudio();
     $appdata.set("modules.media.show", false);
     $appdata.set("modules.media.minimized", false);
-    // Não chama clearVariables() nem closeOutput() — dados e janela de projeção
-    // permanecem para que o último slide continue visível no monitor de saída.
+    // Não chama clearVariables() nem closeOutput() — dados preservados para reabertura
+    // rápida; a janela de saída permanece aberta (modo de projeção ativo).
   },
 
   async openLyric(params) {

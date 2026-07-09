@@ -36,8 +36,14 @@ export default {
     slide_index() {
       return this.config.slide_index;
     },
+    // Só projeta enquanto a música estiver realmente ativa (aberta ou minimizada).
+    // close()/endSong() mantêm modules.media.data intacto de propósito, então sem
+    // esse guard a projeção continuaria exibindo o último slide indefinidamente.
+    isActive() {
+      return !!this.$appdata.get("modules.media.show") || !!this.$appdata.get("modules.media.minimized");
+    },
     slide() {
-      return this.$media.slide();
+      return this.isActive ? this.$media.slide() : null;
     },
   },
 };
