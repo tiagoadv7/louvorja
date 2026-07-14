@@ -28,6 +28,8 @@ import DateTime from "@/helpers/DateTime";
 import Theme from "@/helpers/Theme";
 import Path from "@/helpers/Path";
 import Media from "@/helpers/Media";
+import VideoPlayer from "@/helpers/VideoPlayer";
+import SoundMaster from "@/helpers/SoundMaster";
 import Alert from "@/helpers/Alert";
 import Popup from "@/helpers/Popup";
 import Database from "@/helpers/Database";
@@ -44,6 +46,8 @@ app.mixin({
     this.$theme = Theme;
     this.$path = Path;
     this.$media = Media;
+    this.$videoPlayer = VideoPlayer;
+    this.$soundMaster = SoundMaster;
     this.$alert = Alert;
     this.$popup = Popup;
     this.$database = Database;

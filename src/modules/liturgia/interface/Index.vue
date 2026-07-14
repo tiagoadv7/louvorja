@@ -596,6 +596,12 @@ function newId() {
 // domingo=1 ... sábado=7) para as chaves de dia usadas neste módulo.
 const JA_DAY_MAP = { '1': 'domingo', '2': 'segunda', '3': 'terca', '4': 'quarta', '5': 'quinta', '6': 'sexta', '7': 'sabado' };
 
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac']);
+function isAudioFile(path) {
+  const ext = (path || '').split('.').pop()?.toLowerCase();
+  return AUDIO_EXTENSIONS.has(ext);
+}
+
 // Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
 // com os campos do item, e uma seção [Geral] cujas chaves numéricas (1-7)
 // listam, em ordem e separados por ";", os ids dos itens de cada dia.
@@ -1087,12 +1093,14 @@ export default {
     isPlayable(item) {
       return (item.type === 'musica' && !!item.id_music)
         || (item.type === 'midia' && !!item.url)
-        || (item.type === 'link' && !!item.url);
+        || (item.type === 'link' && !!item.url)
+        || (item.type === 'arquivo' && !!item.url && isAudioFile(item.url));
     },
     playItem(item) {
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
       else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name);
       else if (item.type === 'link' && item.url) this.$electron.openExternal(item.url);
+      else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
     },
 
     /* ── toolbar ── */
@@ -1166,7 +1174,7 @@ export default {
       this.$alert.info({ title: 'Importação concluída', text });
     },
 
-    /* ── arrastar e soltar arquivo (vira item de Mídia) ── */
+    /* ── arrastar e soltar arquivo (áudio → item tocável no SoundMaster, senão vira item de Mídia) ── */
     onDropFiles(e) {
       this.listDragOver = false;
       const files = [...(e.dataTransfer?.files || [])];
@@ -1174,11 +1182,16 @@ export default {
       const newItems = files.map(f => {
         const fp = this.$electron.getPathForFile(f);
         if (!fp) return null;
+        const audio = isAudioFile(fp);
+        const name = f.name.replace(/\.[^./\\]+$/, '') || f.name;
+        // Arraste de um mp3/áudio: já manda tocar no SoundMaster na hora,
+        // além de registrar o item na liturgia (clicável depois via ▶).
+        if (audio) this.$soundMaster.play(fp, name);
         return {
           id: newId(),
-          type: 'midia',
-          name: f.name.replace(/\.[^./\\]+$/, '') || f.name,
-          color: '#fb8c00',
+          type: audio ? 'arquivo' : 'midia',
+          name,
+          color: audio ? '#26a69a' : '#fb8c00',
           duration: 0,
           text: '',
           url: fp,

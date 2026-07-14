@@ -181,6 +181,7 @@
 <script>
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
+import $audioBus from "@/helpers/AudioBus";
 
 function makePads(count) {
   return Array.from({ length: count }, (_, i) => ({
@@ -228,6 +229,8 @@ export default {
     _fades:        {},
     _ticker:       null,
     _keyHandler:   null,
+    _focusHandler: null,
+    _lastPlayTs:   null,
   }),
 
   computed: {
@@ -245,6 +248,12 @@ export default {
     mediaPlaying() {
       return !!this.$appdata.get('modules.media.show') && !this.$appdata.get('modules.media.config.is_paused');
     },
+    // Comando externo (ex.: $soundMaster.play() chamado pela Liturgia) para tocar
+    // um arquivo direto num pad. Vive em $appdata (não no estado local dos pads)
+    // porque outros módulos não têm acesso à instância deste componente.
+    pendingPlay() {
+      return this.$appdata.get('modules.soundmaster.pending_play');
+    },
   },
 
   watch: {
@@ -254,6 +263,17 @@ export default {
       const pad = this.mainPads.find(p => p.id === this.activeMainId);
       const target = this.effVol(pad?.volume ?? 1, true);
       this.fade('main', this._mainAudio, this._mainAudio.volume, target, 1000);
+    },
+    // immediate: cobre tanto o caso em que o módulo já estava aberto quando o
+    // pedido chegou quanto o caso em que $modules.open() acabou de montar o
+    // componente agora (o comando já estava em appdata antes do watch existir).
+    pendingPlay: {
+      immediate: true,
+      handler(cmd) {
+        if (!cmd?.path || cmd.ts === this._lastPlayTs) return;
+        this._lastPlayTs = cmd.ts;
+        this.playExternalFile(cmd.path, cmd.name);
+      },
     },
   },
 
@@ -288,12 +308,20 @@ export default {
       if (k.toLowerCase() === 's' || k === 'Escape') { this.stopAll(); return; }
     };
     window.addEventListener('keydown', this._keyHandler);
+
+    // Outro dono de áudio (video_player, media) começou a tocar: encerra (com
+    // fade) a faixa principal e os FX ativos, sem esperar o próximo clique.
+    this._focusHandler = $audioBus.listen('soundmaster', () => {
+      this.stopMain(true);
+      [...this.activeFxIds].forEach(id => this.stopFx(id, true));
+    });
   },
 
   beforeUnmount() {
     this.stopAllImmediate();
     clearInterval(this._ticker);
     if (this._keyHandler) window.removeEventListener('keydown', this._keyHandler);
+    $audioBus.unlisten(this._focusHandler);
   },
 
   methods: {
@@ -435,6 +463,18 @@ export default {
       });
     },
 
+    // Chamado via $soundMaster.play() por outros módulos (ex.: Liturgia ao
+    // importar/arrastar um mp3). Reaproveita o pad que já tiver esse mesmo
+    // arquivo; senão usa o primeiro pad livre; se todos estiverem ocupados,
+    // sobrescreve o pad 1.
+    playExternalFile(fp, name) {
+      const pad = this.mainPads.find(p => p.filePath === fp)
+        || this.mainPads.find(p => !p.fileUrl)
+        || this.mainPads[0];
+      this.assignFile(pad, fp, name);
+      this.playMain(pad);
+    },
+
     assignFile(pad, fp, name) {
       pad.filePath = fp;
       pad.fileUrl  = toFileUrl(fp);
@@ -449,7 +489,9 @@ export default {
 
     onDrop(e, pad) {
       const file = e.dataTransfer.files[0];
-      if (file?.path) this.assignFile(pad, file.path, file.name);
+      if (!file) return;
+      const fp = this.$electron.getPathForFile(file);
+      if (fp) this.assignFile(pad, fp, file.name);
     },
 
     async onMainPadClick(pad) {
