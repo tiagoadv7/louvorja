@@ -39,6 +39,9 @@
       <div class="lt-toolbar">
         <div class="lt-toolbar-title">{{ currentTabLabel }}</div>
         <div class="lt-toolbar-actions">
+          <button class="lt-btn-outline" @click="importJaFile">
+            <v-icon size="15">mdi-file-import-outline</v-icon> Importar
+          </button>
           <button class="lt-btn-outline lt-btn-outline--danger" :disabled="!dayItems.length" @click="confirmClearAll">
             <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Tudo
           </button>
@@ -46,25 +49,32 @@
             <v-icon size="16">mdi-plus</v-icon> Adicionar Item
           </button>
 
-          <v-menu location="bottom end">
-            <template v-slot:activator="{ props }">
-              <button class="lt-btn-icon" v-bind="props">
-                <v-icon size="18">mdi-dots-vertical</v-icon>
-              </button>
-            </template>
-            <v-list density="compact">
-              <v-list-item prepend-icon="mdi-checkbox-multiple-marked-outline" title="Marcar Todos" @click="selectAll" />
-              <v-list-item prepend-icon="mdi-checkbox-multiple-blank-outline" title="Desmarcar Todos" @click="deselectAll" />
-              <v-list-item prepend-icon="mdi-select-inverse" title="Inverter Seleção" @click="invertSel" />
-              <v-divider />
-              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-check-circle-outline" title="Marcar como Concluído" @click="markDone" />
-              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-lock-outline" title="Bloquear Itens" @click="toggleLock" />
-              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-close" title="Apagar Selecionados" @click="deleteSelected" />
-              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-content-copy" title="Copiar p/ Outros Dias" @click="openCopyToDays" />
-              <v-divider />
-              <v-list-item prepend-icon="mdi-monitor-screenshot" title="Exibir Painel de Apres." @click="showPresentation" />
-            </v-list>
-          </v-menu>
+          <span class="lt-toolbar-sep" />
+
+          <button class="lt-btn-icon" title="Marcar Todos" @click="selectAll">
+            <v-icon size="18">mdi-checkbox-multiple-marked-outline</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Desmarcar Todos" @click="deselectAll">
+            <v-icon size="18">mdi-checkbox-multiple-blank-outline</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Inverter Seleção" @click="invertSel">
+            <v-icon size="18">mdi-select-inverse</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Marcar como Concluído" :disabled="!hasSelected" @click="markDone">
+            <v-icon size="18">mdi-check-circle-outline</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Bloquear Itens" :disabled="!hasSelected" @click="toggleLock">
+            <v-icon size="18">mdi-lock-outline</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Apagar Selecionados" :disabled="!hasSelected" @click="deleteSelected">
+            <v-icon size="18">mdi-close</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Copiar p/ Outros Dias" :disabled="!hasSelected" @click="openCopyToDays()">
+            <v-icon size="18">mdi-content-copy</v-icon>
+          </button>
+          <button class="lt-btn-icon" title="Exibir Painel de Apres." @click="showPresentation">
+            <v-icon size="18">mdi-monitor-screenshot</v-icon>
+          </button>
         </div>
       </div>
 
@@ -582,6 +592,81 @@ function newId() {
   return `${Date.now()}_${_idSeq}`;
 }
 
+// Mapa de dia da semana do formato legado .ja (TDate.DayOfWeek do Delphi:
+// domingo=1 ... sábado=7) para as chaves de dia usadas neste módulo.
+const JA_DAY_MAP = { '1': 'domingo', '2': 'segunda', '3': 'terca', '4': 'quarta', '5': 'quinta', '6': 'sexta', '7': 'sabado' };
+
+// Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
+// com os campos do item, e uma seção [Geral] cujas chaves numéricas (1-7)
+// listam, em ordem e separados por ";", os ids dos itens de cada dia.
+function parseJaSections(raw) {
+  const sections = {};
+  let current = null;
+  raw.split(/\r?\n/).forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const sectionMatch = line.match(/^\[(.+)\]$/);
+    if (sectionMatch) {
+      current = sectionMatch[1];
+      sections[current] = {};
+      return;
+    }
+    if (!current) return;
+    const eq = line.indexOf('=');
+    if (eq < 0) return;
+    sections[current][line.slice(0, eq).trim()] = line.slice(eq + 1);
+  });
+  return sections;
+}
+
+// TColor do Delphi serializado como "$00BBGGRR" — converte para "#rrggbb".
+function delphiColorToHex(raw) {
+  if (!raw) return null;
+  const hex = raw.replace('$', '').padStart(8, '0').slice(-8);
+  const bb = hex.slice(2, 4);
+  const gg = hex.slice(4, 6);
+  const rr = hex.slice(6, 8);
+  if (![bb, gg, rr].every(h => /^[0-9a-fA-F]{2}$/.test(h))) return null;
+  return `#${rr}${gg}${bb}`.toLowerCase();
+}
+
+function jaSectionToItem(sec) {
+  if (!sec) return null;
+  const type = (sec.tipo || '').trim() || 'anotacao';
+  return {
+    id: newId(),
+    type,
+    name: (sec.subitem || sec.item || '').trim(),
+    color: delphiColorToHex(sec.cor) || '#1a237e',
+    duration: 0,
+    text: '',
+    url: type === 'arquivo' ? (sec.dir || '') : '',
+    id_music: type === 'musica' && sec.musica ? Number(sec.musica) : null,
+    has_instrumental_music: false,
+    selected: false,
+    done: !!(sec.checked && sec.checked.trim()),
+    locked: false,
+  };
+}
+
+// Converte o conteúdo bruto de um arquivo .ja em { [dayKey]: item[] }.
+function parseJaLiturgia(raw) {
+  const sections = parseJaSections(raw);
+  const geral = sections['Geral'];
+  if (!geral) return {};
+
+  const result = {};
+  Object.keys(geral).forEach(key => {
+    if (!/^\d+$/.test(key)) return; // ignora chaves como "AlteraOrdem-2"
+    const dayKey = JA_DAY_MAP[key];
+    if (!dayKey) return;
+    const ids = geral[key].split(';').map(s => s.trim()).filter(Boolean);
+    const items = ids.map(id => jaSectionToItem(sections[id])).filter(Boolean);
+    if (items.length) result[dayKey] = [...(result[dayKey] || []), ...items];
+  });
+  return result;
+}
+
 function emptyForm() {
   return { type: '', name: '', color: '#1a237e', duration: 0, text: '', url: '', id_music: null, has_instrumental_music: false };
 }
@@ -1003,6 +1088,50 @@ export default {
       this.clearAllDialog = false;
     },
 
+    /* ── importar arquivo .ja (formato legado do LouvorJA Delphi) ── */
+    async importJaFile() {
+      const fp = await this.$electron.selectFile({
+        title: 'Importar Liturgia (.ja)',
+        filters: [{ name: 'Liturgia (.ja)', extensions: ['ja'] }],
+      });
+      if (!fp) return;
+
+      let raw = null;
+      try {
+        // O arquivo .ja é salvo pelo app antigo em Windows-1252; 'latin1'
+        // decodifica corretamente os acentos nesse intervalo de bytes.
+        raw = await this.$electron.readFile(fp, 'latin1');
+      } catch (_) {
+        raw = null;
+      }
+      if (!raw) {
+        this.$alert.error({ title: 'Erro ao importar', text: 'Não foi possível ler o arquivo selecionado.' });
+        return;
+      }
+
+      const byDay = parseJaLiturgia(raw);
+      const dayKeys = Object.keys(byDay);
+      if (!dayKeys.length) {
+        this.$alert.error({ title: 'Erro ao importar', text: 'Nenhum item de liturgia foi encontrado nesse arquivo.' });
+        return;
+      }
+
+      dayKeys.forEach(dayKey => {
+        const path = `modules.liturgia.days.${dayKey}.items`;
+        const existing = this.$userdata.get(path) || [];
+        this.$userdata.set(path, [...existing, ...byDay[dayKey]]);
+      });
+
+      this.currentDay = dayKeys[0];
+
+      const total = dayKeys.reduce((sum, k) => sum + byDay[k].length, 0);
+      const summary = dayKeys.map(k => `${DAYS.find(d => d.key === k)?.label || k}: ${byDay[k].length}`).join(', ');
+      this.$alert.info({
+        title: 'Importação concluída',
+        text: `${total} item(ns) importado(s) — ${summary}.`,
+      });
+    },
+
     /* ── arrastar e soltar arquivo (vira item de Mídia) ── */
     onDropFiles(e) {
       this.listDragOver = false;
@@ -1136,7 +1265,14 @@ export default {
   font-weight: 700;
   color: rgb(var(--v-theme-on-surface));
 }
-.lt-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.lt-toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; row-gap: 8px; flex-shrink: 0; justify-content: flex-end; }
+
+.lt-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  margin: 0 2px;
+}
 
 .lt-btn-outline, .lt-btn-primary, .lt-btn-icon {
   display: flex;
@@ -1172,7 +1308,8 @@ export default {
   background: transparent;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
-.lt-btn-icon:hover { background: rgba(var(--v-theme-on-surface), 0.08); }
+.lt-btn-icon:hover:not(:disabled) { background: rgba(var(--v-theme-on-surface), 0.08); }
+.lt-btn-icon:disabled { opacity: 0.35; cursor: default; }
 
 /* ── Body ── */
 .lt-body { display: flex; flex: 1; overflow: hidden; }
