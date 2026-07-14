@@ -144,11 +144,11 @@
                   class="lt-item-icon-badge"
                   :style="{ background: item.color + '22', color: item.color }"
                 >
-                  <v-icon size="15" :color="item.color">{{ typeIcon(item.type) }}</v-icon>
+                  <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
                 <div class="lt-item-info">
                   <div class="lt-item-name">{{ item.name }}</div>
-                  <div class="lt-item-sub">{{ typeLabel(item.type) }}</div>
+                  <div class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
                 <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
@@ -407,7 +407,7 @@
 
           <!-- Mídia -->
           <template v-else-if="form.type === 'midia'">
-            <div class="lt-section-lbl">MÍDIA (VÍDEO)</div>
+            <div class="lt-section-lbl">MÍDIA (VÍDEO OU IMAGEM)</div>
             <label class="lt-label">Arquivo local:</label>
             <div class="lt-file-row">
               <input :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
@@ -417,7 +417,7 @@
             </div>
 
             <template v-if="videoPlaylist.length">
-              <div class="lt-section-lbl" style="margin-top:14px">OU ESCOLHER DA FILA DO VÍDEO</div>
+              <div class="lt-section-lbl" style="margin-top:14px">OU ESCOLHER DA FILA DO VÍDEO/IMAGEM</div>
               <div class="lt-music-list">
                 <div
                   v-for="v in videoPlaylist" :key="v.id"
@@ -557,7 +557,7 @@ const TYPES = [
   { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
   { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
   { value: 'versiculo', title: 'Versículo', desc: 'Selecione um versículo bíblico',                 icon: 'mdi-book-open-page-variant-outline', color: '#8e24aa' },
-  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo',                  icon: 'mdi-file-video-outline',              color: '#fb8c00' },
+  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo ou imagem',        icon: 'mdi-file-video-outline',              color: '#fb8c00' },
   { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
 ];
 
@@ -600,6 +600,12 @@ const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac']);
 function isAudioFile(path) {
   const ext = (path || '').split('.').pop()?.toLowerCase();
   return AUDIO_EXTENSIONS.has(ext);
+}
+
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
+function isImageFile(path) {
+  const ext = (path || '').split('.').pop()?.toLowerCase();
+  return IMAGE_EXTENSIONS.has(ext);
 }
 
 // Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
@@ -888,6 +894,16 @@ export default {
 
     typeLabel(t) { return TYPE_LABEL[t] || t; },
     typeIcon(t)  { return TYPE_ICON[t]  || 'mdi-circle-outline'; },
+    // "midia" cobre vídeo e imagem — distingue pelo ícone/rótulo conforme a
+    // extensão do arquivo, sem precisar de um tipo de item separado.
+    itemIcon(item) {
+      if (item.type === 'midia' && isImageFile(item.url)) return 'mdi-image-outline';
+      return this.typeIcon(item.type);
+    },
+    itemTypeLabel(item) {
+      if (item.type === 'midia' && isImageFile(item.url)) return 'Imagem';
+      return this.typeLabel(item.type);
+    },
     formatDur(m) {
       return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}min` : ''}` : `${m}min`;
     },
@@ -975,8 +991,12 @@ export default {
     /* ── mídia ── */
     async pickMediaFile() {
       const fp = await this.$electron.selectFile({
-        title: 'Selecionar arquivo de vídeo',
-        filters: [{ name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] }],
+        title: 'Selecionar arquivo de vídeo ou imagem',
+        filters: [
+          { name: 'Vídeo ou Imagem', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          { name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] },
+          { name: 'Imagem', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+        ],
       });
       if (fp) {
         this.form.url = fp;
