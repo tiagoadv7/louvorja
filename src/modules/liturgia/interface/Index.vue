@@ -95,7 +95,7 @@
             <div class="lt-empty-title">Liturgia vazia</div>
             <div class="lt-empty-sub">
               Adicione músicas, anotações, versículos, mídias e categorias para montar seu culto,
-              ou arraste um arquivo de vídeo até aqui.
+              ou arraste qualquer arquivo até aqui.
             </div>
             <button class="lt-add-center-btn" @click="openAdd">
               <v-icon size="16">mdi-plus</v-icon> Adicionar item
@@ -407,7 +407,7 @@
 
           <!-- Mídia -->
           <template v-else-if="form.type === 'midia'">
-            <div class="lt-section-lbl">MÍDIA (VÍDEO, IMAGEM OU ÁUDIO)</div>
+            <div class="lt-section-lbl">MÍDIA (QUALQUER ARQUIVO)</div>
             <label class="lt-label">Arquivo local:</label>
             <div class="lt-file-row">
               <input :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
@@ -557,7 +557,7 @@ const TYPES = [
   { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
   { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
   { value: 'versiculo', title: 'Versículo', desc: 'Selecione um versículo bíblico',                 icon: 'mdi-book-open-page-variant-outline', color: '#8e24aa' },
-  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo, imagem ou áudio', icon: 'mdi-file-video-outline',              color: '#fb8c00' },
+  { value: 'midia',     title: 'Mídia',     desc: 'Selecione qualquer arquivo (vídeo, imagem, áudio ou outro)', icon: 'mdi-file-video-outline', color: '#fb8c00' },
   { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
 ];
 
@@ -606,6 +606,12 @@ const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
 function isImageFile(path) {
   const ext = (path || '').split('.').pop()?.toLowerCase();
   return IMAGE_EXTENSIONS.has(ext);
+}
+
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv']);
+function isVideoFile(path) {
+  const ext = (path || '').split('.').pop()?.toLowerCase();
+  return VIDEO_EXTENSIONS.has(ext);
 }
 
 // Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
@@ -994,7 +1000,7 @@ export default {
     /* ── mídia ── */
     async pickMediaFile() {
       const fp = await this.$electron.selectFile({
-        title: 'Selecionar arquivo de vídeo, imagem ou áudio',
+        title: 'Selecionar arquivo',
         filters: [
           {
             name: 'Vídeo, Imagem ou Áudio',
@@ -1003,6 +1009,7 @@ export default {
           { name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] },
           { name: 'Imagem', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
           { name: 'Áudio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'] },
+          { name: 'Todos os arquivos', extensions: ['*'] },
         ],
       });
       if (fp) {
@@ -1123,12 +1130,13 @@ export default {
         || (item.type === 'link' && !!item.url)
         || (item.type === 'arquivo' && !!item.url && isAudioFile(item.url));
     },
-    // O tipo "midia" cobre vídeo/imagem (toca no video_player); áudio local
-    // toca no SoundMaster e por isso é salvo como "arquivo" — mesma regra já
-    // usada no drag-and-drop (onDropFiles), agora aplicada também ao arquivo
-    // escolhido pelo botão "Selecionar" no formulário de Mídia.
+    // O tipo "midia" só faz sentido para vídeo/imagem (toca no video_player);
+    // qualquer outro arquivo (áudio, ou qualquer outro tipo) vira "arquivo" —
+    // áudio toca no SoundMaster, os demais ficam como referência na lista
+    // (sem botão de play). Mesma regra usada no drag-and-drop (onDropFiles),
+    // aplicada também ao arquivo escolhido pelo botão "Selecionar".
     resolvedType(type, url) {
-      if (type === 'midia' && isAudioFile(url)) return 'arquivo';
+      if (type === 'midia' && !isImageFile(url) && !isVideoFile(url)) return 'arquivo';
       return type;
     },
     playItem(item) {
@@ -1209,7 +1217,12 @@ export default {
       this.$alert.info({ title: 'Importação concluída', text });
     },
 
-    /* ── arrastar e soltar arquivo (áudio → item tocável no SoundMaster, senão vira item de Mídia) ── */
+    /* ── arrastar e soltar arquivo ── */
+    // Aceita qualquer tipo de arquivo: só importa (adiciona o item), nunca
+    // toca nada automaticamente — quem decide tocar é o operador, clicando no
+    // ▶ do item depois. Vídeo/imagem vira "midia" (video_player); qualquer
+    // outro arquivo (áudio, PDF, o que for) vira "arquivo" — áudio toca no
+    // SoundMaster ao clicar em ▶, os demais ficam só como referência na lista.
     onDropFiles(e) {
       this.listDragOver = false;
       const files = [...(e.dataTransfer?.files || [])];
@@ -1217,16 +1230,13 @@ export default {
       const newItems = files.map(f => {
         const fp = this.$electron.getPathForFile(f);
         if (!fp) return null;
-        const audio = isAudioFile(fp);
         const name = f.name.replace(/\.[^./\\]+$/, '') || f.name;
-        // Arraste de um mp3/áudio: já manda tocar no SoundMaster na hora,
-        // além de registrar o item na liturgia (clicável depois via ▶).
-        if (audio) this.$soundMaster.play(fp, name);
+        const visual = isImageFile(fp) || isVideoFile(fp);
         return {
           id: newId(),
-          type: audio ? 'arquivo' : 'midia',
+          type: visual ? 'midia' : 'arquivo',
           name,
-          color: audio ? '#26a69a' : '#fb8c00',
+          color: visual ? '#fb8c00' : '#26a69a',
           duration: 0,
           text: '',
           url: fp,
