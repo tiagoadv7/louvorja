@@ -630,41 +630,69 @@ function delphiColorToHex(raw) {
   return `#${rr}${gg}${bb}`.toLowerCase();
 }
 
-function jaSectionToItem(sec) {
+// O app Delphi grava "subitem" como o texto exibido na listbox, que já vem
+// prefixado com o rótulo do tipo (ex.: "Música <título>", "Arquivo <caminho>")
+// em vez do valor puro — por isso não dá para usar "subitem" como nome direto
+// para "musica" (resolvemos pelo id na base atual) nem para "arquivo" (usamos
+// o nome do arquivo a partir de "dir", que tem o mesmo caminho sem o prefixo).
+function jaSectionToItem(sec, musicsById, stats) {
   if (!sec) return null;
   const type = (sec.tipo || '').trim() || 'anotacao';
+  let name = (sec.subitem || sec.item || '').trim();
+  let duration = 0;
+  let id_music = null;
+  let has_instrumental_music = false;
+
+  if (type === 'musica') {
+    id_music = sec.musica ? Number(sec.musica) : null;
+    const found = id_music != null ? musicsById?.get(id_music) : null;
+    if (found) {
+      name = found.name;
+      duration = found.duration ? Math.ceil(Number(found.duration) / 60) : 0;
+      has_instrumental_music = !!found.has_instrumental_music;
+    } else if (id_music != null && stats) {
+      stats.unresolvedMusic += 1;
+    }
+  } else if (type === 'arquivo' && sec.dir) {
+    const base = sec.dir.split(/[\\/]/).pop() || sec.dir;
+    name = base.replace(/\.[^./\\]+$/, '') || base;
+  }
+
   return {
     id: newId(),
     type,
-    name: (sec.subitem || sec.item || '').trim(),
+    name,
     color: delphiColorToHex(sec.cor) || '#1a237e',
-    duration: 0,
+    duration,
     text: '',
     url: type === 'arquivo' ? (sec.dir || '') : '',
-    id_music: type === 'musica' && sec.musica ? Number(sec.musica) : null,
-    has_instrumental_music: false,
+    id_music,
+    has_instrumental_music,
     selected: false,
     done: !!(sec.checked && sec.checked.trim()),
     locked: false,
   };
 }
 
-// Converte o conteúdo bruto de um arquivo .ja em { [dayKey]: item[] }.
-function parseJaLiturgia(raw) {
+// Converte o conteúdo bruto de um arquivo .ja em { byDay: {[dayKey]: item[]}, stats }.
+// musicsById (Map<number, music>) permite resolver o nome/duração reais da
+// música atual em vez do texto legado salvo no arquivo.
+function parseJaLiturgia(raw, musicsById) {
   const sections = parseJaSections(raw);
   const geral = sections['Geral'];
-  if (!geral) return {};
+  const stats = { unresolvedMusic: 0 };
+  if (!geral) return { byDay: {}, stats };
 
-  const result = {};
+  const byDay = {};
   Object.keys(geral).forEach(key => {
     if (!/^\d+$/.test(key)) return; // ignora chaves como "AlteraOrdem-2"
     const dayKey = JA_DAY_MAP[key];
     if (!dayKey) return;
     const ids = geral[key].split(';').map(s => s.trim()).filter(Boolean);
-    const items = ids.map(id => jaSectionToItem(sections[id])).filter(Boolean);
-    if (items.length) result[dayKey] = [...(result[dayKey] || []), ...items];
+    const items = ids.map(id => jaSectionToItem(sections[id], musicsById, stats)).filter(Boolean);
+    if (items.length) byDay[dayKey] = [...(byDay[dayKey] || []), ...items];
   });
-  return result;
+  return { byDay, stats };
 }
 
 function emptyForm() {
@@ -1109,7 +1137,12 @@ export default {
         return;
       }
 
-      const byDay = parseJaLiturgia(raw);
+      // Carrega a base de músicas atual para resolver nome/duração reais dos
+      // itens tipo "musica" pelo id, em vez do texto legado salvo no arquivo.
+      if (!this.allMusics.length) await this.loadMusics();
+      const musicsById = new Map(this.allMusics.map(m => [Number(m.id_music), m]));
+
+      const { byDay, stats } = parseJaLiturgia(raw, musicsById);
       const dayKeys = Object.keys(byDay);
       if (!dayKeys.length) {
         this.$alert.error({ title: 'Erro ao importar', text: 'Nenhum item de liturgia foi encontrado nesse arquivo.' });
@@ -1126,10 +1159,11 @@ export default {
 
       const total = dayKeys.reduce((sum, k) => sum + byDay[k].length, 0);
       const summary = dayKeys.map(k => `${DAYS.find(d => d.key === k)?.label || k}: ${byDay[k].length}`).join(', ');
-      this.$alert.info({
-        title: 'Importação concluída',
-        text: `${total} item(ns) importado(s) — ${summary}.`,
-      });
+      let text = `${total} item(ns) importado(s) — ${summary}.`;
+      if (stats.unresolvedMusic > 0) {
+        text += ` Atenção: ${stats.unresolvedMusic} música(s) do arquivo não foram encontradas na base atual.`;
+      }
+      this.$alert.info({ title: 'Importação concluída', text });
     },
 
     /* ── arrastar e soltar arquivo (vira item de Mídia) ── */
