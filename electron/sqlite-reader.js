@@ -167,9 +167,16 @@ class SQLiteReader {
     return rows[0] || null;
   }
 
+  // Comparação por LOWER(): alguns bancos (schema legado do editor de Bíblia,
+  // ex: LIVRO/VERSAO_BIBLICA/BIBLIA) guardam nomes de tabela em maiúsculas,
+  // enquanto outras partes do schema (categories/albums/musics) usam minúsculas.
+  // Uma igualdade direta (name='X') é sensível a maiúsculas/minúsculas e faz o
+  // gate falhar silenciosamente mesmo quando a tabela existe (a query real com
+  // identificador sem aspas, tipo "FROM LIVRO", resolveria certinho contra uma
+  // tabela "livro" — só esse check manual que não resolvia).
   _hasTable(name) {
     const r = this._db.exec(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`
+      `SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = LOWER('${name}')`
     );
     return !!(r[0] && r[0].values.length);
   }
@@ -177,8 +184,8 @@ class SQLiteReader {
   _hasCols(table, ...cols) {
     try {
       const r = this._db.exec(`PRAGMA table_info(${table})`);
-      const existing = (r[0] || { values: [] }).values.map(v => v[1]);
-      return Object.fromEntries(cols.map(c => [c, existing.includes(c)]));
+      const existing = (r[0] || { values: [] }).values.map(v => String(v[1]).toLowerCase());
+      return Object.fromEntries(cols.map(c => [c, existing.includes(c.toLowerCase())]));
     } catch {
       return Object.fromEntries(cols.map(c => [c, false]));
     }
@@ -304,6 +311,10 @@ class SQLiteReader {
       if (filename === 'pt_hymnal_1996') return this._getHymnal('hymnal_1996');
       if (filename.startsWith('album_')) return this._getAlbum(Number(filename.slice(6)));
       if (filename.startsWith('music_')) return this._getMusic(Number(filename.slice(6)));
+      if (filename.endsWith('_bible_book'))    return this._getBibleBooks();
+      if (filename.endsWith('_bible_version')) return this._getBibleVersions();
+      const bibleVerseMatch = filename.match(/^bible_(\d+)_(\d+)_(\d+)$/);
+      if (bibleVerseMatch) return this._getBibleVerses(bibleVerseMatch[1], bibleVerseMatch[2], bibleVerseMatch[3]);
       return null;
     } catch (e) {
       console.error('[SQLiteReader] Erro em get(', filename, '):', e.message);
@@ -697,6 +708,105 @@ class SQLiteReader {
       albums:                albumsPerMusic[r.id_music] || [],
       albums_names:          (albumsPerMusic[r.id_music] || []).map(a => a.name).join(' '),
     }));
+  }
+
+  // ── Bíblia ──────────────────────────────────────────────────────────────
+  // Suporta dois schemas possíveis dentro do mesmo database.db:
+  //   1. Moderno (bible_book/bible_version/bible_verse) — mesmas tabelas e
+  //      nomes de coluna usados pela API online; é o que aparece quando o
+  //      banco vem de uma exportação recente do sistema.
+  //   2. Legado Delphi (LIVRO/VERSAO_BIBLICA/BIBLIA) — schema do editor de
+  //      Bíblia do app antigo, com nomes de tabela/coluna em português.
+  // Tenta o schema moderno primeiro; cai para o legado se as tabelas não existirem.
+
+  // Nota importante: para uma coluna sem "AS alias", o sql.js/SQLite rotula o
+  // resultado com o nome EXATAMENTE como está gravado no schema (ex: "id",
+  // mesmo se a query escrever "ID") — não com a grafia usada na query. Como não
+  // sabemos a priori se o banco real usa maiúsculas ou minúsculas, toda coluna
+  // aqui usa "AS alias_fixo" para garantir uma chave previsível no JS.
+  _getBibleBooks() {
+    if (this._hasTable('bible_book')) {
+      return this._query(`
+        SELECT id_bible_book, name, abbreviation, chapters, color
+        FROM   bible_book
+        ORDER BY book_number
+      `).map(r => ({
+        id_bible_book: r.id_bible_book,
+        name:          r.name || '',
+        abbreviation:  r.abbreviation || (r.name || '').slice(0, 3).toUpperCase(),
+        chapters:      r.chapters || 1,
+        color:         r.color || null,
+      }));
+    }
+    if (!this._hasTable('LIVRO')) return [];
+    const cols = this._hasCols('LIVRO', 'ABREVIACAO', 'ABREV', 'COR', 'CAPITULOS');
+    const abbrevCol = cols.ABREVIACAO ? 'ABREVIACAO' : (cols.ABREV ? 'ABREV' : null);
+    const colorCol  = cols.COR ? 'COR' : null;
+    const rows = this._query(`
+      SELECT ID AS id_bible_book, LIVRO AS book_name,
+             ${abbrevCol ? abbrevCol : 'NULL'} AS abbrev,
+             ${cols.CAPITULOS ? 'CAPITULOS' : '1'} AS chapters,
+             ${colorCol ? colorCol : 'NULL'} AS color
+      FROM   LIVRO
+      ORDER BY ID
+    `);
+    return rows.map(r => ({
+      id_bible_book: r.id_bible_book,
+      name:          r.book_name || '',
+      abbreviation:  r.abbrev || (r.book_name || '').slice(0, 3).toUpperCase(),
+      chapters:      r.chapters || 1,
+      color:         r.color || null,
+    }));
+  }
+
+  _getBibleVersions() {
+    if (this._hasTable('bible_version')) {
+      return this._query(`
+        SELECT id_bible_version, name, abbreviation
+        FROM   bible_version
+        ORDER BY name
+      `).map(r => ({
+        id_bible_version: r.id_bible_version,
+        abbreviation:      r.abbreviation || '',
+        name:              r.name || '',
+      }));
+    }
+    if (!this._hasTable('VERSAO_BIBLICA')) return [];
+    // rowid vira o id numérico usado pelo app — BIBLIA.VERSAO referencia a
+    // sigla (texto), não um id, então _getBibleVerses resolve de volta via rowid.
+    return this._query(`SELECT rowid AS id_bible_version, SIGLA AS sigla, VERSAO AS versao_nome FROM VERSAO_BIBLICA ORDER BY VERSAO`)
+      .map(r => ({
+        id_bible_version: r.id_bible_version,
+        abbreviation:      r.sigla || '',
+        name:              r.versao_nome || '',
+      }));
+  }
+
+  _getBibleVerses(idVersion, idBook, chapter) {
+    if (this._hasTable('bible_verse')) {
+      const rows = this._query(`
+        SELECT verse AS num, text AS txt FROM bible_verse
+        WHERE  id_bible_book = ${Number(idBook)}
+          AND  id_bible_version = ${Number(idVersion)}
+          AND  chapter = ${Number(chapter)}
+        ORDER BY verse
+      `);
+      const map = {};
+      for (const r of rows) map[r.num] = r.txt || '';
+      return map;
+    }
+    if (!this._hasTable('BIBLIA') || !this._hasTable('VERSAO_BIBLICA')) return {};
+    const versionRow = this._queryOne(`SELECT SIGLA AS sigla FROM VERSAO_BIBLICA WHERE rowid = ${Number(idVersion)}`);
+    if (!versionRow) return {};
+    const sigla = String(versionRow.sigla).replace(/'/g, "''");
+    const rows = this._query(`
+      SELECT VERSICULO AS num, PASSAGEM AS txt FROM BIBLIA
+      WHERE  LIVRO = ${Number(idBook)} AND VERSAO = '${sigla}' AND CAPITULO = ${Number(chapter)}
+      ORDER BY VERSICULO
+    `);
+    const map = {};
+    for (const r of rows) map[r.num] = r.txt || '';
+    return map;
   }
 }
 
