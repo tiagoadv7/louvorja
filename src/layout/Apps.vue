@@ -16,6 +16,7 @@
           v-if="countModules(group.modules) != 0"
           class="my-0 py-0"
         >
+          <v-icon v-if="group.icon" size="18" class="mr-2">{{ group.icon }}</v-icon>
           {{ $t(group.title) }}
         </v-expansion-panel-title>
         <v-expansion-panel-text

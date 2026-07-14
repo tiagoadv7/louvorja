@@ -10,6 +10,7 @@
           show-arrows
           class="px-8"
         >
+          <v-icon v-if="group.icon" size="18" start>{{ group.icon }}</v-icon>
           {{ $t(group.title) }}
         </v-tab>
       </v-tabs>

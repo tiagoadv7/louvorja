@@ -16,14 +16,17 @@ export default {
   module_group: {
     musics: {
       title: "module_group.musics.title",
+      icon: "mdi-music",
       modules: ["musics", "hymnal", "hymnal_1996"],
     },
     bible: {
       title: "module_group.bible.title",
+      icon: "mdi-book-cross",
       modules: [],
     },
     utilities: {
       title: "module_group.utilities.title",
+      icon: "mdi-toolbox-outline",
       modules: [],
     },
   },

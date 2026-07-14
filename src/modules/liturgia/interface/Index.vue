@@ -12,71 +12,6 @@
   >
     <div class="lt-root">
 
-      <!-- ── RIBBON TOOLBAR ─────────────────────────────────────── -->
-      <div class="lt-ribbon">
-
-        <!-- Adicionar -->
-        <div class="lt-group">
-          <div class="lt-group-body">
-            <button class="lt-btn lt-btn--large" @click="openAdd">
-              <v-icon size="22">mdi-plus</v-icon>
-              <span>Adicionar Item</span>
-            </button>
-          </div>
-          <div class="lt-group-label">Adicionar</div>
-        </div>
-
-        <div class="lt-sep" />
-
-        <!-- Itens -->
-        <div class="lt-group">
-          <div class="lt-group-body lt-group-body--col">
-            <button class="lt-btn lt-btn--sm" @click="selectAll">
-              <v-icon size="14">mdi-checkbox-multiple-marked-outline</v-icon>Marcar Todos
-            </button>
-            <button class="lt-btn lt-btn--sm" @click="deselectAll">
-              <v-icon size="14">mdi-checkbox-multiple-blank-outline</v-icon>Desmarcar Todos
-            </button>
-            <button class="lt-btn lt-btn--sm" @click="invertSel">
-              <v-icon size="14">mdi-select-inverse</v-icon>Inverter Seleção
-            </button>
-          </div>
-          <div class="lt-group-label">Itens</div>
-        </div>
-
-        <div class="lt-sep" />
-
-        <!-- Apagar -->
-        <div class="lt-group">
-          <div class="lt-group-body">
-            <button class="lt-btn lt-btn--large lt-btn--danger" :disabled="!hasSelected" @click="deleteSelected">
-              <v-icon size="22">mdi-close</v-icon>
-              <span>Apagar<br>Selecionados</span>
-            </button>
-          </div>
-          <div class="lt-group-label">Apagar</div>
-        </div>
-
-        <div class="lt-sep" />
-
-        <!-- Opções -->
-        <div class="lt-group">
-          <div class="lt-group-body lt-group-body--col">
-            <button class="lt-btn lt-btn--sm" :disabled="!hasSelected" @click="markDone">
-              <v-icon size="14">mdi-check-circle-outline</v-icon>Marcar como Concluído
-            </button>
-            <button class="lt-btn lt-btn--sm" @click="showPresentation">
-              <v-icon size="14">mdi-monitor-screenshot</v-icon>Exibir Painel de Apres.
-            </button>
-            <button class="lt-btn lt-btn--sm" :disabled="!hasSelected" @click="toggleLock">
-              <v-icon size="14">mdi-lock-outline</v-icon>Bloquear Itens
-            </button>
-          </div>
-          <div class="lt-group-label">Opções</div>
-        </div>
-
-      </div>
-
       <!-- ── DAY TABS ───────────────────────────────────────────── -->
       <div class="lt-days">
         <button
@@ -85,24 +20,72 @@
           :class="['lt-day', { 'lt-day--active': currentDay === day.key, 'lt-day--sabado': day.key === 'sabado' }]"
           @click="currentDay = day.key"
         >
-          <v-icon size="14" class="lt-day-icon">
-            {{ day.key === 'sabado' ? 'mdi-calendar-star' : 'mdi-calendar' }}
-          </v-icon>
+          <v-icon size="14">{{ day.key === 'sabado' ? 'mdi-calendar-star' : 'mdi-calendar-outline' }}</v-icon>
           {{ day.label }}
         </button>
+
+        <span class="lt-days-sep" />
+
+        <button
+          :class="['lt-day', 'lt-day--avulsa', { 'lt-day--active': currentDay === 'avulsa' }]"
+          @click="currentDay = 'avulsa'"
+        >
+          <v-icon size="14">mdi-star-outline</v-icon>
+          Avulsa
+        </button>
+      </div>
+
+      <!-- ── TOOLBAR ────────────────────────────────────────────── -->
+      <div class="lt-toolbar">
+        <div class="lt-toolbar-title">{{ currentTabLabel }}</div>
+        <div class="lt-toolbar-actions">
+          <button class="lt-btn-outline lt-btn-outline--danger" :disabled="!dayItems.length" @click="confirmClearAll">
+            <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Tudo
+          </button>
+          <button class="lt-btn-primary" @click="openAdd">
+            <v-icon size="16">mdi-plus</v-icon> Adicionar Item
+          </button>
+
+          <v-menu location="bottom end">
+            <template v-slot:activator="{ props }">
+              <button class="lt-btn-icon" v-bind="props">
+                <v-icon size="18">mdi-dots-vertical</v-icon>
+              </button>
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-checkbox-multiple-marked-outline" title="Marcar Todos" @click="selectAll" />
+              <v-list-item prepend-icon="mdi-checkbox-multiple-blank-outline" title="Desmarcar Todos" @click="deselectAll" />
+              <v-list-item prepend-icon="mdi-select-inverse" title="Inverter Seleção" @click="invertSel" />
+              <v-divider />
+              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-check-circle-outline" title="Marcar como Concluído" @click="markDone" />
+              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-lock-outline" title="Bloquear Itens" @click="toggleLock" />
+              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-close" title="Apagar Selecionados" @click="deleteSelected" />
+              <v-list-item :disabled="!hasSelected" prepend-icon="mdi-content-copy" title="Copiar p/ Outros Dias" @click="openCopyToDays" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-monitor-screenshot" title="Exibir Painel de Apres." @click="showPresentation" />
+            </v-list>
+          </v-menu>
+        </div>
       </div>
 
       <!-- ── BODY ───────────────────────────────────────────────── -->
       <div class="lt-body">
 
         <!-- Content: items list or empty state -->
-        <div class="lt-content">
+        <div
+          class="lt-content"
+          :class="{ 'lt-content--dragover': listDragOver }"
+          @dragover.prevent="listDragOver = true"
+          @dragleave.self="listDragOver = false"
+          @drop.prevent="onDropFiles($event)"
+        >
           <!-- Empty state -->
           <div v-if="dayItems.length === 0" class="lt-empty">
             <v-icon size="60" color="grey-lighten-1">mdi-script-text-outline</v-icon>
             <div class="lt-empty-title">Liturgia vazia</div>
             <div class="lt-empty-sub">
-              Adicione músicas, anotações, sites, arquivos e categorias para montar seu culto.
+              Adicione músicas, anotações, versículos, mídias e categorias para montar seu culto,
+              ou arraste um arquivo de vídeo até aqui.
             </div>
             <button class="lt-add-center-btn" @click="openAdd">
               <v-icon size="16">mdi-plus</v-icon> Adicionar item
@@ -110,56 +93,78 @@
           </div>
 
           <!-- Items list -->
-          <div v-else class="lt-list">
-            <div
-              v-for="(item, idx) in dayItems"
-              :key="item.id"
-              :class="['lt-item', {
-                'lt-item--selected': item.selected,
-                'lt-item--done':     item.done,
-                'lt-item--locked':   item.locked,
-              }]"
-              @click="toggleSelect(idx)"
-            >
-              <div class="lt-item-stripe" :style="{ background: item.color }" />
-              <input
-                type="checkbox"
-                class="lt-item-check"
-                :checked="item.selected"
-                @click.stop
-                @change="setSelected(idx, $event.target.checked)"
-              />
+          <draggable
+            v-else
+            v-model="dayItems"
+            item-key="id"
+            handle=".lt-drag-handle"
+            class="lt-list"
+            :animation="150"
+          >
+            <template v-slot:item="{ element: item, index: idx }">
               <div
-                class="lt-item-icon-badge"
-                :style="{ background: item.color + '22', color: item.color }"
+                :class="['lt-item', {
+                  'lt-item--selected': item.selected,
+                  'lt-item--done':     item.done,
+                  'lt-item--locked':   item.locked,
+                }]"
+                @click="toggleSelect(idx)"
               >
-                <v-icon size="15" :color="item.color">{{ typeIcon(item.type) }}</v-icon>
-              </div>
-              <div class="lt-item-info">
-                <div class="lt-item-name">{{ item.name }}</div>
-                <div class="lt-item-sub">{{ typeLabel(item.type) }}</div>
-              </div>
-              <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
-              <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
-              <div class="lt-item-actions" @click.stop>
-                <button class="lt-row-btn" :disabled="idx === 0" @click="moveUp(idx)">
-                  <v-icon size="13">mdi-chevron-up</v-icon>
+                <div class="lt-item-stripe" :style="{ background: item.color }" />
+
+                <v-icon size="16" class="lt-drag-handle" @click.stop>mdi-drag-vertical</v-icon>
+
+                <div class="lt-item-badge" @click.stop>
+                  <span class="lt-badge-num">{{ idx + 1 }}</span>
+                  <input
+                    type="checkbox"
+                    class="lt-badge-check"
+                    :checked="item.selected"
+                    @change="setSelected(idx, $event.target.checked)"
+                  />
+                </div>
+
+                <button class="lt-status-btn" @click.stop="toggleDone(idx)">
+                  <v-icon size="18" :color="item.done ? 'success' : undefined" :class="{ 'lt-status-off': !item.done }">
+                    {{ item.done ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                  </v-icon>
                 </button>
-                <button class="lt-row-btn" :disabled="idx === dayItems.length - 1" @click="moveDown(idx)">
-                  <v-icon size="13">mdi-chevron-down</v-icon>
-                </button>
-                <MusicMenuTable
-                  v-if="item.type === 'musica'"
-                  :id_music="item.id_music"
-                  :has_instrumental_music="item.has_instrumental_music"
-                  class="lt-item-music-menu"
-                />
-                <button class="lt-row-btn lt-row-btn--del" @click="removeItem(idx)">
-                  <v-icon size="13">mdi-close</v-icon>
-                </button>
+
+                <div
+                  class="lt-item-icon-badge"
+                  :style="{ background: item.color + '22', color: item.color }"
+                >
+                  <v-icon size="15" :color="item.color">{{ typeIcon(item.type) }}</v-icon>
+                </div>
+                <div class="lt-item-info">
+                  <div class="lt-item-name">{{ item.name }}</div>
+                  <div class="lt-item-sub">{{ typeLabel(item.type) }}</div>
+                </div>
+                <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
+                <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
+                <div class="lt-item-actions" @click.stop>
+                  <button v-if="isPlayable(item)" class="lt-row-btn lt-row-btn--play" @click="playItem(item)">
+                    <v-icon size="17">mdi-play-circle-outline</v-icon>
+                  </button>
+                  <MusicMenuTable
+                    v-if="item.type === 'musica'"
+                    :id_music="item.id_music"
+                    :has_instrumental_music="item.has_instrumental_music"
+                    class="lt-item-music-menu"
+                  />
+                  <button class="lt-row-btn" title="Copiar para outros dias" @click="openCopyToDays([item])">
+                    <v-icon size="13">mdi-content-copy</v-icon>
+                  </button>
+                  <button class="lt-row-btn" @click="openEdit(idx)">
+                    <v-icon size="13">mdi-pencil</v-icon>
+                  </button>
+                  <button class="lt-row-btn lt-row-btn--del" @click="removeItem(idx)">
+                    <v-icon size="13">mdi-close</v-icon>
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
+            </template>
+          </draggable>
         </div>
 
         <!-- Right panel: Anotações -->
@@ -167,7 +172,7 @@
           <div class="lt-notes-head">
             <v-icon size="14" class="me-1">mdi-note-text-outline</v-icon>
             <span>Anotações</span>
-            <span class="lt-notes-day">{{ currentDayUpper }}</span>
+            <span class="lt-notes-day">{{ currentTabLabel.toUpperCase() }}</span>
           </div>
 
           <textarea
@@ -230,10 +235,10 @@
       </div>
     </div>
 
-    <!-- ── ADD ITEM DIALOG ───────────────────────────────────────── -->
-    <v-dialog v-model="addDialog" max-width="540" scrollable @after-leave="resetForm">
+    <!-- ── ADD/EDIT ITEM DIALOG ──────────────────────────────────── -->
+    <v-dialog v-model="addDialog" max-width="560" scrollable @after-leave="resetForm">
       <v-card>
-        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+        <v-card-title v-if="dialogStep === 'type'" class="d-flex align-center pa-3 text-body-1 font-weight-medium">
           <v-icon start size="16">mdi-plus</v-icon>
           Adicionar Item
           <v-spacer />
@@ -241,29 +246,39 @@
             <v-icon size="16">mdi-close</v-icon>
           </v-btn>
         </v-card-title>
+        <v-card-title v-else class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-btn v-if="dialogMode === 'add'" icon size="small" variant="text" class="me-1" @click="dialogStep = 'type'">
+            <v-icon size="18">mdi-arrow-left</v-icon>
+          </v-btn>
+          <v-icon start size="18">{{ currentTypeConfig?.icon }}</v-icon>
+          {{ dialogMode === 'edit' ? 'Editar Item' : `Adicionar Item: ${currentTypeConfig?.title}` }}
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="addDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
         <v-divider />
 
-        <v-card-text class="pa-4">
-          <!-- Linha 1: Tipo + Nome -->
-          <div class="lt-form-row">
-            <div class="lt-form-field">
-              <label class="lt-label">Tipo:</label>
-              <v-select
-                v-model="form.type"
-                :items="[
-                  { title: 'Anotação',          value: 'anotacao'  },
-                  { title: 'Arquivo/Diretório',  value: 'arquivo'   },
-                  { title: 'Categoria',          value: 'categoria' },
-                  { title: 'Itens Agendados',    value: 'agendados' },
-                  { title: 'Música',             value: 'musica'    },
-                  { title: 'Site',               value: 'site'      },
-                ]"
-                density="compact"
-                variant="outlined"
-                hide-details
-                style="min-width: 155px"
-              />
+        <!-- STEP 1: escolha do tipo -->
+        <v-card-text v-if="dialogStep === 'type'" class="pa-4">
+          <div class="lt-type-list">
+            <div v-for="tp in TYPES" :key="tp.value" class="lt-type-row" @click="chooseType(tp.value)">
+              <div class="lt-type-icon" :style="{ background: tp.color + '22', color: tp.color }">
+                <v-icon size="20">{{ tp.icon }}</v-icon>
+              </div>
+              <div class="lt-type-info">
+                <div class="lt-type-title">{{ tp.title }}</div>
+                <div class="lt-type-desc">{{ tp.desc }}</div>
+              </div>
+              <v-icon size="18" class="lt-type-chevron">mdi-chevron-right</v-icon>
             </div>
+          </div>
+        </v-card-text>
+
+        <!-- STEP 2: formulário do tipo -->
+        <v-card-text v-else class="pa-4">
+          <!-- Linha 1: Nome -->
+          <div class="lt-form-row">
             <div class="lt-form-field lt-form-field--grow">
               <label class="lt-label">Nome do Item:</label>
               <input
@@ -295,19 +310,7 @@
             <textarea v-model="form.text" class="lt-textarea" placeholder="Anotações ou lembrado..." />
           </template>
 
-          <!-- Arquivo -->
-          <template v-else-if="form.type === 'arquivo'">
-            <div class="lt-section-lbl">ARQUIVO / DIRETÓRIO</div>
-            <label class="lt-label">Caminho:</label>
-            <input v-model="form.url" class="lt-input lt-input--full" placeholder="C:\caminho\arquivo.pdf" />
-          </template>
-
-          <!-- Site -->
-          <template v-else-if="form.type === 'site'">
-            <div class="lt-section-lbl">SITE</div>
-            <label class="lt-label">URL:</label>
-            <input v-model="form.url" class="lt-input lt-input--full" placeholder="https://..." />
-          </template>
+          <!-- Categoria: sem campos extras -->
 
           <!-- Música -->
           <template v-else-if="form.type === 'musica'">
@@ -331,14 +334,187 @@
               </template>
             </div>
           </template>
+
+          <!-- Versículo -->
+          <template v-else-if="form.type === 'versiculo'">
+            <template v-if="dialogMode === 'add'">
+              <div class="lt-section-lbl">VERSÍCULO</div>
+              <div class="lt-form-row">
+                <div class="lt-form-field">
+                  <label class="lt-label">Versão:</label>
+                  <v-select
+                    v-model="versicle.id_bible_version"
+                    :items="vsVersionItems"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    style="min-width: 160px"
+                  />
+                </div>
+                <div class="lt-form-field lt-form-field--grow">
+                  <label class="lt-label">Livro:</label>
+                  <v-select
+                    v-model="versicle.id_bible_book"
+                    :items="vsBookItems"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                  />
+                </div>
+              </div>
+              <div class="lt-form-row" style="margin-top:10px">
+                <div class="lt-form-field">
+                  <label class="lt-label">Capítulo:</label>
+                  <v-select
+                    v-model="versicle.chapter"
+                    :items="vsChaptersList"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    style="min-width: 100px"
+                  />
+                </div>
+                <div class="lt-form-field lt-form-field--grow">
+                  <label class="lt-label">Versículos:</label>
+                  <v-select
+                    v-model="versicle.verses"
+                    :items="vsVersesList"
+                    multiple
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                  />
+                </div>
+              </div>
+              <div v-if="vsText" class="lt-verse-preview">{{ vsText }}</div>
+            </template>
+            <template v-else>
+              <div class="lt-section-lbl">TEXTO DO VERSÍCULO</div>
+              <label class="lt-label">Texto:</label>
+              <textarea v-model="form.text" class="lt-textarea" placeholder="Texto do versículo..." />
+            </template>
+          </template>
+
+          <!-- Mídia -->
+          <template v-else-if="form.type === 'midia'">
+            <div class="lt-section-lbl">MÍDIA (VÍDEO)</div>
+            <label class="lt-label">Arquivo local:</label>
+            <div class="lt-file-row">
+              <input :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
+              <button class="lt-btn-outline" @click="pickMediaFile">
+                <v-icon size="15">mdi-folder-open-outline</v-icon> Selecionar
+              </button>
+            </div>
+
+            <template v-if="videoPlaylist.length">
+              <div class="lt-section-lbl" style="margin-top:14px">OU ESCOLHER DA FILA DO VÍDEO</div>
+              <div class="lt-music-list">
+                <div
+                  v-for="v in videoPlaylist" :key="v.id"
+                  :class="['lt-music-row', { 'lt-music-row--sel': form.url === v.path }]"
+                  @click="pickFromVideoPlaylist(v)"
+                >
+                  <div class="lt-music-name">{{ v.name }}</div>
+                  <div class="lt-music-sub">{{ v.duration ? formatDur(Math.round(v.duration / 60)) : '' }}</div>
+                </div>
+              </div>
+            </template>
+          </template>
+
+          <!-- Link -->
+          <template v-else-if="form.type === 'link'">
+            <div class="lt-section-lbl">LINK</div>
+            <label class="lt-label">URL:</label>
+            <input v-model="form.url" class="lt-input lt-input--full" placeholder="https://..." />
+          </template>
         </v-card-text>
 
         <v-divider />
         <v-card-actions class="pa-3">
           <v-spacer />
           <v-btn variant="text" @click="addDialog = false">Cancelar</v-btn>
-          <v-btn color="primary" prepend-icon="mdi-plus" :disabled="!canAdd" @click="confirmAdd">
-            Adicionar item
+          <v-btn
+            v-if="dialogStep === 'form'"
+            color="primary"
+            :prepend-icon="dialogMode === 'edit' ? 'mdi-content-save' : 'mdi-plus'"
+            :disabled="!canAdd"
+            @click="dialogMode === 'edit' ? confirmEdit() : confirmAdd()"
+          >
+            {{ dialogMode === 'edit' ? 'Salvar' : 'Adicionar item' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── CONFIRMAR LIMPAR TUDO ─────────────────────────────────────────── -->
+    <v-dialog v-model="clearAllDialog" max-width="380" content-class="lt-confirm-dialog">
+      <v-card class="lt-confirm-card">
+        <div class="lt-confirm-header">
+          <span>Limpar Tudo</span>
+          <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" color="white" @click="clearAllDialog = false" />
+        </div>
+        <div class="lt-confirm-body">
+          <div class="lt-confirm-warning">
+            <v-avatar size="40" color="error" variant="tonal" class="flex-shrink-0">
+              <v-icon size="20">mdi-alert-circle-outline</v-icon>
+            </v-avatar>
+            <div class="lt-confirm-title">Apagar todos os itens de {{ currentTabLabel }}?</div>
+          </div>
+          <div class="lt-confirm-sub">Essa ação não pode ser desfeita.</div>
+          <div class="lt-confirm-actions">
+            <button class="lt-confirm-link" @click="clearAllDialog = false">
+              <v-icon size="16">mdi-close</v-icon> Cancelar
+            </button>
+            <button class="lt-confirm-link lt-confirm-link--danger" @click="doClearAll">
+              <v-icon size="16">mdi-delete-sweep-outline</v-icon> Apagar Tudo
+            </button>
+          </div>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── COPIAR ITENS PARA OUTROS DIAS ──────────────────────────────────── -->
+    <v-dialog v-model="copyDaysDialog" max-width="380">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-icon start size="16">mdi-content-copy</v-icon>
+          Copiar Itens para Outros Dias
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="copyDaysDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <div class="lt-copy-hint">
+            Selecione os dias para colar {{ copyClipboard.length }} item(ns) copiado(s) de {{ currentTabLabel }}:
+          </div>
+          <div class="lt-copy-days">
+            <label v-for="day in copyDaysOptions" :key="day.key" class="lt-copy-day-row">
+              <input
+                type="checkbox"
+                :checked="copyDaysTargets.includes(day.key)"
+                @change="toggleCopyTarget(day.key)"
+              />
+              {{ day.label }}
+            </label>
+          </div>
+          <label class="lt-copy-overwrite">
+            <input type="checkbox" v-model="copyDaysOverwrite" />
+            Sobrescrever todo o conteúdo dos dias selecionados
+          </label>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="copyDaysDialog = false">Cancelar</v-btn>
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-content-copy"
+            :disabled="!copyDaysTargets.length"
+            @click="confirmCopyToDays"
+          >
+            Copiar
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -351,6 +527,7 @@
 import manifest from '../manifest.json';
 import Window from '@/components/Window.vue';
 import MusicMenuTable from '@/components/MusicMenuTable.vue';
+import Draggable from 'vuedraggable';
 
 const DAYS = [
   { key: 'domingo', label: 'Domingo' },
@@ -365,42 +542,84 @@ const DAYS = [
 const FONTS = ['Tahoma', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana'];
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 
+const TYPES = [
+  { value: 'anotacao',  title: 'Anotação',  desc: 'Texto livre sem ação (ex: Oração, Doxologia)',  icon: 'mdi-text-long',                      color: '#42a5f5' },
+  { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
+  { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
+  { value: 'versiculo', title: 'Versículo', desc: 'Selecione um versículo bíblico',                 icon: 'mdi-book-open-page-variant-outline', color: '#8e24aa' },
+  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo',                  icon: 'mdi-file-video-outline',              color: '#fb8c00' },
+  { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
+];
+
 const TYPE_LABEL = {
   anotacao:  'Anotação',
-  arquivo:   'Arquivo/Diretório',
   categoria: 'Categoria',
-  agendados: 'Itens Agendados',
   musica:    'Música',
+  versiculo: 'Versículo',
+  midia:     'Mídia',
+  link:      'Link',
+  // legado — itens salvos antes do redesign do módulo
+  arquivo:   'Arquivo/Diretório',
   site:      'Site',
+  agendados: 'Itens Agendados',
 };
 
 const TYPE_ICON = {
-  anotacao:  'mdi-note-text-outline',
-  arquivo:   'mdi-folder-outline',
-  categoria: 'mdi-music-box-multiple-outline',
-  agendados: 'mdi-calendar-check-outline',
+  anotacao:  'mdi-text-long',
+  categoria: 'mdi-tag-outline',
   musica:    'mdi-music-note',
+  versiculo: 'mdi-book-open-page-variant-outline',
+  midia:     'mdi-file-video-outline',
+  link:      'mdi-link-variant',
+  arquivo:   'mdi-folder-outline',
   site:      'mdi-web',
+  agendados: 'mdi-calendar-check-outline',
 };
 
+let _idSeq = 0;
+function newId() {
+  _idSeq += 1;
+  return `${Date.now()}_${_idSeq}`;
+}
+
 function emptyForm() {
-  return { type: 'anotacao', name: '', color: '#1a237e', duration: 0, text: '', url: '', id_music: null, has_instrumental_music: false };
+  return { type: '', name: '', color: '#1a237e', duration: 0, text: '', url: '', id_music: null, has_instrumental_music: false };
+}
+
+function emptyVersicle() {
+  return { id_bible_version: null, id_bible_book: null, chapter: null, verses: [] };
 }
 
 export default {
   name: 'LiturgiaModule',
-  components: { Window, MusicMenuTable },
+  components: { Window, MusicMenuTable, Draggable },
 
   data: () => ({
     DAYS,
     FONTS,
     SIZES,
+    TYPES,
 
-    addDialog:    false,
-    form:         emptyForm(),
-    musicSearch:  '',
-    musicLoading: false,
-    allMusics:    [],
+    addDialog:     false,
+    dialogMode:    'add',   // 'add' | 'edit'
+    dialogStep:    'type',  // 'type' | 'form'
+    editingIndex:  null,
+    clearAllDialog: false,
+    listDragOver:  false,
+    copyDaysDialog:    false,
+    copyDaysTargets:   [],
+    copyDaysOverwrite: false,
+    copyClipboard:     [],
+    form:          emptyForm(),
+    musicSearch:   '',
+    musicLoading:  false,
+    allMusics:     [],
+
+    versicle:    emptyVersicle(),
+    vsVersions:  [],
+    vsBooks:     [],
+    vsVerseMap:  {},
+    vsLoading:   false,
 
     nFont:   'Tahoma',
     nSize:   12,
@@ -423,7 +642,7 @@ export default {
       set(v) { this.$userdata.set('modules.liturgia.currentDay', v); },
     },
     currentDayLabel() { return DAYS.find(d => d.key === this.currentDay)?.label || ''; },
-    currentDayUpper() { return this.currentDayLabel.toUpperCase(); },
+    currentTabLabel() { return this.currentDay === 'avulsa' ? 'Avulsa' : this.currentDayLabel; },
 
     dayItems: {
       get() { return this.$userdata.get(`modules.liturgia.days.${this.currentDay}.items`) || []; },
@@ -435,6 +654,9 @@ export default {
     },
 
     hasSelected() { return this.dayItems.some(i => i.selected); },
+    copyDaysOptions() {
+      return [...DAYS, { key: 'avulsa', label: 'Avulsa' }].filter(d => d.key !== this.currentDay);
+    },
 
     totalTime() {
       return this.dayItems.reduce((s, i) => s + (Number(i.duration) || 0), 0);
@@ -466,14 +688,63 @@ export default {
         .slice(0, 60);
     },
 
+    currentTypeConfig() {
+      return this.TYPES.find(t => t.value === this.form.type);
+    },
+
     canAdd() {
-      return this.form.type === 'musica' ? !!this.form.id_music : !!this.form.name.trim();
+      if (this.form.type === 'musica') return !!this.form.id_music;
+      if (this.form.type === 'versiculo' && this.dialogMode === 'add') return this.versicle.verses.length > 0;
+      return !!this.form.name.trim();
+    },
+
+    // Fila do módulo Vídeo — permite escolher um vídeo já adicionado lá em
+    // vez de procurar o arquivo local de novo.
+    videoPlaylist() { return this.$videoPlayer.getPlaylist(); },
+
+    /* ── versículo ── */
+    vsBook()    { return this.vsBooks.find(b => b.id_bible_book === this.versicle.id_bible_book); },
+    vsVersion() { return this.vsVersions.find(v => v.id_bible_version === this.versicle.id_bible_version); },
+
+    vsVersionItems() {
+      return this.vsVersions.map(v => ({ title: `${v.abbreviation} - ${v.name}`, value: v.id_bible_version }));
+    },
+    vsBookItems() {
+      return this.vsBooks.map(b => ({ title: b.name, value: b.id_bible_book }));
+    },
+    vsChaptersList() {
+      if (!this.vsBook) return [];
+      return Array.from({ length: this.vsBook.chapters }, (_, i) => ({ title: String(i + 1), value: i + 1 }));
+    },
+    vsVersesList() {
+      return Object.keys(this.vsVerseMap)
+        .map(n => ({ title: n, value: +n }))
+        .sort((a, b) => a.value - b.value);
+    },
+    vsReference() {
+      if (!this.vsBook || !this.versicle.chapter) return '';
+      const interval = this.numbersInterval([...this.versicle.verses]);
+      const abbrev = this.vsVersion ? ` (${this.vsVersion.abbreviation})` : '';
+      return `${this.vsBook.name} ${this.versicle.chapter}${interval ? `:${interval}` : ''}${abbrev}`;
+    },
+    vsText() {
+      return [...this.versicle.verses]
+        .sort((a, b) => a - b)
+        .map(n => this.vsVerseMap[n])
+        .filter(Boolean)
+        .join(' ');
     },
   },
 
   watch: {
     addDialog(v) {
       if (v && !this.allMusics.length) this.loadMusics();
+    },
+    'versicle.id_bible_version'() { this.versicle.verses = []; this.loadVerses(); },
+    'versicle.id_bible_book'()    { this.versicle.chapter = 1; this.versicle.verses = []; this.loadVerses(); },
+    'versicle.chapter'()          { this.versicle.verses = []; this.loadVerses(); },
+    vsReference(v) {
+      if (this.dialogMode === 'add' && this.form.type === 'versiculo') this.form.name = v;
     },
   },
 
@@ -530,19 +801,129 @@ export default {
       this.form.duration = sec ? Math.ceil(sec / 60) : 0;
     },
 
-    openAdd()    { this.addDialog = true; },
-    resetForm()  { this.form = emptyForm(); this.musicSearch = ''; },
+    /* ── bíblia / versículo ── */
+    async loadBibleMeta() {
+      if (this.vsVersions.length && this.vsBooks.length) return;
+      this.vsLoading = true;
+      try {
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        this.vsVersions = (await this.$database.get(`${locale}_bible_version`)) || [];
+        this.vsBooks = (await this.$database.get(`${locale}_bible_book`)) || [];
+        if (!this.versicle.id_bible_version && this.vsVersions[0]) this.versicle.id_bible_version = this.vsVersions[0].id_bible_version;
+        if (!this.versicle.id_bible_book && this.vsBooks[0]) this.versicle.id_bible_book = this.vsBooks[0].id_bible_book;
+        if (!this.versicle.chapter) this.versicle.chapter = 1;
+      } catch (_) {
+        this.vsVersions = [];
+        this.vsBooks = [];
+      } finally {
+        this.vsLoading = false;
+      }
+    },
+    async loadVerses() {
+      if (!this.versicle.id_bible_version || !this.versicle.id_bible_book || !this.versicle.chapter) {
+        this.vsVerseMap = {};
+        return;
+      }
+      this.vsLoading = true;
+      try {
+        this.vsVerseMap = (await this.$database.get(
+          `bible_${this.versicle.id_bible_version}_${this.versicle.id_bible_book}_${this.versicle.chapter}`
+        )) || {};
+      } catch (_) {
+        this.vsVerseMap = {};
+      } finally {
+        this.vsLoading = false;
+      }
+    },
+    numbersInterval(numbers) {
+      if (!numbers || numbers.length === 0) return '';
+      numbers.sort((a, b) => a - b);
+      const result = [];
+      let start = numbers[0];
+      let end = numbers[0];
+      for (let i = 1; i <= numbers.length; i++) {
+        if (numbers[i] === end + 1) {
+          end = numbers[i];
+        } else {
+          result.push(start === end ? `${start}` : `${start}-${end}`);
+          start = numbers[i];
+          end = numbers[i];
+        }
+      }
+      return result.join(', ');
+    },
+
+    /* ── mídia ── */
+    async pickMediaFile() {
+      const fp = await this.$electron.selectFile({
+        title: 'Selecionar arquivo de vídeo',
+        filters: [{ name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] }],
+      });
+      if (fp) {
+        this.form.url = fp;
+        if (!this.form.name.trim()) {
+          this.form.name = fp.split(/[\\/]/).pop() || '';
+        }
+      }
+    },
+    pickFromVideoPlaylist(v) {
+      this.form.url = v.path;
+      this.form.name = v.name;
+      if (v.duration) this.form.duration = Math.round(v.duration / 60);
+    },
+
+    /* ── dialog add/edit ── */
+    openAdd() {
+      this.dialogMode = 'add';
+      this.editingIndex = null;
+      this.dialogStep = 'type';
+      this.addDialog = true;
+    },
+    openEdit(idx) {
+      const item = this.dayItems[idx];
+      this.dialogMode = 'edit';
+      this.editingIndex = idx;
+      this.form = {
+        type: item.type,
+        name: item.name,
+        color: item.color || '#1a237e',
+        duration: item.duration || 0,
+        text: item.text || '',
+        url: item.url || '',
+        id_music: item.id_music || null,
+        has_instrumental_music: !!item.has_instrumental_music,
+      };
+      this.musicSearch = item.type === 'musica' ? item.name : '';
+      this.dialogStep = 'form';
+      this.addDialog = true;
+    },
+    chooseType(value) {
+      this.form.type = value;
+      this.dialogStep = 'form';
+      if (value === 'musica' && !this.allMusics.length) this.loadMusics();
+      if (value === 'versiculo') this.loadBibleMeta();
+    },
+    resetForm() {
+      this.form = emptyForm();
+      this.musicSearch = '';
+      this.dialogMode = 'add';
+      this.dialogStep = 'type';
+      this.editingIndex = null;
+      this.versicle = emptyVersicle();
+      this.vsVerseMap = {};
+    },
 
     confirmAdd() {
       if (!this.canAdd) return;
       const { type, name, color, duration, text, url, id_music, has_instrumental_music } = this.form;
+      const finalText = type === 'versiculo' ? this.vsText : text;
       this.dayItems = [...this.dayItems, {
         id:                    Date.now(),
         type,
         name:                  name.trim(),
         color:                 color || '#1a237e',
         duration:              Number(duration) || 0,
-        text:                  text || '',
+        text:                  finalText || '',
         url:                   url  || '',
         id_music:              id_music || null,
         has_instrumental_music: !!has_instrumental_music,
@@ -552,22 +933,28 @@ export default {
       }];
       this.addDialog = false;
     },
+    confirmEdit() {
+      if (!this.canAdd || this.editingIndex === null) return;
+      const { type, name, color, duration, text, url, id_music, has_instrumental_music } = this.form;
+      const l = [...this.dayItems];
+      l[this.editingIndex] = {
+        ...l[this.editingIndex],
+        type,
+        name:                  name.trim(),
+        color:                 color || '#1a237e',
+        duration:              Number(duration) || 0,
+        text:                  text || '',
+        url:                   url  || '',
+        id_music:              id_music || null,
+        has_instrumental_music: !!has_instrumental_music,
+      };
+      this.dayItems = l;
+      this.addDialog = false;
+    },
 
     /* ── item row ── */
     removeItem(idx) {
       const l = [...this.dayItems]; l.splice(idx, 1); this.dayItems = l;
-    },
-    moveUp(idx) {
-      if (idx === 0) return;
-      const l = [...this.dayItems];
-      [l[idx - 1], l[idx]] = [l[idx], l[idx - 1]];
-      this.dayItems = l;
-    },
-    moveDown(idx) {
-      const l = [...this.dayItems];
-      if (idx >= l.length - 1) return;
-      [l[idx], l[idx + 1]] = [l[idx + 1], l[idx]];
-      this.dayItems = l;
     },
     toggleSelect(idx) {
       const l = [...this.dayItems];
@@ -579,8 +966,20 @@ export default {
       l[idx] = { ...l[idx], selected: v };
       this.dayItems = l;
     },
+    toggleDone(idx) {
+      const l = [...this.dayItems];
+      l[idx] = { ...l[idx], done: !l[idx].done };
+      this.dayItems = l;
+    },
+    isPlayable(item) {
+      return (item.type === 'musica' && !!item.id_music)
+        || (item.type === 'midia' && !!item.url)
+        || (item.type === 'link' && !!item.url);
+    },
     playItem(item) {
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
+      else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name);
+      else if (item.type === 'link' && item.url) this.$electron.openExternal(item.url);
     },
 
     /* ── toolbar ── */
@@ -594,6 +993,66 @@ export default {
       const item = this.dayItems.find(i => i.selected && i.type === 'musica') ||
                    this.dayItems.find(i => i.type === 'musica');
       if (item) this.$media.open({ id_music: item.id_music, mode: 'audio' });
+    },
+    confirmClearAll() {
+      if (!this.dayItems.length) return;
+      this.clearAllDialog = true;
+    },
+    doClearAll() {
+      this.dayItems = [];
+      this.clearAllDialog = false;
+    },
+
+    /* ── arrastar e soltar arquivo (vira item de Mídia) ── */
+    onDropFiles(e) {
+      this.listDragOver = false;
+      const files = [...(e.dataTransfer?.files || [])];
+      if (!files.length) return;
+      const newItems = files.map(f => {
+        const fp = this.$electron.getPathForFile(f);
+        if (!fp) return null;
+        return {
+          id: newId(),
+          type: 'midia',
+          name: f.name.replace(/\.[^./\\]+$/, '') || f.name,
+          color: '#fb8c00',
+          duration: 0,
+          text: '',
+          url: fp,
+          id_music: null,
+          has_instrumental_music: false,
+          selected: false,
+          done: false,
+          locked: false,
+        };
+      }).filter(Boolean);
+      if (newItems.length) this.dayItems = [...this.dayItems, ...newItems];
+    },
+
+    /* ── copiar itens (selecionados ou um único item da linha) para outros dias ── */
+    openCopyToDays(items = null) {
+      const sourceItems = items || this.dayItems.filter(i => i.selected);
+      if (!sourceItems.length) return;
+      this.copyClipboard = sourceItems;
+      this.copyDaysTargets = this.copyDaysOptions.map(d => d.key);
+      this.copyDaysOverwrite = false;
+      this.copyDaysDialog = true;
+    },
+    toggleCopyTarget(key) {
+      const idx = this.copyDaysTargets.indexOf(key);
+      if (idx >= 0) this.copyDaysTargets.splice(idx, 1);
+      else this.copyDaysTargets.push(key);
+    },
+    confirmCopyToDays() {
+      const sourceItems = this.copyClipboard;
+      if (!sourceItems.length || !this.copyDaysTargets.length) { this.copyDaysDialog = false; return; }
+      this.copyDaysTargets.forEach(dayKey => {
+        const path = `modules.liturgia.days.${dayKey}.items`;
+        const existing = this.copyDaysOverwrite ? [] : (this.$userdata.get(path) || []);
+        const clones = sourceItems.map(i => ({ ...i, id: newId(), selected: false, done: false }));
+        this.$userdata.set(path, [...existing, ...clones]);
+      });
+      this.copyDaysDialog = false;
     },
   },
 };
@@ -615,89 +1074,12 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 
-/* ── Ribbon ── */
-.lt-ribbon {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  padding: 3px 6px 0;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.lt-group {
-  display: flex;
-  flex-direction: column;
-  padding: 0 4px 2px;
-}
-.lt-group-body {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  gap: 2px;
-}
-.lt-group-body--col {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 1px;
-}
-.lt-group-label {
-  font-size: 10px;
-  color: rgba(var(--v-theme-on-surface), 0.38);
-  text-align: center;
-  padding-top: 2px;
-  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  margin-top: 2px;
-}
-
-.lt-sep {
-  width: 1px;
-  background: rgba(var(--v-border-color), var(--v-border-opacity));
-  margin: 2px 3px 4px;
-  align-self: stretch;
-}
-
-.lt-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px 10px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: none;
-  cursor: pointer;
-  font-size: 11px;
-  line-height: 1.3;
-  color: rgb(var(--v-theme-on-surface));
-  text-align: center;
-  transition: background 0.15s;
-  min-width: 56px;
-}
-.lt-btn:hover:not(:disabled) {
-  background: rgba(var(--v-theme-on-surface), 0.08);
-  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
-}
-.lt-btn:disabled { opacity: 0.38; cursor: default; }
-.lt-btn--large { min-height: 50px; }
-.lt-btn--danger { color: #c62828; }
-.v-theme--dark .lt-btn--danger { color: #ef9a9a; }
-.lt-btn--sm {
-  flex-direction: row;
-  gap: 5px;
-  padding: 3px 6px;
-  min-width: 0;
-  justify-content: flex-start;
-  white-space: nowrap;
-}
-
 /* ── Day tabs ── */
 .lt-days {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   flex-shrink: 0;
   overflow-x: auto;
@@ -708,48 +1090,89 @@ export default {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 16px;
+  padding: 6px 14px;
   border: none;
-  border-right: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
-  background: none;
+  border-radius: 20px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   cursor: pointer;
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   white-space: nowrap;
   transition: background 0.12s, color 0.12s;
 }
-.lt-day:hover:not(.lt-day--active) { background: rgba(var(--v-theme-on-surface), 0.05); }
+.lt-day:hover:not(.lt-day--active) { background: rgba(var(--v-theme-on-surface), 0.1); }
 .lt-day--active {
-  background: rgba(230, 81, 0, 0.08);
-  color: #e65100;
-  border-bottom: 2px solid #e65100;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
   font-weight: 600;
-}
-.v-theme--dark .lt-day--active {
-  background: rgba(255, 183, 77, 0.10);
-  color: #ffb74d;
-  border-bottom-color: #ffb74d;
 }
 
 /* Sábado — destaque especial */
-.lt-day--sabado {
-  color: #7c3aed;
-}
-.lt-day--sabado .lt-day-icon { color: #7c3aed !important; }
-.v-theme--dark .lt-day--sabado { color: #c4b5fd; }
-.v-theme--dark .lt-day--sabado .lt-day-icon { color: #c4b5fd !important; }
-.lt-day--sabado.lt-day--active {
-  background: rgba(124, 58, 237, 0.08);
-  color: #7c3aed;
-  border-bottom-color: #7c3aed;
-}
-.v-theme--dark .lt-day--sabado.lt-day--active {
-  background: rgba(196, 181, 253, 0.10);
-  color: #c4b5fd;
-  border-bottom-color: #c4b5fd;
-}
+.lt-day--sabado:not(.lt-day--active) { color: #b8860b; }
+.v-theme--dark .lt-day--sabado:not(.lt-day--active) { color: #ffd54f; }
+.lt-day--sabado.lt-day--active { background: #d4af37; color: #3a2c00; }
+.v-theme--dark .lt-day--sabado.lt-day--active { background: #ffd54f; color: #1a1a2e; }
 
-.lt-day-icon { opacity: 0.75; }
+.lt-days-sep {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  margin: 2px 4px;
+}
+.lt-day--avulsa:not(.lt-day--active) { color: rgba(var(--v-theme-on-surface), 0.5); }
+
+/* ── Toolbar ── */
+.lt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  flex-shrink: 0;
+  gap: 10px;
+}
+.lt-toolbar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
+}
+.lt-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.lt-btn-outline, .lt-btn-primary, .lt-btn-icon {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.lt-btn-outline {
+  padding: 6px 12px;
+  background: transparent;
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgb(var(--v-theme-on-surface));
+}
+.lt-btn-outline:hover:not(:disabled) { background: rgba(var(--v-theme-on-surface), 0.06); }
+.lt-btn-outline--danger { color: #e53935; border-color: rgba(229, 57, 53, 0.4); }
+.v-theme--dark .lt-btn-outline--danger { color: #ef9a9a; border-color: rgba(239, 154, 154, 0.35); }
+.lt-btn-outline:disabled, .lt-btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+.lt-btn-primary {
+  padding: 6px 14px;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+}
+.lt-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.lt-btn-icon {
+  padding: 6px;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+.lt-btn-icon:hover { background: rgba(var(--v-theme-on-surface), 0.08); }
 
 /* ── Body ── */
 .lt-body { display: flex; flex: 1; overflow: hidden; }
@@ -759,6 +1182,12 @@ export default {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  transition: background 0.12s, outline-color 0.12s;
+}
+.lt-content--dragover {
+  outline: 2px dashed rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+  background: rgba(var(--v-theme-primary), 0.06);
 }
 
 /* Empty */
@@ -808,7 +1237,7 @@ export default {
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.6));
   cursor: pointer;
   transition: background 0.1s;
-  min-height: 40px;
+  min-height: 44px;
 }
 .lt-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
 .lt-item--selected { background: rgba(var(--v-theme-primary), 0.08) !important; }
@@ -816,12 +1245,61 @@ export default {
 
 .lt-item-stripe { width: 4px; align-self: stretch; flex-shrink: 0; }
 
-.lt-item-check {
-  margin: 0 8px;
-  cursor: pointer;
+.lt-drag-handle {
+  cursor: grab;
+  opacity: 0.35;
+  margin: 0 4px 0 8px;
   flex-shrink: 0;
+}
+.lt-drag-handle:active { cursor: grabbing; }
+.lt-item:hover .lt-drag-handle { opacity: 0.7; }
+
+.lt-item-badge {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lt-badge-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lt-badge-check {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: none;
+  cursor: pointer;
   accent-color: rgb(var(--v-theme-primary));
 }
+.lt-item:hover .lt-badge-num,
+.lt-item--selected .lt-badge-num { display: none; }
+.lt-item:hover .lt-badge-check,
+.lt-item--selected .lt-badge-check { display: block; }
+
+.lt-status-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.lt-status-off { color: rgba(var(--v-theme-on-surface), 0.3); }
 
 .lt-item-icon-badge {
   width: 32px;
@@ -873,6 +1351,7 @@ export default {
 .lt-row-btn:disabled { opacity: 0.25; cursor: default; }
 .lt-row-btn--del  { color: #e53935; }
 .v-theme--dark .lt-row-btn--del { color: #ef9a9a; }
+.lt-row-btn--play { color: rgb(var(--v-theme-primary)); }
 
 /* MusicMenuTable dentro do item da liturgia — mesmo estilo do álbum */
 .lt-item-music-menu { display: flex; align-items: center; }
@@ -881,7 +1360,7 @@ export default {
 
 /* ── Notes panel ── */
 .lt-notes {
-  width: 220px;
+  width: 240px;
   border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   flex-direction: column;
@@ -1093,5 +1572,144 @@ export default {
   text-align: center;
   color: rgba(var(--v-theme-on-surface), 0.38);
   font-size: 12px;
+}
+
+/* ── Type picker (passo 1) ── */
+.lt-type-list { display: flex; flex-direction: column; gap: 6px; }
+.lt-type-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.lt-type-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); border-color: rgba(var(--v-theme-primary), 0.4); }
+.lt-type-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.lt-type-info { flex: 1; min-width: 0; }
+.lt-type-title { font-size: 13.5px; font-weight: 600; color: rgb(var(--v-theme-on-surface)); }
+.lt-type-desc { font-size: 11.5px; color: rgba(var(--v-theme-on-surface), 0.55); }
+.lt-type-chevron { opacity: 0.4; flex-shrink: 0; }
+
+/* ── Versículo / Mídia ── */
+.lt-verse-preview {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.lt-file-row { display: flex; gap: 8px; align-items: center; }
+.lt-file-row .lt-input { flex: 1; }
+.lt-file-row .lt-btn-outline { flex-shrink: 0; }
+
+/* ── Confirmar Limpar Tudo ── */
+.lt-confirm-card {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.lt-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #0891b2;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+.lt-confirm-body { padding: 18px 18px 8px; }
+.lt-confirm-warning { display: flex; align-items: center; gap: 12px; }
+.lt-confirm-title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #b91c1c;
+}
+.v-theme--dark .lt-confirm-title { color: #f87171; }
+.lt-confirm-sub {
+  font-size: 12.5px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin: 8px 0 4px 52px;
+}
+
+.lt-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+.lt-confirm-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 4px;
+  border: none;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: none;
+  cursor: pointer;
+  font-size: 13.5px;
+  text-align: left;
+  color: rgb(var(--v-theme-primary));
+  transition: background 0.12s;
+}
+.lt-confirm-link:last-child { border-bottom: none; }
+.lt-confirm-link:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.lt-confirm-link--danger { color: #e53935; }
+
+/* ── Copiar para outros dias ── */
+.lt-copy-hint {
+  font-size: 12.5px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin-bottom: 10px;
+}
+.lt-copy-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.lt-copy-day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: rgb(var(--v-theme-on-surface));
+}
+.lt-copy-overwrite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  cursor: pointer;
+}
+.lt-copy-day-row input,
+.lt-copy-overwrite input {
+  accent-color: rgb(var(--v-theme-primary));
+  cursor: pointer;
 }
 </style>
