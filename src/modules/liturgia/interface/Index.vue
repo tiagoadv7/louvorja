@@ -407,12 +407,12 @@
 
           <!-- Mídia -->
           <template v-else-if="form.type === 'midia'">
-            <div class="lt-section-lbl">MÍDIA (VÍDEO OU IMAGEM)</div>
+            <div class="lt-section-lbl">MÍDIA (VÍDEO, IMAGEM OU ÁUDIO)</div>
             <label class="lt-label">Arquivo local:</label>
             <div class="lt-file-row">
               <input :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
               <button class="lt-btn-outline" @click="pickMediaFile">
-                <v-icon size="15">mdi-folder-open-outline</v-icon> Selecionar
+                <v-icon size="15">mdi-magnify</v-icon> Selecionar
               </button>
             </div>
 
@@ -557,7 +557,7 @@ const TYPES = [
   { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
   { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
   { value: 'versiculo', title: 'Versículo', desc: 'Selecione um versículo bíblico',                 icon: 'mdi-book-open-page-variant-outline', color: '#8e24aa' },
-  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo ou imagem',        icon: 'mdi-file-video-outline',              color: '#fb8c00' },
+  { value: 'midia',     title: 'Mídia',     desc: 'Selecione um arquivo de vídeo, imagem ou áudio', icon: 'mdi-file-video-outline',              color: '#fb8c00' },
   { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
 ];
 
@@ -894,14 +894,17 @@ export default {
 
     typeLabel(t) { return TYPE_LABEL[t] || t; },
     typeIcon(t)  { return TYPE_ICON[t]  || 'mdi-circle-outline'; },
-    // "midia" cobre vídeo e imagem — distingue pelo ícone/rótulo conforme a
-    // extensão do arquivo, sem precisar de um tipo de item separado.
+    // "midia" cobre vídeo e imagem, e "arquivo" cobre áudio local (toca no
+    // SoundMaster) — distingue o ícone/rótulo pela extensão do arquivo, sem
+    // precisar de um tipo de item separado para cada mídia.
     itemIcon(item) {
       if (item.type === 'midia' && isImageFile(item.url)) return 'mdi-image-outline';
+      if (item.type === 'arquivo' && isAudioFile(item.url)) return 'mdi-music-note';
       return this.typeIcon(item.type);
     },
     itemTypeLabel(item) {
       if (item.type === 'midia' && isImageFile(item.url)) return 'Imagem';
+      if (item.type === 'arquivo' && isAudioFile(item.url)) return 'Áudio';
       return this.typeLabel(item.type);
     },
     formatDur(m) {
@@ -991,11 +994,15 @@ export default {
     /* ── mídia ── */
     async pickMediaFile() {
       const fp = await this.$electron.selectFile({
-        title: 'Selecionar arquivo de vídeo ou imagem',
+        title: 'Selecionar arquivo de vídeo, imagem ou áudio',
         filters: [
-          { name: 'Vídeo ou Imagem', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          {
+            name: 'Vídeo, Imagem ou Áudio',
+            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
+          },
           { name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] },
           { name: 'Imagem', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          { name: 'Áudio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'] },
         ],
       });
       if (fp) {
@@ -1058,7 +1065,7 @@ export default {
       const finalText = type === 'versiculo' ? this.vsText : text;
       this.dayItems = [...this.dayItems, {
         id:                    Date.now(),
-        type,
+        type:                  this.resolvedType(type, url),
         name:                  name.trim(),
         color:                 color || '#1a237e',
         duration:              Number(duration) || 0,
@@ -1078,7 +1085,7 @@ export default {
       const l = [...this.dayItems];
       l[this.editingIndex] = {
         ...l[this.editingIndex],
-        type,
+        type:                  this.resolvedType(type, url),
         name:                  name.trim(),
         color:                 color || '#1a237e',
         duration:              Number(duration) || 0,
@@ -1115,6 +1122,14 @@ export default {
         || (item.type === 'midia' && !!item.url)
         || (item.type === 'link' && !!item.url)
         || (item.type === 'arquivo' && !!item.url && isAudioFile(item.url));
+    },
+    // O tipo "midia" cobre vídeo/imagem (toca no video_player); áudio local
+    // toca no SoundMaster e por isso é salvo como "arquivo" — mesma regra já
+    // usada no drag-and-drop (onDropFiles), agora aplicada também ao arquivo
+    // escolhido pelo botão "Selecionar" no formulário de Mídia.
+    resolvedType(type, url) {
+      if (type === 'midia' && isAudioFile(url)) return 'arquivo';
+      return type;
     },
     playItem(item) {
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
