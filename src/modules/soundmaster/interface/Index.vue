@@ -160,11 +160,6 @@
               />
             </template>
           </v-tooltip>
-          <v-tooltip v-if="_mediaDuck" location="top" text="Volume reduzido — áudio do álbum em reprodução">
-            <template #activator="{ props }">
-              <v-icon v-bind="props" size="14" color="warning" class="ml-1" style="opacity:0.7">mdi-music-note-plus</v-icon>
-            </template>
-          </v-tooltip>
           <v-icon size="16" class="ml-2 mr-1" style="opacity:0.4">mdi-volume-high</v-icon>
           <div class="sm-vol-track" @click="setMasterVol">
             <div class="sm-vol-fill" :style="{ width: (masterVolume * 100) + '%' }" />
@@ -223,7 +218,6 @@ export default {
     isPlaying:     false,
     dragOverId:    null,
     showSettings:  false,
-    _mediaDuck:    false,
     _mainAudio:    null,
     _fxAudios:     {},
     _fades:        {},
@@ -245,9 +239,6 @@ export default {
     activeTrackName() {
       return this.mainPads.find(p => p.id === this.activeMainId)?.name || '';
     },
-    mediaPlaying() {
-      return !!this.$appdata.get('modules.media.show') && !this.$appdata.get('modules.media.config.is_paused');
-    },
     // Comando externo (ex.: $soundMaster.play() chamado pela Liturgia) para tocar
     // um arquivo direto num pad. Vive em $appdata (não no estado local dos pads)
     // porque outros módulos não têm acesso à instância deste componente.
@@ -257,13 +248,6 @@ export default {
   },
 
   watch: {
-    mediaPlaying(nowPlaying) {
-      this._mediaDuck = nowPlaying;
-      if (!this._mainAudio) return;
-      const pad = this.mainPads.find(p => p.id === this.activeMainId);
-      const target = this.effVol(pad?.volume ?? 1, true);
-      this.fade('main', this._mainAudio, this._mainAudio.volume, target, 1000);
-    },
     // immediate: cobre tanto o caso em que o módulo já estava aberto quando o
     // pedido chegou quanto o caso em que $modules.open() acabou de montar o
     // componente agora (o comando já estava em appdata antes do watch existir).
@@ -347,7 +331,7 @@ export default {
     effVol(padVol, isMain) {
       if (this.isMuted) return 0;
       let v = padVol * this.masterVolume;
-      if (isMain && (this.activeFxIds.size > 0 || this.isTalkover || this._mediaDuck)) v *= this.duckingLevel;
+      if (isMain && (this.activeFxIds.size > 0 || this.isTalkover)) v *= this.duckingLevel;
       return Math.max(0, Math.min(1, v));
     },
 
