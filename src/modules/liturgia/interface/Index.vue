@@ -287,6 +287,7 @@
 
         <!-- STEP 2: formulário do tipo -->
         <v-card-text v-else class="pa-4">
+          <form @submit.prevent="submitForm">
           <!-- Linha 1: Nome -->
           <div class="lt-form-row">
             <div class="lt-form-field lt-form-field--grow">
@@ -437,6 +438,13 @@
             <label class="lt-label">URL:</label>
             <input v-model="form.url" class="lt-input lt-input--full" placeholder="https://..." />
           </template>
+
+          <!-- Botão de submit invisível: com múltiplos campos de texto, o
+               Enter só dispara o submit do <form> nativo se ele tiver um
+               botão de submit — o botão visível real fica em v-card-actions,
+               fora do <form>, então esse aqui só existe pra habilitar o Enter. -->
+          <button type="submit" style="display:none" aria-hidden="true" />
+          </form>
         </v-card-text>
 
         <v-divider />
@@ -448,7 +456,7 @@
             color="primary"
             :prepend-icon="dialogMode === 'edit' ? 'mdi-content-save' : 'mdi-plus'"
             :disabled="!canAdd"
-            @click="dialogMode === 'edit' ? confirmEdit() : confirmAdd()"
+            @click="submitForm"
           >
             {{ dialogMode === 'edit' ? 'Salvar' : 'Adicionar item' }}
           </v-btn>
@@ -1064,6 +1072,15 @@ export default {
       this.editingIndex = null;
       this.versicle = emptyVersicle();
       this.vsVerseMap = {};
+    },
+
+    // Enter em qualquer campo de texto do formulário (steps de add/editar item)
+    // dispara o submit do <form> nativo, que cai aqui — mesma ação do botão
+    // "Adicionar item"/"Salvar", sem precisar clicar.
+    submitForm() {
+      if (!this.canAdd) return;
+      if (this.dialogMode === 'edit') this.confirmEdit();
+      else this.confirmAdd();
     },
 
     confirmAdd() {

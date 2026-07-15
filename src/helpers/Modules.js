@@ -9,6 +9,9 @@ export default {
     }
     $dev.write("open", id);
     $appdata.set(`modules.${id}.show`, true);
+    // Reabrir (ex.: clique no ícone da tray) sai do estado "minimizado" —
+    // ver comentário em minimize() sobre por que esse campo existe.
+    $appdata.set(`modules.${id}.minimized`, false);
   },
   close(id) {
     if (!this.check(id)) {
@@ -17,6 +20,11 @@ export default {
     }
     $dev.write("close", id);
     $appdata.set(`modules.${id}.show`, false);
+    // Fechar de vez (diferente de minimizar) — qualquer módulo com janela de
+    // saída (ex. video_player) que use "show || minimized" pra decidir se
+    // deve continuar ativo na projeção precisa que isso vire false aqui,
+    // senão o close nunca encerra a projeção depois de um minimize anterior.
+    $appdata.set(`modules.${id}.minimized`, false);
 
     //Remove da TrayArea
     this.removeTray(id);
@@ -36,6 +44,10 @@ export default {
     }
     $dev.write("minimize", id);
     $appdata.set(`modules.${id}.show`, false);
+    // "minimized" (distinto de "show") existe pra módulos com janela de saída
+    // continuarem ativos na projeção mesmo com o painel do operador escondido
+    // — ver modules.video_player.minimized em video_player/interface/Popup.vue.
+    $appdata.set(`modules.${id}.minimized`, true);
 
     //Adiciona na TrayArea
     this.addTray(id);
