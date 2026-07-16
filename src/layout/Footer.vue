@@ -1,6 +1,8 @@
 <template>
   <v-footer id="footer-bar" class="pa-0" color="primary">
     <l-player v-if="$media.isMinimized()" location="footer" />
+    <l-player v-else-if="videoActive" location="footer" source="video" />
+    <l-player v-else-if="soundmasterActive" location="footer" source="soundmaster" />
     <v-row v-else class="ma-0 pa-0 align-center">
       <span class="text-caption pa-1">Versão {{ version }}</span>
       <v-spacer />
@@ -35,6 +37,16 @@ export default {
   computed: {
     version() {
       return packageJson.version + "." + this.db_version;
+    },
+    // Módulo Vídeo minimizado com algo carregado → mostra na barra do rodapé
+    // (mesmo lugar/estilo da barra do player de mídia), com o controle de
+    // play/pause e o mini player flutuante (PIP) acessíveis sem reabrir o painel.
+    videoActive() {
+      return this.$videoPlayer.isMinimized() && !!this.$videoPlayer.getConfig().src;
+    },
+    // SoundMaster (coletânea) minimizado e tocando/pausado algo
+    soundmasterActive() {
+      return this.$soundMaster.isMinimized() && !!this.$soundMaster.nowPlaying().name;
     },
   },
   methods: {

@@ -1,6 +1,7 @@
 import $appdata from "@/helpers/AppData";
 import $popup from "@/helpers/Popup";
 import $modules from "@/helpers/Modules";
+import $audioBus from "@/helpers/AudioBus";
 
 // Lógica compartilhada do módulo Vídeo (fila/playlist + config de reprodução),
 // para que outros módulos (ex. Liturgia) possam adicionar/tocar vídeos no
@@ -124,15 +125,74 @@ export default {
     if (!alreadyOpen) $popup.open("video_player");
   },
 
-  // Carrega o item sem tocar (usado ao clicar num item da lista para selecioná-lo).
+  isMinimized() {
+    return $appdata.get("modules.video_player.minimized", false);
+  },
+  maximize() {
+    $modules.open("video_player");
+  },
+
+  // Centralizados aqui (em vez de só no Index.vue) para a barra do rodapé
+  // poder reutilizar exatamente a mesma lógica de play/pause/parar.
+  togglePlay() {
+    if (!this.getConfig().src) return;
+    const playing = !this.getConfig().isPlaying;
+    if (playing) this.ensureOutputShowing();
+    this.setConfig({ isPlaying: playing });
+  },
+  stop() {
+    const config = this.getConfig();
+    if (!config.src) return;
+    const stoppedSrc = config.src;
+    const stopToken = (config.stopToken || 0) + 1;
+    this.setConfig({ isPlaying: false, stopToken });
+    // Popup.vue (janela de saída) já limpa o próprio src localmente após o
+    // fade — mas escritas feitas por ela (is_popup=true) nunca voltam pra
+    // esta janela (ver AppData.js). Sem limpar também por aqui, o painel e a
+    // barra do rodapé nunca sabiam que o vídeo parou e continuavam
+    // mostrando-o como "ativo" para sempre. Espera o mesmo tempo do fade
+    // visual (1s) e só limpa se nada mais recente aconteceu nesse meio-tempo
+    // (mesmo src e mesmo stopToken que acabamos de gravar) — evita apagar o
+    // src de um vídeo novo, caso o operador já tenha selecionado outro.
+    setTimeout(() => {
+      const current = this.getConfig();
+      if (current.src === stoppedSrc && current.stopToken === stopToken) {
+        this.setConfig({ src: '' });
+      }
+    }, 1100);
+  },
+  setVolume(vol) {
+    this.setConfig({ volume: Math.max(0, Math.min(100, vol)) });
+  },
+  // currentTime já é observado por Popup.vue (seek externo) — ver watch
+  // 'config.currentTime' lá; aqui só validamos os limites antes de gravar.
+  seekTo(time) {
+    const config = this.getConfig();
+    this.setConfig({ currentTime: Math.max(0, Math.min(config.duration || 0, time)) });
+  },
+  seekBy(delta) {
+    this.seekTo((this.getConfig().currentTime || 0) + delta);
+  },
+
+  // Carrega o item da lista (usado ao clicar num item pra selecioná-lo).
+  // loop:false — o "Repetir" é por sessão de reprodução, não deve vazar de um
+  // vídeo para o próximo só porque ficou marcado em algum item anterior.
+  //
+  // Se a projeção já estiver selecionada neste módulo (mesma checagem do
+  // botão de tela — ver Screen.vue "is_selected"), o item aparece/toca direto
+  // na saída ao ser selecionado, sem precisar clicar no botão de novo. Imagem
+  // já aparece sozinha (Popup.vue não depende de isPlaying pra exibi-la); aqui
+  // só falta o vídeo também tocar automaticamente pra ter o mesmo comportamento.
   selectPlaylistItem(item) {
     const image = item.mediaType === "image" || isImageFile(item.path);
+    const isProjecting = $appdata.get("popup") && $appdata.get("popup_module") === "video_player";
     this.setConfig({
       src: item.src, path: item.path, name: item.name, currentId: item.id,
       mediaType: image ? "image" : "video",
       rotation: item.rotation || 0,
       flip: !!item.flip,
-      isPlaying: false, currentTime: 0, duration: item.duration || 0,
+      isPlaying: isProjecting && !image, currentTime: 0, duration: item.duration || 0,
+      loop: false,
     });
   },
 
@@ -147,12 +207,18 @@ export default {
     $modules.open("video_player");
     this.ensureOutputShowing();
     const image = item.mediaType === "image";
+    // Avisa media/soundmaster JÁ AQUI (não só quando o <video> da janela de
+    // saída montar) — sem isso, se a janela de saída ainda não estava aberta,
+    // o pedido de foco só chegava depois que ela terminasse de carregar, e a
+    // música do álbum continuava tocando por cima durante esse intervalo.
+    if (!image) $audioBus.requestFocus("video_player");
     this.setConfig({
       src: item.src, path: item.path, name: item.name, currentId: item.id,
       mediaType: image ? "image" : "video",
       rotation: item.rotation || 0,
       flip: !!item.flip,
       isPlaying: !image, currentTime: 0,
+      loop: false,
     });
   },
 

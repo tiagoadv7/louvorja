@@ -33,7 +33,65 @@ export default {
       param != "is_popup" &&
       !this.get("is_popup")
     ) {
-      window.electron.sendStateUpdate({ param, value });
+      try {
+        // value pode ser um proxy reativo do Vuex — o Electron não consegue
+        // clonar proxies via IPC ("An object could not be cloned"), mesmo
+        // quando o mesmo valor passa por JSON.stringify sem erro. Um
+        // round-trip por JSON garante um valor plano antes de enviar; sem
+        // isso, o erro interrompe installModule() e todo módulo instalado
+        // depois dele fica sem tradução/menu na janela de saída.
+        const plain = value === undefined ? value : JSON.parse(JSON.stringify(value));
+        window.electron.sendStateUpdate({ param, value: plain });
+      } catch (e) {
+        console.warn("[AppData] falha ao sincronizar com a janela de saída:", param, e);
+      }
+    }
+  },
+
+  // Grava vários campos de uma vez e propaga como UM ÚNICO evento/mensagem
+  // IPC (em vez de N separados) — usado quando dois ou mais campos precisam
+  // chegar juntos na janela de saída (ex.: show+minimized do $modules.minimize()).
+  // Com set() chamado em sequência, cada campo vira uma mensagem IPC própria;
+  // entre a primeira e a segunda, a janela de saída podia computar um estado
+  // combinado (ex. show||minimized) momentaneamente errado e reagir a ele
+  // (vídeo saindo da projeção só por minimizar). Tudo aqui é aplicado antes
+  // de qualquer flush de reatividade do lado receptor.
+  setMultiple(entries) {
+    entries.forEach(([param, value]) => store.commit("setData", [param, value]));
+
+    const popup = this.get("popup");
+    if (popup && !popup._electron) {
+      const filtered = entries.filter(([param]) => param != "popup" && param != "is_popup" && param != "is_fullscreen");
+      if (filtered.length) {
+        if (popup.closed) {
+          this.set("popup", null);
+        } else {
+          try {
+            popup.postMessage({ batch: filtered.map(([param, value]) => ({ param, value })) }, window.location.origin);
+          } catch (e) {
+            console.log(e);
+          }
+        }
+      }
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      window.electron &&
+      !this.get("is_popup")
+    ) {
+      const filtered = entries.filter(([param]) => param != "popup" && param != "is_popup");
+      if (filtered.length) {
+        try {
+          const plainEntries = filtered.map(([param, value]) => ({
+            param,
+            value: value === undefined ? value : JSON.parse(JSON.stringify(value)),
+          }));
+          window.electron.sendStateUpdateBatch(plainEntries);
+        } catch (e) {
+          console.warn("[AppData] falha ao sincronizar lote com a janela de saída:", e);
+        }
+      }
     }
   },
 

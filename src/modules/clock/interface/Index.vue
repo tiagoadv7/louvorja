@@ -170,6 +170,10 @@ export default {
     },
 
     close() {
+      // Só sai da projeção se o Relógio for de fato o módulo projetado agora —
+      // senão, fechar o painel (só uma ferramenta do operador) apagaria o que
+      // estiver sendo exibido (ex.: uma música), sem ele ter pedido isso.
+      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
       this.$modules.close(this.module_id);
     },
   },

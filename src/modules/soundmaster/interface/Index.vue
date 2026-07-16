@@ -211,6 +211,10 @@ export default {
     fadeOutMs:     2500,
     duckingLevel:  0.25,
     activeMainId:  null,
+    // Reprodução externa (ex.: áudio da Liturgia) — usa a mesma engine/config
+    // do pad principal (crossfade, fadeIn/Out, ducking, volume master), mas
+    // não fica em mainPads, então não ocupa/aparece como pad na grade.
+    externalPad:   null,
     activeFxIds:   new Set(),
     currentTime:   0,
     duration:      0,
@@ -225,6 +229,7 @@ export default {
     _keyHandler:   null,
     _focusHandler: null,
     _lastPlayTs:   null,
+    _lastFooterCmdTs: null,
   }),
 
   computed: {
@@ -236,14 +241,26 @@ export default {
         set: (_, k, v) => { this.$userdata.set(`modules.${this.module_id}.${k}`, v); return true; },
       });
     },
+    // Pad "principal" tocando agora — pode ser um pad real (grade) ou o
+    // externalPad (arquivo tocado por fora, ex.: Liturgia), que usa o mesmo
+    // slot de reprodução (_mainAudio/activeMainId) sem estar em mainPads.
+    activePad() {
+      if (this.externalPad && this.activeMainId === this.externalPad.id) return this.externalPad;
+      return this.mainPads.find(p => p.id === this.activeMainId) || null;
+    },
     activeTrackName() {
-      return this.mainPads.find(p => p.id === this.activeMainId)?.name || '';
+      return this.activePad?.name || '';
     },
     // Comando externo (ex.: $soundMaster.play() chamado pela Liturgia) para tocar
     // um arquivo direto num pad. Vive em $appdata (não no estado local dos pads)
     // porque outros módulos não têm acesso à instância deste componente.
     pendingPlay() {
       return this.$appdata.get('modules.soundmaster.pending_play');
+    },
+    // Comando externo (ex.: barra do rodapé) para play/pause ou stop sem
+    // acesso direto à instância deste componente — mesmo padrão do pendingPlay.
+    footerCommand() {
+      return this.$appdata.get('modules.soundmaster.footer_command');
     },
   },
 
@@ -258,6 +275,33 @@ export default {
         this._lastPlayTs = cmd.ts;
         this.playExternalFile(cmd.path, cmd.name);
       },
+    },
+    footerCommand(cmd) {
+      if (!cmd?.action || cmd.ts === this._lastFooterCmdTs) return;
+      this._lastFooterCmdTs = cmd.ts;
+      if (cmd.action === 'toggle') this.togglePlay();
+      else if (cmd.action === 'stop') this.stopAll();
+      else if (cmd.action === 'seek_by' && this._mainAudio) {
+        this._mainAudio.currentTime = Math.max(0, Math.min(this.duration, this._mainAudio.currentTime + (cmd.delta || 0)));
+      } else if (cmd.action === 'seek_to' && this._mainAudio) {
+        this._mainAudio.currentTime = Math.max(0, Math.min(this.duration, cmd.time || 0));
+      } else if (cmd.action === 'volume') {
+        this.masterVolume = Math.max(0, Math.min(1, (cmd.value ?? 100) / 100));
+        this.userdata.master_volume = this.masterVolume;
+        this.applyVolumes();
+      }
+    },
+    // Espelha o essencial do "now playing" em $appdata — os pads/estado de
+    // reprodução vivem só no componente, então sem isso a barra do rodapé
+    // (outro componente) não teria como saber o que está tocando.
+    activeTrackName(name) {
+      this.$appdata.set('modules.soundmaster.now_playing.name', name);
+    },
+    isPlaying(v) {
+      this.$appdata.set('modules.soundmaster.now_playing.playing', v);
+    },
+    masterVolume(v) {
+      this.$appdata.set('modules.soundmaster.now_playing.volume', v * 100);
     },
   },
 
@@ -353,6 +397,11 @@ export default {
       this.currentTime = a.currentTime;
       this.duration    = a.duration || 0;
       this.progress    = this.duration > 0 ? a.currentTime / a.duration : 0;
+      // Espelha em $appdata (escala 0-100, igual ao módulo Media) para a
+      // barra do rodapé mostrar tempo/progresso sem acesso à instância.
+      this.$appdata.set('modules.soundmaster.now_playing.current_time', this.currentTime);
+      this.$appdata.set('modules.soundmaster.now_playing.duration', this.duration);
+      this.$appdata.set('modules.soundmaster.now_playing.progress', this.progress * 100);
     },
 
     seekTo(e) {
@@ -369,9 +418,8 @@ export default {
     },
 
     applyVolumes() {
-      if (this._mainAudio) {
-        const pad = this.mainPads.find(p => p.id === this.activeMainId);
-        if (pad) this._mainAudio.volume = this.effVol(pad.volume, true);
+      if (this._mainAudio && this.activePad) {
+        this._mainAudio.volume = this.effVol(this.activePad.volume, true);
       }
       Object.entries(this._fxAudios).forEach(([id, a]) => {
         const pad = this.fxPads.find(p => p.id === +id);
@@ -391,8 +439,7 @@ export default {
 
     _applySmooth(fadeMs) {
       if (this._mainAudio) {
-        const pad = this.mainPads.find(p => p.id === this.activeMainId);
-        this.fade('main', this._mainAudio, this._mainAudio.volume, this.effVol(pad?.volume ?? 1, true), fadeMs);
+        this.fade('main', this._mainAudio, this._mainAudio.volume, this.effVol(this.activePad?.volume ?? 1, true), fadeMs);
       }
       Object.entries(this._fxAudios).forEach(([id, a]) => {
         const p = this.fxPads.find(f => f.id === +id);
@@ -403,11 +450,13 @@ export default {
     togglePlay() {
       if (!this._mainAudio) return;
       const audio = this._mainAudio;
-      const pad   = this.mainPads.find(p => p.id === this.activeMainId);
+      const pad   = this.activePad;
       const fadeDuration = Math.min(600, this.fadeInMs);
 
       if (audio.paused) {
-        // Resume com fade in
+        // Resume com fade in — avisa media/video_player para pararem, senão
+        // a música do álbum toca junto com o que já estiver ativo lá.
+        $audioBus.requestFocus('soundmaster');
         const targetVol = this.effVol(pad?.volume ?? 1, true);
         audio.volume = 0;
         audio.play().then(() => {
@@ -447,16 +496,21 @@ export default {
       });
     },
 
-    // Chamado via $soundMaster.play() por outros módulos (ex.: Liturgia ao
-    // importar/arrastar um mp3). Reaproveita o pad que já tiver esse mesmo
-    // arquivo; senão usa o primeiro pad livre; se todos estiverem ocupados,
-    // sobrescreve o pad 1.
+    // Chamado via $soundMaster.play() por outros módulos (ex.: Liturgia).
+    // Toca com a mesma engine/config do pad principal (crossfade, fades,
+    // ducking, volume master), mas SEM ocupar/aparecer como pad na grade —
+    // usa um "pad virtual" (externalPad) fora de mainPads, com id negativo
+    // pra nunca colidir com os ids reais (1-10).
     playExternalFile(fp, name) {
-      const pad = this.mainPads.find(p => p.filePath === fp)
-        || this.mainPads.find(p => !p.fileUrl)
-        || this.mainPads[0];
-      this.assignFile(pad, fp, name);
-      this.playMain(pad);
+      this.externalPad = {
+        id: -1,
+        filePath: fp,
+        fileUrl: toFileUrl(fp),
+        name: name || fp.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''),
+        volume: 1.0,
+        isLooping: false,
+      };
+      this.playMain(this.externalPad);
     },
 
     assignFile(pad, fp, name) {
@@ -489,6 +543,12 @@ export default {
     },
 
     playMain(pad) {
+      // Avisa media/video_player para pararem — usado tanto pelo clique direto
+      // num pad quanto por playExternalFile() (ex: item de áudio da Liturgia).
+      // Sem isso, uma música/vídeo já em execução em outro módulo continuava
+      // tocando junto com o pad da coletânea.
+      $audioBus.requestFocus('soundmaster');
+
       // Crossfade: fade out o audio anterior enquanto o novo entra
       const outAudio = this._mainAudio;
       const outId    = this.activeMainId;
@@ -517,6 +577,7 @@ export default {
         if (!pad.isLooping) {
           this.activeMainId = null; this._mainAudio = null;
           this.isPlaying = false; this.progress = 0; this.currentTime = 0;
+          if (this.externalPad === pad) this.externalPad = null;
         }
       });
 
@@ -527,6 +588,7 @@ export default {
       }).catch(() => {
         if (this._mainAudio === audio) {
           this.activeMainId = null; this._mainAudio = null; this.isPlaying = false;
+          if (this.externalPad === pad) this.externalPad = null;
         }
       });
     },
@@ -539,6 +601,7 @@ export default {
         if (this._mainAudio === audio) {
           this._mainAudio = null; this.activeMainId = null; this.isPlaying = false;
           this.progress = 0; this.currentTime = 0;
+          this.externalPad = null;
           clearInterval(this._ticker);
         }
         this.applyVolumes();

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, createWebHashHistory } from "vue-router
 import Main from "@/views/Main.vue";
 import Popup from "@/views/Popup.vue";
 import ReturnScreen from "@/views/ReturnScreen.vue";
+import VideoPip from "@/views/VideoPip.vue";
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: "/return-screen",
     name: "ReturnScreen",
     component: ReturnScreen,
+  },
+  {
+    path: "/video-pip",
+    name: "VideoPip",
+    component: VideoPip,
   },
 ];
 

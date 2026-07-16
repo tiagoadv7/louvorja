@@ -297,6 +297,35 @@ function setupIpc(mainWindow) {
   // Pasta de JSONs: sempre gravável (ou pasta customizada pelo usuário)
   const getDbDir = () => Store.get('db_local_folder') || path.join(getWritableBase(), 'db');
 
+  // Busca e cacheia o JSON de uma música quando ele ainda não existe em disco.
+  // Usado pela verificação de arquivos (files:scan-*): sem isso, uma música cujo
+  // music_<id>.json nunca foi salvo localmente (comum com o Modo Offline ativo,
+  // que só lê do disco e nunca busca/cacheia dados novos) é silenciosamente
+  // ignorada pelo scan — os áudios/imagens dela nunca são reportados como
+  // faltando. Aqui tentamos buscar da API (se houver dbBaseUrl/conexão); se
+  // falhar, mantém o comportamento anterior de pular a música.
+  const ensureMusicJsonCached = async (dbDir, dbBaseUrl, token, musicId) => {
+    const mFile = path.join(dbDir, `music_${musicId}.json`);
+    if (fs.existsSync(mFile)) {
+      try { return JSON.parse(fs.readFileSync(mFile, 'utf8')); }
+      catch (_) { /* cai para nova busca abaixo */ }
+    }
+    if (!dbBaseUrl) return null;
+    try {
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const resp = await net.fetch(`${dbBaseUrl}/music_${musicId}?${date}`, {
+        headers: token ? { 'Api-Token': token } : {},
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+      fs.writeFileSync(mFile, JSON.stringify(data), 'utf8');
+      return data;
+    } catch (_) {
+      return null;
+    }
+  };
+
   ipcMain.handle('db:get-local-folder', () => Store.get('db_local_folder', null));
 
   ipcMain.handle('db:set-local-folder', (_, folderPath) => {
@@ -1208,6 +1237,29 @@ function setupIpc(mainWindow) {
     return null;
   });
 
+  // Baixa um único arquivo de música (áudio/instrumental) sob demanda — usado pelo
+  // prompt "Baixar Música" no modo online, sem precisar escanear o álbum inteiro.
+  // Reaproveita resolveFileUrl/downloadBinary (mesmas usadas em files:download-missing)
+  // e a mesma convenção de pasta (getAutoMediaDir com fallback para o nome do álbum).
+  ipcMain.handle('media:download-file', async (_, { url, albumName, filesBaseUrl, token } = {}) => {
+    if (!url) return null;
+    const name = safeBasename(url);
+    if (!name) return null;
+    try {
+      const resolvedUrl = resolveFileUrl(url, filesBaseUrl);
+      if (!resolvedUrl) return null;
+      const dest = path.join(getAutoMediaDir(albumName || null, true), name);
+      const hdrs = token ? { 'Api-Token': token } : {};
+      const ok = await downloadBinary(resolvedUrl, dest, hdrs, false);
+      if (!ok) return null;
+      try { await syncLocalFileUrls(getDbDir()); } catch (_) {}
+      return toFileUrl(dest);
+    } catch (e) {
+      console.error('[IPC] media:download-file error:', e.message);
+      return null;
+    }
+  });
+
   // ── Pasta de imagens locais ───────────────────────────────────────────────
   ipcMain.handle('media:get-images-folder', () => Store.get('media_images_folder', null));
 
@@ -1891,7 +1943,7 @@ document.getElementById('f').onsubmit=async(e)=>{
   });
 
   // ── Verificação e download de arquivos em falta ───────────────────────────
-  ipcMain.handle('files:scan-missing', async () => {
+  ipcMain.handle('files:scan-missing', async (_event, dbBaseUrl, token) => {
     try {
       const dbDir = getDbDir();
       if (!fs.existsSync(dbDir)) return { total: 0, missing: [], counts: {} };
@@ -1944,12 +1996,8 @@ document.getElementById('f').onsubmit=async(e)=>{
         addMissing(albumData.url_image, capasW, 'cover');
 
         for (const music of (albumData.musics || [])) {
-          const mFile = path.join(dbDir, `music_${music.id_music}.json`);
-          if (!fs.existsSync(mFile)) continue;
-
-          let md;
-          try { md = JSON.parse(fs.readFileSync(mFile, 'utf8')); }
-          catch (_) { continue; }
+          const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
+          if (!md) continue;
 
           addMissing(md.url_music, audioW, 'audio');
           addMissing(md.url_instrumental_music, audioW, 'audio');
@@ -1972,7 +2020,7 @@ document.getElementById('f').onsubmit=async(e)=>{
 
   // Retorna álbuns com arquivos faltando + lista flat de todos os itens.
   // Igual ao ARQUIVOS_SISTEMA do LouvorJA Delphi: Arquivo | Diretório | Status
-  ipcMain.handle('files:scan-albums', async (event) => {
+  ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token) => {
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });
 
@@ -2278,11 +2326,8 @@ document.getElementById('f').onsubmit=async(e)=>{
         chk(albumData.url_image, capasW, 'cover');
         let musicIdx = 0;
         for (const music of (albumData.musics || [])) {
-          const mFile = path.join(dbDir, `music_${music.id_music}.json`);
-          if (!fs.existsSync(mFile)) continue;
-          let md;
-          try { md = JSON.parse(fs.readFileSync(mFile, 'utf8')); }
-          catch (_) { continue; }
+          const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
+          if (!md) continue;
           chk(md.url_music, audioW, 'audio');
           chk(md.url_instrumental_music, audioW, 'audio');
           chk(md.url_image, imgsW, 'image');
@@ -2317,6 +2362,68 @@ document.getElementById('f').onsubmit=async(e)=>{
       console.error('[IPC] files:scan-albums error:', e.message);
       return { ...emptyResult(), error: e.message };
     }
+  });
+
+  // Verifica completude de álbuns específicos baixados via album_<id>.json (fluxo
+  // "Baixar álbum completo" do Centro de Downloads). Diferente de files:scan-albums,
+  // sempre lê os JSONs diretamente por id — não usa o ARQUIVOS_SISTEMA do SQLite
+  // Delphi, cujas entradas têm id_album nulo e não dá pra casar com os ids pedidos
+  // (era por isso que "Meus Downloads" nunca marcava nenhum álbum como completo).
+  ipcMain.handle('files:check-albums-complete', async (_event, albumIds, dbBaseUrl, token) => {
+    const result = {};
+    if (!Array.isArray(albumIds) || !albumIds.length) return result;
+
+    const dbDir = getDbDir();
+    if (!fs.existsSync(dbDir)) return result;
+
+    const capasR = getAutoCapasDir();
+    const capasW = getAutoCapasDir(true);
+    const imgsR  = getAutoImagesDir();
+    const imgsW  = getAutoImagesDir(true);
+
+    for (const id of albumIds) {
+      const albumFile = path.join(dbDir, `album_${id}.json`);
+      if (!fs.existsSync(albumFile)) continue;
+
+      let albumData;
+      try { albumData = JSON.parse(fs.readFileSync(albumFile, 'utf8')); }
+      catch (_) { continue; }
+
+      const albumName = albumData.name || `album_${id}`;
+      const audioW = getAutoMediaDir(albumData.folder_name || albumName, true);
+      const audioR = getAutoMediaDir(albumData.folder_name || albumName, false);
+
+      let totalFiles = 0, foundFiles = 0, missing = 0;
+
+      const check = (rawUrl, dirW, dirR, type) => {
+        if (!rawUrl) return;
+        totalFiles++;
+        if (fileUrlExists(rawUrl)) { foundFiles++; return; }
+        const name = safeBasename(rawUrl);
+        if (!name) { missing++; return; }
+        let exists = fs.existsSync(path.join(dirW, name));
+        if (!exists && dirR) exists = fs.existsSync(path.join(dirR, name));
+        if (!exists && type === 'audio') exists = !!findFileInTree(audioR, name) || !!findFileInTree(audioW, name);
+        if (exists) foundFiles++; else missing++;
+      };
+
+      check(albumData.url_image, capasW, capasR, 'cover');
+
+      for (const music of (albumData.musics || [])) {
+        const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
+        if (!md) { missing++; totalFiles++; continue; }
+        check(md.url_music, audioW, audioR, 'audio');
+        check(md.url_instrumental_music, audioW, audioR, 'audio');
+        check(md.url_image, imgsW, imgsR, 'image');
+        const slideList = Array.isArray(md.slides) ? md.slides
+          : (md.lyric && typeof md.lyric === 'object' ? Object.values(md.lyric) : []);
+        for (const s of slideList) check(s?.url_image, imgsW, imgsR, 'image');
+      }
+
+      result[String(id)] = { missing, totalFiles, foundFiles };
+    }
+
+    return result;
   });
 
   ipcMain.handle('files:download-missing', async (event, missingList, filesBaseUrl, token) => {

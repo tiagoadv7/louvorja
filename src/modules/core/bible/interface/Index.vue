@@ -789,7 +789,11 @@ export default {
     },
 
     close() {
-      this.$popup.exit();
+      // Só sai da projeção se a Bíblia for de fato o módulo projetado agora —
+      // senão, fechar o painel (a Bíblia só estava aberta de fundo, sem ser o
+      // que aparece na saída) apagaria o que estiver sendo exibido (ex.: uma
+      // música), sem o operador ter pedido isso.
+      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
       this.bible.verses = [];
       this.select_bible = {
         id_bible_version: null,

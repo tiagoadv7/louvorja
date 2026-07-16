@@ -5,6 +5,7 @@
 
   <AppModules />
   <AppAlert />
+  <MediaChoiceDialog />
 
   <AppsRibbon v-if="this.$userdata.get('layout') == 'ribbon'" />
 
@@ -34,6 +35,7 @@ import AppFooter from "@/layout/Footer.vue";
 import AppMenu from "@/layout/Menu.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
+import MediaChoiceDialog from "@/components/MediaChoiceDialog.vue";
 import Apps from "@/layout/Apps.vue";
 import AppsRibbon from "@/layout/AppsRibbon.vue";
 import AppTrayArea from "@/layout/TrayArea.vue";
@@ -47,6 +49,7 @@ export default {
     AppMenu,
     AppModules,
     AppAlert,
+    MediaChoiceDialog,
     Apps,
     AppsRibbon,
     AppTrayArea,

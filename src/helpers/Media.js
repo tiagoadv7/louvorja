@@ -7,8 +7,9 @@ import $alert from "@/helpers/Alert";
 import $modules from "@/helpers/Modules";
 import $database from "@/helpers/Database";
 import $electron from "@/helpers/Electron";
+import $audioBus from "@/helpers/AudioBus";
 
-export default {
+const Media = {
   async open(params) {
     if (typeof params != "object") {
       params = { id_music: params };
@@ -71,6 +72,10 @@ export default {
 
     // Crossfade: se havia áudio tocando ao trocar de música, faz fade-out independente
     const _newMode = params.mode || "no_audio";
+    if (_newMode === "audio" || _newMode === "instrumental") {
+      // Avisa outros donos de áudio (soundmaster, video_player) para pararem com fade
+      $audioBus.requestFocus("media");
+    }
     const _wasPlayingAudio = !$appdata.get("modules.media.config.is_paused") &&
       ["audio", "instrumental"].includes($appdata.get("modules.media.config.mode"));
     if (_wasPlayingAudio && (_newMode === "audio" || _newMode === "instrumental")) {
@@ -147,18 +152,74 @@ export default {
       audio.currentTime = 0;
 
       //Grava os tempos dos slides
+      const openTimes = this.slides().map((item) =>
+        $datetime.toNumber(
+          mode == "audio" ? item.time : item.instrumental_time,
+        ),
+      );
+      // Se o modo escolhido não tiver marcações válidas (todas 0), cai para
+      // "time" — sem isso o slide pula direto para o último assim que o
+      // áudio começa (mesma proteção já aplicada em switchMode()).
       $appdata.set(
         "modules.media.times",
-        this.slides().map((item) =>
-          $datetime.toNumber(
-            mode == "audio" ? item.time : item.instrumental_time,
-          ),
-        ),
+        openTimes.some((t) => t > 0)
+          ? openTimes
+          : this.slides().map((item) => $datetime.toNumber(item.time)),
       );
 
       const rawUrl = mode == "audio" ? data.url_music : data.url_instrumental_music;
       const localUrl = await $electron.mediaResolveFile(rawUrl);
       $appdata.set("modules.media.config.audio", localUrl || $path.file(rawUrl));
+
+      // Arquivo ainda não baixado, app em Modo Offline e com internet disponível →
+      // pergunta a preferência (baixar a música, baixar o álbum inteiro, ou só
+      // tocar online desta vez) em vez de só oferecer "Baixar Álbum" (comportamento
+      // antigo, ainda usado como fallback abaixo quando não há internet).
+      // Em Modo Online o app já assume que vai buscar tudo sob demanda — toca direto,
+      // sem perguntar (params._skipOnlineChoice evita perguntar de novo após a escolha).
+      const isOfflineMode = $database.isLocalEnabled();
+      const hasInternet = typeof navigator === "undefined" || navigator.onLine;
+      if (!localUrl && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
+        && typeof this._autoCloseCallback !== 'function') {
+        $appdata.set("modules.media.config.mode", mode);
+        $appdata.set("modules.media.loading", false);
+        const albumEntry = data.albums?.length > 0
+          ? (id_album ? data.albums.find((x) => x.id_album == id_album) : null) || data.albums[0]
+          : null;
+
+        window.dispatchEvent(
+          new CustomEvent("media-play-choice", {
+            detail: {
+              onChoice: async (val) => {
+                if (val === "cancel") return;
+                if (val === "download_album") {
+                  window.dispatchEvent(
+                    new CustomEvent("open-download-center", {
+                      detail: { section: "collections", id_album, albumName: albumEntry?.name || "" },
+                    })
+                  );
+                  return;
+                }
+                if (val === "download_song") {
+                  const downloaded = await $electron.mediaDownloadFile({
+                    url: rawUrl,
+                    albumName: albumEntry?.name || null,
+                    filesBaseUrl: import.meta.env.VITE_URL_FILES,
+                    token: import.meta.env.VITE_API_TOKEN,
+                  });
+                  if (!downloaded) {
+                    $alert.error({ text: "modules.media.alerts.not_loaded" });
+                    return;
+                  }
+                }
+                // "online" ou música baixada agora: (re)abre já sem perguntar de novo
+                this.open({ ...params, _skipOnlineChoice: true });
+              },
+            },
+          })
+        );
+        return;
+      }
 
       // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar
       if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
@@ -281,7 +342,7 @@ export default {
     $appdata.set("modules.media.config.mode", mode);
   },
 
-  async switchMode(newMode) {
+  async switchMode(newMode, skipChoice = false) {
     const data = $appdata.get("modules.media.data");
     if (!data) return;
 
@@ -294,7 +355,51 @@ export default {
     const localUrl = await $electron.mediaResolveFile(rawSwitchUrl);
     const newUrl = localUrl || $path.file(rawSwitchUrl);
 
-    // Arquivo local não encontrado → avisar usuário sem travar is_fading
+    // Mesmo tratamento do open(): Modo Offline + internet + arquivo (cantado/playback)
+    // ainda não baixado → pergunta a preferência em vez de só oferecer "Baixar Álbum".
+    const isOfflineMode = $database.isLocalEnabled();
+    const hasInternet = typeof navigator === "undefined" || navigator.onLine;
+    if (!localUrl && rawSwitchUrl && !skipChoice && isOfflineMode && hasInternet) {
+      const id_album = $appdata.get("modules.media.id_album");
+      const albumEntry = data.albums?.length > 0
+        ? (id_album ? data.albums.find((x) => x.id_album == id_album) : null) || data.albums[0]
+        : null;
+
+      window.dispatchEvent(
+        new CustomEvent("media-play-choice", {
+          detail: {
+            onChoice: async (val) => {
+              if (val === "cancel") return;
+              if (val === "download_album") {
+                window.dispatchEvent(
+                  new CustomEvent("open-download-center", {
+                    detail: { section: "collections", id_album, albumName: albumEntry?.name || "" },
+                  })
+                );
+                return;
+              }
+              if (val === "download_song") {
+                const downloaded = await $electron.mediaDownloadFile({
+                  url: rawSwitchUrl,
+                  albumName: albumEntry?.name || null,
+                  filesBaseUrl: import.meta.env.VITE_URL_FILES,
+                  token: import.meta.env.VITE_API_TOKEN,
+                });
+                if (!downloaded) {
+                  $alert.error({ text: "modules.media.alerts.not_loaded" });
+                  return;
+                }
+              }
+              // "online" ou música baixada agora: troca de modo já sem perguntar de novo
+              this.switchMode(newMode, true);
+            },
+          },
+        })
+      );
+      return;
+    }
+
+    // Arquivo local não encontrado (sem internet, ou Modo Online) → aviso antigo
     if (!localUrl && rawSwitchUrl && rawSwitchUrl.startsWith("app-local://")) {
       $alert.show(
         {
@@ -438,8 +543,12 @@ export default {
     }
 
     this.stopAudio();
-    $appdata.set("modules.media.show", false);
-    $appdata.set("modules.media.minimized", false);
+    // setMultiple: uma única mensagem IPC com os dois campos (evita estado
+    // combinado intermediário incorreto do lado da janela de saída).
+    $appdata.setMultiple([
+      ["modules.media.show", false],
+      ["modules.media.minimized", false],
+    ]);
     // show=false e minimized=false tiram a projeção do modo ativo (Popup.vue do módulo
     // media passa a renderizar em standby/transparente), mas a janela de saída permanece
     // aberta até o operador clicar em "Parar projeção". Não chama clearVariables() aqui:
@@ -453,8 +562,10 @@ export default {
   // saída continua aberta até o operador encerrar a projeção manualmente.
   endSong() {
     this.stopAudio();
-    $appdata.set("modules.media.show", false);
-    $appdata.set("modules.media.minimized", false);
+    $appdata.setMultiple([
+      ["modules.media.show", false],
+      ["modules.media.minimized", false],
+    ]);
     // Não chama clearVariables() nem closeOutput() — dados preservados para reabertura
     // rápida; a janela de saída permanece aberta (modo de projeção ativo).
   },
@@ -628,17 +739,25 @@ export default {
   },
 
   minimize() {
-    $appdata.set("modules.media.show", false);
-    $appdata.set("modules.media.minimized", true);
+    // setMultiple: uma única mensagem IPC com os dois campos — mesmo motivo
+    // do $modules.minimize() genérico (ver Modules.js). Com dois set()
+    // separados, a janela de saída podia processá-los em momentos diferentes
+    // e computar isActive (show || minimized) errado por um instante.
+    $appdata.setMultiple([
+      ["modules.media.minimized", true],
+      ["modules.media.show", false],
+    ]);
   },
 
   maximize() {
-    $appdata.set("modules.media.show", true);
-    $appdata.set("modules.media.minimized", false);
-    // Atualiza o módulo ativo para a janela de saída.
-    // AppData.js envia automaticamente para o output via IPC se ele estiver aberto.
-    // Se o output estiver fechado, a mensagem IPC é ignorada — sem efeito colateral.
-    $appdata.set("popup_module", "media");
+    // Atualiza o módulo ativo para a janela de saída junto — AppData.js
+    // envia automaticamente para o output via IPC se ele estiver aberto; se
+    // estiver fechado, a mensagem é ignorada sem efeito colateral.
+    $appdata.setMultiple([
+      ["modules.media.show", true],
+      ["modules.media.minimized", false],
+      ["popup_module", "media"],
+    ]);
   },
 
   isMinimized() {
@@ -1075,3 +1194,16 @@ export default {
     }
   },
 };
+
+// Outro dono de áudio (video_player, soundmaster) começou a tocar: se houver
+// música ativa aqui, encerra com fade — mesmo efeito de "terminar a música".
+$audioBus.listen("media", () => {
+  const isPlayingAudio =
+    !$appdata.get("modules.media.config.is_paused") &&
+    ["audio", "instrumental"].includes($appdata.get("modules.media.config.mode"));
+  if (isPlayingAudio) {
+    Media.fadeOutAudio(() => Media.endSong());
+  }
+});
+
+export default Media;

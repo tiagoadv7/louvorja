@@ -94,6 +94,9 @@ export default {
     isElectron() ? window.electron.storeClear() : Promise.resolve(false),
 
   // ── Sistema de arquivos ────────────────────────────────────────────────
+  // Caminho absoluto de um File (drag&drop) — File.path não existe mais fora do Electron.
+  getPathForFile: (file) =>
+    isElectron() ? window.electron.getPathForFile(file) : null,
   selectFile: (options = {}) =>
     isElectron() ? window.electron.selectFile(options) : Promise.resolve(null),
   selectFolder: (options = {}) =>
@@ -134,6 +137,8 @@ export default {
     isElectron() ? window.electron.mediaScanFolder(folderPath) : Promise.resolve({ count: 0 }),
   mediaResolveFile: (filename) =>
     isElectron() ? window.electron.mediaResolveFile(filename) : Promise.resolve(null),
+  mediaDownloadFile: (params) =>
+    isElectron() ? window.electron.mediaDownloadFile(params) : Promise.resolve(null),
   mediaGetImagesFolder: () =>
     isElectron() ? window.electron.mediaGetImagesFolder() : Promise.resolve(null),
   mediaSetImagesFolder: (folderPath) =>
@@ -196,15 +201,27 @@ export default {
       ? window.electron.albumDownloadFull(albumId, dbBaseUrl, filesBaseUrl, token, overwrite)
       : Promise.resolve({ success: false, error: 'not-electron' }),
 
+  // Passa dbBaseUrl/token para que o scan possa buscar metadados de música que
+  // ainda não foram cacheados localmente (ex: Modo Offline nunca salvou o JSON
+  // da música porque só lê do disco) — sem isso, músicas sem music_<id>.json
+  // local são silenciosamente ignoradas e a busca "some vazia".
   scanMissingFiles: () =>
     isElectron()
-      ? window.electron.scanMissingFiles()
+      ? window.electron.scanMissingFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN)
       : Promise.resolve({ total: 0, missing: [], counts: {} }),
 
   scanAlbumsFiles: () =>
     isElectron()
-      ? window.electron.scanAlbumsFiles()
+      ? window.electron.scanAlbumsFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN)
       : Promise.resolve({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] }),
+
+  // Verifica álbuns específicos (baixados via album_<id>.json) diretamente pelo
+  // id — ao contrário de scanAlbumsFiles, não depende do SQLite Delphi (cujas
+  // entradas não têm id_album e nunca combinariam com os ids de "Meus Downloads").
+  checkAlbumsComplete: (albumIds) =>
+    isElectron()
+      ? window.electron.checkAlbumsComplete(albumIds, import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN)
+      : Promise.resolve({}),
 
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
     isElectron()
@@ -218,6 +235,20 @@ export default {
     isElectron() ? window.electron.closeReturnScreen() : Promise.resolve(false),
   isReturnScreenOpen: () =>
     isElectron() ? window.electron.isReturnScreenOpen() : Promise.resolve(false),
+
+  // ── Janela flutuante (PIP) do player de vídeo ─────────────────────────
+  pipOpen: () =>
+    isElectron() ? window.electron.pipOpen() : Promise.resolve(false),
+  pipClose: () =>
+    isElectron() ? window.electron.pipClose() : Promise.resolve(false),
+  pipIsOpen: () =>
+    isElectron() ? window.electron.pipIsOpen() : Promise.resolve(false),
+  sendPipTogglePlay: () =>
+    isElectron() && window.electron.sendPipTogglePlay(),
+  sendPipStop: () =>
+    isElectron() && window.electron.sendPipStop(),
+  sendVideoProgress: (data) =>
+    isElectron() && window.electron.sendVideoProgress(data),
 
   // ── Sistema ───────────────────────────────────────────────────────────
   getHostname: () =>
@@ -250,6 +281,8 @@ export default {
   // ── Sincronização de estado ────────────────────────────────────────────
   sendStateUpdate: (data) =>
     isElectron() && window.electron.sendStateUpdate(data),
+  sendAudioFocusRequest: (data) =>
+    isElectron() && window.electron.sendAudioFocusRequest(data),
   notifyOutputReady: () =>
     isElectron() && window.electron.notifyOutputReady(),
 

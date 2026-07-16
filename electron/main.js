@@ -46,6 +46,7 @@ let mainWindow    = null;
 let outputWindow  = null;
 let returnWindow  = null;
 let loadingWindow = null;
+let pipWindow     = null;
 
 // Previne múltiplas instâncias
 const gotLock = app.requestSingleInstanceLock();
@@ -213,6 +214,7 @@ function createMainWindow() {
     // Usa destroy() para garantir fechamento mesmo em fullscreen/alwaysOnTop
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.destroy();
     if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
+    if (pipWindow && !pipWindow.isDestroyed()) pipWindow.destroy();
     tryGC();
   });
 }
@@ -333,6 +335,69 @@ function createReturnWindow(displayId) {
   return returnWindow;
 }
 
+// ── Janela flutuante do player de vídeo (PIP no modo operador) ────────────────
+// Mini player sempre visível por cima das outras janelas do app (não da tela de
+// projeção), para o operador acompanhar o vídeo e controlar play/pause sem
+// precisar deixar o módulo de Vídeo em foco.
+function createPipWindow() {
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.focus();
+    return pipWindow;
+  }
+
+  // Ancora na tela onde a janela principal (operador) está — NUNCA em
+  // screen.getPrimaryDisplay() puro. Se o Windows estiver configurado com o
+  // monitor/projetor externo como "tela principal" do sistema (comum em
+  // configurações de som/imagem), getPrimaryDisplay() apontava pra lá, e o
+  // mini player flutuante nascia por cima da própria projeção — visível pra
+  // plateia — em vez de ficar na tela do operador.
+  const anchorDisplay = (mainWindow && !mainWindow.isDestroyed())
+    ? screen.getDisplayMatching(mainWindow.getBounds())
+    : screen.getPrimaryDisplay();
+  const { x: ax, y: ay, width: sw, height: sh } = anchorDisplay.workArea;
+  const w = 340, h = 210;
+
+  pipWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x: ax + sw - w - 24,
+    y: ay + sh - h - 24,
+    minWidth: 220,
+    minHeight: 140,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: true,
+    skipTaskbar: true,
+    backgroundColor: '#000000',
+    icon: path.join(__dirname, '../public/ico/favicon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: !isDev,
+      spellcheck: false,
+      backgroundThrottling: false,
+    },
+    show: false,
+  });
+  pipWindow.setAlwaysOnTop(true, 'floating');
+
+  pipWindow.loadURL(getAppUrl('#/video-pip'));
+
+  pipWindow.once('ready-to-show', () => {
+    if (pipWindow && !pipWindow.isDestroyed()) pipWindow.show();
+  });
+
+  pipWindow.on('closed', () => {
+    pipWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('video-pip:closed');
+    }
+  });
+
+  return pipWindow;
+}
+
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
@@ -439,18 +504,98 @@ function registerIpcHandlers() {
     return !!(returnWindow && !returnWindow.isDestroyed());
   });
 
+  // ── Janela flutuante (PIP) do player de vídeo ────────────────────────────
+  ipcMain.handle('video-pip:open', () => {
+    createPipWindow();
+    return true;
+  });
+  ipcMain.handle('video-pip:close', () => {
+    if (pipWindow && !pipWindow.isDestroyed()) pipWindow.destroy();
+    return true;
+  });
+  ipcMain.handle('video-pip:is-open', () => {
+    return !!(pipWindow && !pipWindow.isDestroyed());
+  });
+  // Comandos vindos da janela PIP (play/pause, parar) são repassados para a
+  // janela principal, que é a dona da config compartilhada do módulo de vídeo
+  // — assim o play/pause controla o mesmo vídeo/áudio real da projeção.
+  ipcMain.on('video-pip:toggle-play', (event) => {
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('video-pip:toggle-play');
+    }
+  });
+  ipcMain.on('video-pip:stop', (event) => {
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('video-pip:stop');
+    }
+  });
+  // Progresso de reprodução (currentTime/duration) da janela de saída pra
+  // janela principal — canal dedicado, não passa pelo state-update genérico
+  // (ver comentário em preload.js).
+  ipcMain.on('video-player:progress', (event, data) => {
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('video-player:progress', data);
+    }
+  });
+
+  // data.target (opcional): sincronização completa pedida por UMA janela
+  // específica (ver 'output:ready' abaixo) — vai só pra ela. Sem isso, o
+  // resync completo de uma janela (ex.: PIP abrindo) reenviava também pra
+  // outputWindow campos que só ela mesma atualiza localmente e nunca manda
+  // de volta (ex. currentTime do vídeo em reprodução), fazendo a projeção
+  // saltar de volta pra um tempo antigo — visualmente "reiniciava" o vídeo.
   ipcMain.on('state-update', (_, data) => {
+    if (data && data.target === 'output') {
+      if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update', data);
+      return;
+    }
+    if (data && data.target === 'return') {
+      if (returnWindow && !returnWindow.isDestroyed()) returnWindow.webContents.send('state-update', data);
+      return;
+    }
+    if (data && data.target === 'pip') {
+      if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update', data);
+      return;
+    }
+    // Sem target: atualização "ao vivo" normal — broadcast pra todas (comportamento original)
     if (outputWindow && !outputWindow.isDestroyed()) {
       outputWindow.webContents.send('state-update', data);
     }
     if (returnWindow && !returnWindow.isDestroyed()) {
       returnWindow.webContents.send('state-update', data);
     }
+    if (pipWindow && !pipWindow.isDestroyed()) {
+      pipWindow.webContents.send('state-update', data);
+    }
   });
 
-  ipcMain.on('output:ready', () => {
+  // Lote atômico (ver AppData.js setMultiple / preload.js) — sempre
+  // broadcast (só usado para atualizações "ao vivo", nunca resync completo).
+  ipcMain.on('state-update-batch', (_, entries) => {
+    if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update-batch', entries);
+    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.webContents.send('state-update-batch', entries);
+    if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update-batch', entries);
+  });
+
+  // Foco de áudio entre janelas — diferente de 'state-update' (que só vai da
+  // janela principal para a de saída), este é bidirecional: quem começa a
+  // tocar (mainWindow ou outputWindow) avisa TODAS as outras janelas, exceto
+  // a que enviou, para pararem o próprio áudio.
+  ipcMain.on('audio-focus-request', (event, data) => {
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('audio-focus-request', data);
+    }
+    if (outputWindow && !outputWindow.isDestroyed() && event.sender !== outputWindow.webContents) {
+      outputWindow.webContents.send('audio-focus-request', data);
+    }
+  });
+
+  // target identifica QUEM pediu o resync ('output' | 'return' | 'pip') —
+  // repassado pra SystemBar.vue poder marcar cada state-update do resync
+  // com esse mesmo target, ver comentário em 'state-update' acima.
+  ipcMain.on('output:ready', (_, target) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('output-ready');
+      mainWindow.webContents.send('output-ready', target);
     }
   });
 

@@ -20,4 +20,43 @@ export default {
       ts: Date.now() + Math.random(),
     });
   },
+
+  // Estado "now playing" espelhado em $appdata pelo próprio componente
+  // (os pads vivem como estado local dele) — usado pela barra do rodapé
+  // para mostrar faixa/tempo/volume sem precisar da instância do componente.
+  nowPlaying() {
+    return $appdata.get("modules.soundmaster.now_playing", {
+      name: "", playing: false, current_time: 0, duration: 0, progress: 0, volume: 100,
+    });
+  },
+
+  isMinimized() {
+    return $appdata.get("modules.soundmaster.minimized", false);
+  },
+
+  maximize() {
+    $modules.open("soundmaster");
+  },
+
+  // Comandos vindos de fora (ex.: barra do rodapé) — o componente observa
+  // esses campos em $appdata, mesmo padrão de "pending_play" acima.
+  togglePlay() {
+    this._command("toggle");
+  },
+  stop() {
+    this._command("stop");
+  },
+  seekBy(delta) {
+    this._command("seek_by", { delta });
+  },
+  seekTo(time) {
+    this._command("seek_to", { time });
+  },
+  setVolume(vol) {
+    this._command("volume", { value: vol });
+  },
+
+  _command(action, extra = {}) {
+    $appdata.set("modules.soundmaster.footer_command", { action, ...extra, ts: Date.now() + Math.random() });
+  },
 };

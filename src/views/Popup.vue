@@ -26,6 +26,7 @@ export default {
     module: null,
     visible: false,
     stateHandler: null,
+    batchHandler: null,
     moduleHandler: null,
     closingHandler: null,
     _revealTimer: null,
@@ -45,6 +46,21 @@ export default {
     },
   },
   methods: {
+    _applyStateEntry(data) {
+      if (!data || !data.param) return;
+      this.$appdata.set(data.param, data.value);
+      if (data.param === "popup_module" && data.value) {
+        this.module = data.value;
+      }
+      if (data.param === "theme" && data.value) {
+        try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
+      }
+      // Quando a imagem de capa chega, pré-carrega e revela a janela
+      if (data.param === "modules.media.data" && data.value?.url_image) {
+        this._revealWindow(data.value.url_image);
+      }
+    },
+
     startFadeOut() {
       this.visible = false;
       // Para o browser: fecha a janela após a animação terminar
@@ -84,19 +100,13 @@ export default {
       }
 
       this.stateHandler = window.electron.on("state-update", (data) => {
-        if (data && data.param) {
-          this.$appdata.set(data.param, data.value);
-          if (data.param === "popup_module" && data.value) {
-            this.module = data.value;
-          }
-          if (data.param === "theme" && data.value) {
-            try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
-          }
-          // Quando a imagem de capa chega, pré-carrega e revela a janela
-          if (data.param === "modules.media.data" && data.value?.url_image) {
-            this._revealWindow(data.value.url_image);
-          }
-        }
+        this._applyStateEntry(data);
+      });
+      // Lote atômico (ver AppData.js setMultiple) — aplica tudo em sequência
+      // antes de ceder o controle, então nenhum watcher/computed daqui vê um
+      // estado combinado intermediário incorreto (ex.: show+minimized).
+      this.batchHandler = window.electron.on("state-update-batch", (entries) => {
+        (entries || []).forEach((entry) => this._applyStateEntry(entry));
       });
 
       this.moduleHandler = window.electron.on("set-module", (id) => {
@@ -111,7 +121,7 @@ export default {
         this.startFadeOut();
       });
 
-      window.electron.notifyOutputReady();
+      window.electron.notifyOutputReady('output');
 
       // Fallback: para módulos sem imagem de capa (ou se modules.media.data não chegar),
       // revela depois de 500 ms para não bloquear indefinidamente a janela de saída.
@@ -129,20 +139,12 @@ export default {
       }
 
       window.addEventListener("message", (event) => {
-        if (event.origin === window.location.origin) {
-          if (event.data.param) {
-            this.$appdata.set(event.data.param, event.data.value);
-            if (event.data.param === "popup_module" && event.data.value) {
-              this.module = event.data.value;
-            }
-            if (event.data.param === "theme" && event.data.value) {
-              try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
-            }
-            if (event.data.param === "modules.media.data" && event.data.value?.url_image) {
-              this._revealWindow(event.data.value.url_image);
-            }
-          }
+        if (event.origin !== window.location.origin) return;
+        if (Array.isArray(event.data?.batch)) {
+          event.data.batch.forEach((entry) => this._applyStateEntry(entry));
+          return;
         }
+        this._applyStateEntry(event.data);
       });
       // Fallback para browser: revela se não chegar dados de mídia
       this._revealTimer = setTimeout(() => this._revealWindow(null), 500);
@@ -196,6 +198,7 @@ export default {
     document.removeEventListener("keydown", this.handleKeyDown);
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off("state-update",    this.stateHandler);
+      if (this.batchHandler)  window.electron.off("state-update-batch", this.batchHandler);
       if (this.moduleHandler) window.electron.off("set-module",       this.moduleHandler);
       if (this.closingHandler) window.electron.off("output-closing",  this.closingHandler);
     }

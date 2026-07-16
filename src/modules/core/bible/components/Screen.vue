@@ -4,7 +4,7 @@
     :style="{
       position: 'relative',
       overflow: 'hidden',
-      background: userdata.background_color,
+      background: backgroundColor,
       width: '100%',
       height: height ? height + 'px' : '100%',
     }"
@@ -18,8 +18,8 @@
         width: '100%',
         height: '100%',
         position: 'absolute',
-        objectFit: userdata.image_fit,
-        opacity: userdata.image_opacity / 100,
+        objectFit: imageFit,
+        opacity: imageOpacity,
       }"
     />
 
@@ -28,8 +28,8 @@
         :key="layerKey"
         class="d-flex flex-column"
         :class="[
-          `align-${userdata.vertical_align}`,
-          `justify-${userdata.horizontal_align}`,
+          `align-${verticalAlign}`,
+          `justify-${horizontalAlign}`,
         ]"
         :style="{
           position: 'absolute',
@@ -38,23 +38,23 @@
           width: '100%',
           height: '100%',
           boxSizing: 'border-box',
-          padding: `${fontSizePc(userdata.border_spacing)}px`,
+          padding: `${fontSizePc(borderSpacing)}px`,
         }"
       >
         <span
           v-if="bible && bible.text"
           :class="
             'text-' +
-            (userdata.horizontal_align == 'start'
+            (horizontalAlign == 'start'
               ? 'left'
-              : userdata.horizontal_align == 'end'
+              : horizontalAlign == 'end'
                 ? 'right'
                 : 'center')
           "
           :style="{
             zIndex: 1,
-            color: userdata.font_color,
-            fontSize: `${fontSizePc(userdata.font_size)}px`,
+            color: fontColor,
+            fontSize: `${fontSizePc(fontSize)}px`,
             fontFamily: userdata.font || 'Arial, sans-serif',
           }"
         >
@@ -63,12 +63,12 @@
         <span
           v-if="bible && bible.scriptural_reference"
           :class="
-            'text-' + (userdata.horizontal_align == 'start' ? 'left' : 'right')
+            'text-' + (horizontalAlign == 'start' ? 'left' : 'right')
           "
           :style="{
             zIndex: 1,
-            color: userdata.reference_font_color,
-            fontSize: `${fontSizePc(userdata.reference_font_size)}px`,
+            color: referenceFontColor,
+            fontSize: `${fontSizePc(referenceFontSize)}px`,
             fontFamily: userdata.reference_font || 'Arial, sans-serif',
           }"
         >
@@ -115,6 +115,20 @@ export default {
       );
     },
     /* COMPUTEDS OBRIGATÓRIAS - FIM */
+    // Valores padrão — sem eles, userdata.xxx fica null até o operador
+    // customizar a exibição pelo menos uma vez, e font_size null vira
+    // fontSizePc(null) === 0 (texto montado no DOM com tamanho zero,
+    // portanto invisível mesmo com bible.text preenchido corretamente).
+    backgroundColor() { return this.userdata.background_color || "#000000"; },
+    fontColor()       { return this.userdata.font_color || "#ffffff"; },
+    fontSize()        { return this.userdata.font_size || 48; },
+    referenceFontColor() { return this.userdata.reference_font_color || "#aaaaaa"; },
+    referenceFontSize()  { return this.userdata.reference_font_size || 32; },
+    borderSpacing()   { return this.userdata.border_spacing || 10; },
+    verticalAlign()   { return this.userdata.vertical_align || "center"; },
+    horizontalAlign() { return this.userdata.horizontal_align || "center"; },
+    imageFit()        { return this.userdata.image_fit || "cover"; },
+    imageOpacity()    { return (this.userdata.image_opacity || 100) / 100; },
     bible() {
       return this.$appdata.get("modules.bible.data");
     },

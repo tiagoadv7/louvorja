@@ -283,6 +283,9 @@ export default {
     close() {
       this.pauseStopwatch();
       this.resetStopwatch();
+      // Só sai da projeção se o Cronômetro for de fato o módulo projetado
+      // agora — senão, fechar o painel apagaria o que estiver sendo exibido.
+      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
       this.$modules.close(this.module_id);
     },
 

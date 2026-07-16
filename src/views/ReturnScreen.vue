@@ -47,6 +47,7 @@ export default {
 
   data: () => ({
     stateHandler: null,
+    batchHandler: null,
     closingHandler: null,
   }),
 
@@ -144,6 +145,14 @@ export default {
       return `${m}:${s.toString().padStart(2, '0')}`;
     },
 
+    _applyStateEntry(data) {
+      if (!data || !data.param) return;
+      this.$appdata.set(data.param, data.value);
+      if (data.param === 'theme' && data.value) {
+        try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
+      }
+    },
+
     initElectron() {
       this.$appdata.set('is_popup', true);
       this.$userdata.load();
@@ -153,12 +162,12 @@ export default {
       }
 
       this.stateHandler = window.electron.on('state-update', (data) => {
-        if (data && data.param) {
-          this.$appdata.set(data.param, data.value);
-          if (data.param === 'theme' && data.value) {
-            try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
-          }
-        }
+        this._applyStateEntry(data);
+      });
+      // Lote atômico (ver AppData.js setMultiple) — aplica tudo antes de
+      // ceder o controle, sem estado combinado intermediário incorreto.
+      this.batchHandler = window.electron.on('state-update-batch', (entries) => {
+        (entries || []).forEach((entry) => this._applyStateEntry(entry));
       });
 
       this.closingHandler = window.electron.on('return-closing', () => {
@@ -170,15 +179,18 @@ export default {
       });
 
       // Solicita sincronização do estado completo ao renderer principal
-      window.electron.notifyOutputReady();
+      window.electron.notifyOutputReady('return');
     },
 
     initBrowser() {
       this.$appdata.set('is_popup', true);
       window.addEventListener('message', (event) => {
-        if (event.origin === window.location.origin && event.data?.param) {
-          this.$appdata.set(event.data.param, event.data.value);
+        if (event.origin !== window.location.origin) return;
+        if (Array.isArray(event.data?.batch)) {
+          event.data.batch.forEach((entry) => this._applyStateEntry(entry));
+          return;
         }
+        this._applyStateEntry(event.data);
       });
     },
   },
@@ -193,6 +205,7 @@ export default {
   beforeUnmount() {
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off('state-update',   this.stateHandler);
+      if (this.batchHandler)  window.electron.off('state-update-batch', this.batchHandler);
       if (this.closingHandler) window.electron.off('return-closing', this.closingHandler);
     }
   },

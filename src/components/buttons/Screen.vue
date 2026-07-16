@@ -6,7 +6,7 @@
   >
     <v-btn
       :size="size"
-      :active="is_popup_opened"
+      :active="is_selected"
       icon="mdi-open-in-new"
       :class="{ 'rotate-icon': is_selected }"
       @click="popup()"
@@ -27,6 +27,13 @@
 </template>
 
 <script>
+// Módulos auxiliares (não são conteúdo principal do culto) — trocar pra eles
+// na tela de projeção precisa de confirmação, pra não substituir o que já
+// está sendo exibido (ex.: uma música) só por um clique sem querer. Vídeo
+// fica de fora mesmo compartilhando a categoria "utilities" no manifest,
+// porque é conteúdo trocado com frequência durante o culto.
+const CONFIRM_BEFORE_REPLACE = ["bible", "clock", "stopwatch", "sorteio"];
+
 export default {
   name: "ButtonScreenComponent",
   props: {
@@ -61,9 +68,21 @@ export default {
     popup() {
       if (this.is_selected) {
         this.$popup.close();
-      } else {
-        this.$popup.open(this.module);
+        return;
       }
+      // Já tem outra coisa sendo exibida na projeção e o módulo pra onde
+      // estamos indo é auxiliar (Bíblia/Relógio/Cronômetro/Sorteio) — confirma
+      // antes de substituir, em vez de trocar na hora sem aviso.
+      const isReplacingActiveProjection =
+        this.is_popup_opened && this.popup_module && this.popup_module !== this.module;
+      if (isReplacingActiveProjection && CONFIRM_BEFORE_REPLACE.includes(this.module)) {
+        this.$alert.yesno(
+          { text: "Substituir o que está sendo exibido na tela de projeção agora?", translate: false },
+          (btn) => { if (btn === "yes") this.$popup.open(this.module); }
+        );
+        return;
+      }
+      this.$popup.open(this.module);
     },
     close() {
       this.$popup.close();

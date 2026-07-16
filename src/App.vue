@@ -63,7 +63,7 @@ export default {
     if (!this.$electron.isElectron()) return;
     // Janelas de projeção não precisam de verificação de arquivos nem notificações
     const _hash = window.location.hash;
-    if (_hash.includes('/popup') || _hash.includes('/return-screen')) return;
+    if (_hash.includes('/popup') || _hash.includes('/return-screen') || _hash.includes('/video-pip')) return;
 
     // Garante que o fundo personalizado não persista de sessões anteriores.
     // O slide sempre inicia com a imagem padrão do álbum (globalBg = null).

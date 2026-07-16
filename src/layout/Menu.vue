@@ -87,7 +87,10 @@ export default {
   },
   methods: {
     dispatchSyncFiles() {
-      window.dispatchEvent(new CustomEvent('sync-files'));
+      // Aguarda a transição de fechamento do drawer terminar antes de abrir o
+      // diálogo — do contrário o scrim do drawer (ainda fechando) pode ficar
+      // por cima do novo diálogo e bloquear cliques nos botões dele.
+      setTimeout(() => window.dispatchEvent(new CustomEvent('sync-files')), 300);
     },
     dispatchCheckUpdates() {
       window.dispatchEvent(new CustomEvent('check-updates'));

@@ -179,18 +179,22 @@ export default {
     const h2 = this.$electron.on("output-window-opened", () => {
       this.outputOpen = true;
     });
-    // Janela de saída pronta: envia estado completo (cores, números, módulo, tema, etc.)
-    const h3 = this.$electron.on("output-ready", () => {
+    // Janela de saída/retorno/PIP pronta: envia estado completo (cores, números,
+    // módulo, tema, etc.) SÓ para quem pediu (target) — nunca em broadcast pras
+    // outras, senão campos que a própria janela de saída atualiza localmente e
+    // nunca manda de volta (ex. currentTime do vídeo tocando) seriam sobrescritos
+    // com o valor desatualizado daqui, fazendo a projeção "voltar no tempo".
+    const h3 = this.$electron.on("output-ready", (target) => {
       const data = this.$appdata.getFlatten();
       Object.keys(data).forEach((param) => {
-        this.$electron.sendStateUpdate({ param, value: data[param] });
+        this.$electron.sendStateUpdate({ param, value: data[param], target });
       });
       // slide_global_bg não está no appdata (fica no localStorage) — envia separadamente
       // para que o output window fique em sincronia com qualquer fundo definido na sessão.
       try {
         const raw = localStorage.getItem('slide_global_bg');
         const bgValue = raw ? JSON.parse(raw) : null;
-        this.$electron.sendStateUpdate({ param: 'slide_global_bg', value: bgValue });
+        this.$electron.sendStateUpdate({ param: 'slide_global_bg', value: bgValue, target });
       } catch (_) {}
     });
     this.outputHandlers = [

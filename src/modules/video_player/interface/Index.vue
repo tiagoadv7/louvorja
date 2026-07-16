@@ -10,7 +10,7 @@
     minimizable
     compact
     @close="close()"
-    @minimize="$modules.minimize(module_id)"
+    @minimize="onMinimize()"
   >
     <template v-slot:system_buttons>
       <LScreenBtn module="video_player" />
@@ -27,6 +27,18 @@
 
       <!-- ── Preview (mudo, sem playback real — só referência visual) ────── -->
       <div class="vp-preview">
+        <!-- Mini player flutuante (picture-in-picture): sempre visível por cima
+             das outras janelas do app, com play/pause próprio -->
+        <button
+          v-if="$electron.isElectron()"
+          class="vp-pip-btn"
+          :class="{ 'vp-pip-btn--on': pipOpen }"
+          :title="pipOpen ? 'Fechar mini player flutuante' : 'Abrir mini player flutuante (picture-in-picture)'"
+          @click="togglePip"
+        >
+          <v-icon size="15">mdi-picture-in-picture-bottom-right</v-icon>
+        </button>
+
         <v-icon v-if="!config.src" size="46" style="opacity:0.2">mdi-movie-open-outline</v-icon>
         <img
           v-else-if="config.mediaType === 'image'"
@@ -146,10 +158,17 @@
 import manifest from '../manifest.json';
 import Window from '@/components/Window.vue';
 import LScreenBtn from '@/components/buttons/Screen.vue';
+import $audioBus from '@/helpers/AudioBus';
 
 export default {
   name: 'VideoPlayerModule',
   components: { Window, LScreenBtn },
+
+  data: () => ({
+    pipOpen: false,
+    _pipHandlers: [],
+    _focusHandler: null,
+  }),
 
   computed: {
     /* ── obrigatórias ── */
@@ -241,18 +260,74 @@ export default {
     },
 
     togglePlay() {
-      if (!this.config.src) return;
-      if (!this.config.isPlaying) this.$videoPlayer.ensureOutputShowing();
-      this._patch({ isPlaying: !this.config.isPlaying });
+      this.$videoPlayer.togglePlay();
     },
     stop() {
-      if (!this.config.src) return;
-      this._patch({ isPlaying: false, stopToken: (this.config.stopToken || 0) + 1 });
+      this.$videoPlayer.stop();
     },
     toggleLoop() { this._patch({ loop: !this.config.loop }); },
     toggleTalkover() { this._patch({ talkover: !this.config.talkover }); },
     setVolume(v) { this._patch({ volume: Number(v) }); },
     setTalkoverLevel(v) { this._patch({ talkoverLevel: Number(v) }); },
+
+    // Mini player flutuante (picture-in-picture): abre/fecha uma janela
+    // separada, sempre visível por cima das demais, que espelha este vídeo.
+    async togglePip() {
+      if (this.pipOpen) {
+        await this.$electron.pipClose();
+        this.pipOpen = false;
+      } else {
+        await this.$electron.pipOpen();
+        this.pipOpen = true;
+      }
+    },
+
+    // Minimizar o painel não pausa nem interrompe a reprodução (ela continua
+    // na projeção normalmente) — só troca a prévia pelos controles da barra do
+    // rodapé (ver Footer.vue/videoActive). O mini player flutuante (PIP) é
+    // sempre uma ação manual e separada (botão dedicado) — nunca some/aparece
+    // sozinho junto do minimizar, pra não nascer sem o operador ter pedido.
+    onMinimize() {
+      this.$modules.minimize(this.module_id);
+    },
+  },
+
+  async mounted() {
+    // Outro dono de áudio (SoundMaster/Media) pediu foco: o Popup.vue (janela
+    // de saída) já reage sozinho e para na hora — mas escritas feitas por ele
+    // (is_popup=true) nunca voltam pra esta janela (ver AppData.js). Sem este
+    // listener aqui também, o painel e a barra do rodapé nunca ficavam
+    // sabendo que o vídeo parou, e continuavam mostrando ele como "ativo"
+    // pra sempre (mesmo já mudo/parado na projeção).
+    this._focusHandler = $audioBus.listen('video_player', () => {
+      if (this.config.isPlaying) this.stop();
+    });
+
+    if (!this.$electron.isElectron()) return;
+    this.pipOpen = await this.$electron.pipIsOpen();
+
+    // Comandos vindos do mini player (play/pause, parar) chegam aqui porque
+    // esta janela é a dona da config compartilhada do módulo de vídeo.
+    const hClosed = this.$electron.on('video-pip:closed', () => { this.pipOpen = false; });
+    const hToggle = this.$electron.on('video-pip:toggle-play', () => this.togglePlay());
+    const hStop   = this.$electron.on('video-pip:stop', () => this.stop());
+    // Progresso (currentTime/duration) vindo da janela de saída — canal
+    // dedicado (ver comentário em Popup.vue/onTimeUpdate). Sem isso, o painel
+    // e a barra do rodapé ficavam parados em 0:00 mesmo com o vídeo tocando.
+    const hProgress = this.$electron.on('video-player:progress', ({ currentTime, duration }) => {
+      this.$videoPlayer.setConfig({ currentTime, duration });
+    });
+    this._pipHandlers = [
+      ['video-pip:closed', hClosed],
+      ['video-pip:toggle-play', hToggle],
+      ['video-pip:stop', hStop],
+      ['video-player:progress', hProgress],
+    ];
+  },
+
+  beforeUnmount() {
+    this._pipHandlers.forEach(([channel, handler]) => this.$electron.off(channel, handler));
+    $audioBus.unlisten(this._focusHandler);
   },
 };
 </script>
@@ -319,6 +394,27 @@ export default {
   align-items: center;
   gap: 4px;
 }
+
+/* ── Mini player flutuante (PIP) ── */
+.vp-pip-btn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s;
+  z-index: 1;
+}
+.vp-pip-btn:hover { background: rgba(0, 0, 0, 0.65); }
+.vp-pip-btn--on { background: rgb(var(--v-theme-primary)); }
 
 /* ── Girar/inverter imagem ── */
 .vp-image-controls {

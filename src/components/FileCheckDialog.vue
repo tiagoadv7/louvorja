@@ -354,6 +354,15 @@ export default {
   },
 
   methods: {
+    // Expande todos os álbuns incompletos por padrão, exceto quando há muitos —
+    // v-expansion-panels não é virtualizado (ao contrário da vista "flat"), então
+    // expandir centenas/milhares de linhas de uma vez trava o processo de render
+    // e os cliques no cabeçalho/rodapé (X, Fechar) parecem não fazer nada.
+    defaultExpandedAlbums() {
+      if (this.albumsIncomplete.length > 8) return [];
+      return this.albumsIncomplete.map(a => a.id_album || a.name);
+    },
+
     // Abre o dialog e inicia a varredura.
     // force=true → sempre mostra o diálogo com spinner (usado pelo menu "Sincronizar arquivos").
     // force=false (padrão) → em produção mostra scanning imediatamente e fecha se não houver faltando.
@@ -428,7 +437,7 @@ export default {
 
       // Arquivos faltando: mostra resultados diretamente
       this.selectedDests  = new Set(this.fileList.map(f => f.dest));
-      this.expandedAlbums = this.albumsIncomplete.map(a => a.id_album || a.name);
+      this.expandedAlbums = this.defaultExpandedAlbums();
       this.step           = 'results';
     },
 
@@ -486,7 +495,7 @@ export default {
       } else {
         this.step           = 'results';
         this.selectedDests  = new Set(this.fileList.map(f => f.dest));
-        this.expandedAlbums = this.albumsIncomplete.map(a => a.id_album || a.name);
+        this.expandedAlbums = this.defaultExpandedAlbums();
       }
     },
 

@@ -1,0 +1,8 @@
+{
+  "id": "video_player",
+  "name": "Vídeo",
+  "description": "Reprodutor de vídeo para a tela de projeção, com fade de áudio e imagem",
+  "category": "utilities",
+  "icon": "mdi-movie-open-outline",
+  "showInMainMenu": false
+}

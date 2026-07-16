@@ -62,16 +62,25 @@
             <p class="text-body-2 text-medium-emphasis mt-1 mb-4">
               Baixe coletâneas completas (letras, capas, áudio) para usar o LouvorJA sem conexão.
             </p>
-            <v-row dense>
-              <v-col v-for="item in navItems.filter(i => i.section !== 'home')" :key="item.section" cols="6">
-                <v-card variant="tonal" color="primary" class="dc-home-card" @click="goTo(item.section)">
-                  <v-card-text class="d-flex align-center gap-3 pa-3">
-                    <v-icon size="26" color="primary">{{ item.icon }}</v-icon>
-                    <span class="text-body-2 font-weight-medium">{{ item.label }}</span>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
+            <div class="dc-home-grid mt-3">
+              <div
+                v-for="item in navItems.filter(i => i.section !== 'home')"
+                :key="item.section"
+                class="dc-home-card"
+                @click="goTo(item.section)"
+              >
+                <div
+                  class="dc-home-cover"
+                  :style="{ background: `linear-gradient(145deg, ${item.color}ee 0%, ${item.color}99 100%)` }"
+                >
+                  <v-icon size="48" color="white" style="opacity:0.95">{{ item.icon }}</v-icon>
+                </div>
+                <div class="dc-home-info">
+                  <div class="dc-home-label">{{ item.label }}</div>
+                  <div class="dc-home-desc">{{ item.description }}</div>
+                </div>
+              </div>
+            </div>
           </template>
 
           <!-- HINÁRIOS -->
@@ -79,15 +88,15 @@
             <div class="dc-section-title">Hinários</div>
             <div class="dc-hymnal-grid mt-3">
               <div v-for="h in hymnalItems" :key="h.file" class="dc-hymnal-card">
-                <!-- Capa: imagem real ou gradiente como fallback -->
+                <!-- Capa: gradiente + ícone do hinário (SVG local) -->
                 <div
                   class="dc-hymnal-cover"
-                  :style="h.cover ? {} : { background: `linear-gradient(145deg, ${h.color}ee 0%, ${h.color}99 100%)` }"
+                  :style="{ background: `linear-gradient(145deg, ${h.color}ee 0%, ${h.color}99 100%)` }"
                 >
                   <img
                     v-if="h.cover"
-                    :src="resolveUrl(h.cover)"
-                    class="dc-hymnal-img"
+                    :src="h.cover"
+                    class="dc-hymnal-icon"
                     loading="lazy"
                   />
                   <v-icon v-else size="72" color="white" style="opacity:0.9">{{ h.icon }}</v-icon>
@@ -153,8 +162,8 @@
               >
                 <div class="dc-album-img-wrap">
                   <img
-                    v-if="album.url_image"
-                    :src="resolveUrl(album.url_image)"
+                    v-if="albumImageUrl(album)"
+                    :src="resolveUrl(albumImageUrl(album))"
                     class="dc-album-img"
                     loading="lazy"
                   />
@@ -490,8 +499,13 @@
                         loading="lazy"
                       />
                       <v-icon v-else size="42" color="grey-lighten-1">mdi-music-box</v-icon>
-                      <div class="dc-album-badge-ok">
-                        <v-icon size="16" color="success">mdi-check</v-icon>
+                      <div
+                        class="dc-album-badge-ok"
+                        :title="albumMissingCount(album.id_album) > 0 ? `${albumMissingCount(album.id_album)} arquivo(s) em falta` : 'Completo'"
+                      >
+                        <v-icon size="16" :color="albumMissingCount(album.id_album) > 0 ? 'warning' : 'success'">
+                          {{ albumMissingCount(album.id_album) > 0 ? 'mdi-alert' : 'mdi-check' }}
+                        </v-icon>
                       </div>
                     </div>
                     <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
@@ -514,12 +528,12 @@
                   >
                     <div
                       class="dc-album-img-wrap"
-                      :style="h.cover ? {} : { background: `linear-gradient(145deg, ${h.color}dd 0%, ${h.color}88 100%)` }"
+                      :style="{ background: `linear-gradient(145deg, ${h.color}dd 0%, ${h.color}88 100%)` }"
                     >
                       <img
                         v-if="h.cover"
-                        :src="resolveUrl(h.cover)"
-                        class="dc-album-img dc-album-img--full"
+                        :src="h.cover"
+                        class="dc-hymnal-icon dc-hymnal-icon--sm"
                         loading="lazy"
                       />
                       <v-icon v-else size="52" color="white" style="opacity:0.85">{{ h.icon }}</v-icon>
@@ -607,17 +621,20 @@
 <script>
 import $database from '@/helpers/Database';
 import $storage from '@/helpers/Storage';
+import hasdFlame from '@/assets/imgs/hasd-flame.svg';
 
 const NAV_ITEMS = [
   { section: 'home',        icon: 'mdi-home-outline',         label: 'Início' },
-  { section: 'hymnals',     icon: 'mdi-music-note',           label: 'Hinários' },
-  { section: 'collections', icon: 'mdi-music-box-multiple',   label: 'Coletâneas' },
-  { section: 'bibles',      icon: 'mdi-book-open-variant',    label: 'Bíblias' },
+  { section: 'hymnals',     icon: 'mdi-music-note',           label: 'Hinários',   description: 'Hinários completos com letras e áudio', color: '#1565C0' },
+  { section: 'collections', icon: 'mdi-music-box-multiple',   label: 'Coletâneas', description: 'Coletâneas de músicas por categoria',   color: '#2E7D32' },
+  { section: 'bibles',      icon: 'mdi-book-open-variant',    label: 'Bíblias',    description: 'Textos bíblicos em português e espanhol', color: '#EF6C00' },
 ];
 
+// Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
+// substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
 const HYMNAL_ITEMS = [
-  { file: 'pt_hymnal',      name: 'Hinário 2022', description: 'Hinário moderno',           cover: '/covers/hasd.bmp', icon: 'mdi-music-note',        color: '#1565C0' },
-  { file: 'pt_hymnal_1996', name: 'Hinário 1996', description: 'Hinário histórico de 1996', cover: '/covers/hasd.bmp', icon: 'mdi-music-note-outline', color: '#6A1B9A' },
+  { file: 'pt_hymnal',      name: 'Hinário 2022', description: 'Hinário moderno',           cover: hasdFlame, icon: 'mdi-music-note',        color: '#1B5E43' },
+  { file: 'pt_hymnal_1996', name: 'Hinário 1996', description: 'Hinário histórico de 1996', cover: hasdFlame, icon: 'mdi-music-note-outline', color: '#1B5E43' },
 ];
 
 const BIBLE_ITEMS = [
@@ -679,6 +696,9 @@ export default {
     replaceAlbumTarget:    null,
     // Infos dos álbuns baixados (id_album -> {name, url_image})
     downloadedAlbumInfos:  {},
+    // Completude real dos álbuns baixados (id_album -> {missing, totalFiles}),
+    // obtida verificando os arquivos no disco — não apenas se o JSON existe
+    downloadedAlbumStatus: {},
     // Caminhos das pastas locais
     dbFolder:     '',
     configFolder: '',
@@ -791,17 +811,27 @@ export default {
 
     async init() {
       await this.loadLocalFiles();
-      if (this.section === 'collections') await this.loadCategories();
-      if (this.section === 'downloads') await this.loadDownloadedAlbumInfos();
+      if (this.section === 'collections') {
+        await this.loadCategories();
+        await this.loadDownloadedAlbumInfos();
+      }
+      if (this.section === 'downloads') {
+        await this.loadDownloadedAlbumInfos();
+        this.loadDownloadedAlbumsStatus();
+      }
       if (this.section === 'settings') await this.loadFolderPaths();
     },
 
     async goTo(s) {
       this.section = s;
-      if (s === 'collections' && this.categories.length === 0) await this.loadCategories();
+      if (s === 'collections') {
+        if (this.categories.length === 0) await this.loadCategories();
+        await this.loadDownloadedAlbumInfos();
+      }
       if (s === 'downloads') {
         await this.loadLocalFiles();
         await this.loadDownloadedAlbumInfos();
+        this.loadDownloadedAlbumsStatus();
       }
       if (s === 'settings') {
         await this.loadLocalFiles();
@@ -812,8 +842,37 @@ export default {
     async loadCategories() {
       this.loading = true;
       const locale = this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
-      this.categories = await $database.get(`${locale}_categories`) || [];
+      this.categories = await this.fetchCatalog(`${locale}_categories`) || [];
       this.loading = false;
+    },
+
+    // Busca o catálogo de coletâneas para navegação/download. Diferente de $database.get,
+    // não respeita o Modo Offline: o Centro de Downloads precisa listar tudo que existe
+    // (mesmo o que ainda não foi baixado) para o usuário escolher o que baixar. Se não
+    // houver conexão, cai para o índice salvo localmente em downloads anteriores.
+    async fetchCatalog(file) {
+      const cache_name = `db:${file}`;
+      const cached = $storage.get(cache_name, null, 'session');
+      if (cached) return cached;
+
+      try {
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const url = `${this.$path.db(`/${file}`)}?${date}`;
+        const response = await fetch(url, { headers: { 'Api-Token': import.meta.env.VITE_API_TOKEN } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        $storage.set(cache_name, data, 'session');
+        this.$electron.dbLocalSave(file, data).catch(() => {});
+        return data;
+      } catch (e) {
+        if (this.$electron.isElectron()) {
+          try {
+            const local = await this.$electron.dbLocalGet(file);
+            if (local) return local;
+          } catch (_) {}
+        }
+        return null;
+      }
     },
 
     async loadLocalFiles() {
@@ -830,7 +889,7 @@ export default {
       const albumFiles = this.localFiles.filter(f => f.name.startsWith('album_'));
       if (!albumFiles.length) { this.downloadedAlbumInfos = {}; return; }
 
-      // Garante que as categories estão carregadas para buscar nome e capa
+      // Garante que as categories estão carregadas para complementar dados ausentes
       if (!this.categories.length) await this.loadCategories();
 
       const infos = {};
@@ -838,25 +897,58 @@ export default {
         const id = f.name.replace('album_', '');
         let found = null;
 
-        // Busca nas categories (fonte mais completa — tem nome e url_image)
-        for (const cat of this.categories) {
-          const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
-          if (album) { found = { name: album.name, url_image: album.url_image || '' }; break; }
-        }
+        // 1. Lê do JSON local primeiro — após o download, a capa já foi convertida
+        //    para app-local://, funcionando sem internet. Usar a categoria (URL
+        //    online) aqui faria a capa sumir no Modo Offline sem conexão real.
+        try {
+          const data = await this.$electron.dbLocalGet(f.name);
+          if (data) found = { name: data.name || '', url_image: data.url_image || '' };
+        } catch { /* segue para o fallback abaixo */ }
 
-        // Fallback: lê do banco local
-        if (!found) {
-          try {
-            const data = await this.$electron.dbLocalGet(f.name);
-            found = { name: data?.name || f.name, url_image: data?.url_image || '' };
-          } catch {
-            found = { name: f.name, url_image: '' };
+        // 2. Complementa com as categories (fonte online) só o que faltar
+        if (!found?.name || !found?.url_image) {
+          for (const cat of this.categories) {
+            const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
+            if (album) {
+              found = {
+                name:      found?.name      || album.name,
+                url_image: found?.url_image || album.url_image || '',
+              };
+              break;
+            }
           }
         }
 
-        infos[id] = found || { name: f.name, url_image: '' };
+        infos[id] = found?.name ? found : { name: f.name, url_image: found?.url_image || '' };
       }
       this.downloadedAlbumInfos = infos;
+    },
+
+    // Verifica no disco se os álbuns baixados estão realmente completos (áudio,
+    // capas e imagens presentes) — sem isso, "Meus Downloads" mostrava sempre
+    // "completo" só porque o JSON do álbum existe, mesmo com arquivos faltando.
+    async loadDownloadedAlbumsStatus() {
+      if (!this.isElectron) return;
+      const ids = this.downloadedAlbums.map(a => a.id_album);
+      if (!ids.length) { this.downloadedAlbumStatus = {}; return; }
+      try {
+        const result = await this.$electron.checkAlbumsComplete(ids);
+        const map = {};
+        for (const id of ids) {
+          const st = result?.[String(id)];
+          if (st) map[String(id)] = { missing: st.missing || 0, totalFiles: st.totalFiles || 0 };
+        }
+        this.downloadedAlbumStatus = map;
+      } catch (_) {
+        // Sem informação nova — mantém o estado anterior (badges neutras)
+      }
+    },
+
+    // Retorna a quantidade de arquivos em falta de um álbum baixado, ou null
+    // quando a verificação ainda não rodou (status desconhecido).
+    albumMissingCount(id_album) {
+      const st = this.downloadedAlbumStatus[String(id_album)];
+      return st ? st.missing : null;
     },
 
     isDownloaded(filename) {
@@ -869,6 +961,15 @@ export default {
 
     isAlbumFullyDownloaded(album) {
       return this.isDownloaded(`album_${album.id_album}`);
+    },
+
+    // Capa a exibir para um álbum na grade de Coletâneas: se já foi baixado,
+    // usa a capa do JSON local (app-local://, funciona sem internet). Só cai
+    // para a URL online (categories) quando o álbum ainda não foi baixado.
+    albumImageUrl(album) {
+      const local = this.downloadedAlbumInfos[String(album.id_album)];
+      if (local?.url_image) return local.url_image;
+      return album.url_image || '';
     },
 
     resolveUrl(url) {
@@ -1014,8 +1115,10 @@ export default {
         if (result.success) {
           const s = result.stats || {};
           this.albumStats = { ...this.albumStats, [id]: s };
-          // Recarrega categorias para que as capas com URL app-local:// sejam exibidas
-          await this.loadCategories();
+          // Recarrega do JSON local (não das categories online) para que a capa
+          // já convertida para app-local:// pelo download seja exibida
+          await this.loadLocalFiles();
+          await this.loadDownloadedAlbumInfos();
           if ((s.skipped || 0) > 0 && !overwrite) {
             this.$alert?.info?.({
               text: `${s.skipped} arquivo(s) já existiam e foram ignorados. Use "Substituir" para forçar o re-download.`,
@@ -1027,8 +1130,8 @@ export default {
             text: `Falha ao baixar álbum "${album.name}": ${result.error || 'erro desconhecido'}`,
             translate: false,
           });
+          await this.loadLocalFiles();
         }
-        await this.loadLocalFiles();
       } catch (e) {
         this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
@@ -1224,8 +1327,47 @@ export default {
 
 /* ── Comuns ─────────────────────────────────────────────────────── */
 .dc-section-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-.dc-home-card { cursor: pointer; transition: opacity 0.15s; }
-.dc-home-card:hover { opacity: 0.85; }
+
+/* ── Cards da tela inicial (estilo capa) ─────────────────────────── */
+.dc-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+.dc-home-card {
+  border-radius: 12px;
+  border: 1px solid rgba(128,128,128,0.15);
+  overflow: hidden;
+  background: rgba(128,128,128,0.04);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.dc-home-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.18); }
+.dc-home-cover {
+  width: 100%;
+  aspect-ratio: 16/9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dc-home-info {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.dc-home-label {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.dc-home-desc {
+  font-size: 12px;
+  opacity: 0.55;
+}
 
 /* ── Grid de Hinários ───────────────────────────────────────────── */
 .dc-hymnal-grid {
@@ -1267,11 +1409,13 @@ export default {
   font-size: 12px;
   opacity: 0.55;
 }
-.dc-hymnal-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.dc-hymnal-icon {
+  width: 55%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.35));
 }
+.dc-hymnal-icon--sm { width: 48%; }
 
 /* ── Lista de pacotes ───────────────────────────────────────────── */
 .dc-pkg-list { display: flex; flex-direction: column; gap: 12px; }

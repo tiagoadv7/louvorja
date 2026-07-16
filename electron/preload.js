@@ -1,16 +1,22 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Canais que o renderer pode ouvir (main → renderer)
 const RECEIVE_CHANNELS = [
   'state-update',
+  'state-update-batch',
   'set-module',
   'output-window-closed',
   'output-window-opened',
   'output-ready',
   'output-closing',
+  'audio-focus-request',
   'return-window-opened',
   'return-window-closed',
   'return-closing',
+  'video-pip:toggle-play',
+  'video-pip:stop',
+  'video-pip:closed',
+  'video-player:progress',
   'menu:open-output',
   'menu:close-output',
   'menu:save-data',
@@ -52,6 +58,10 @@ contextBridge.exposeInMainWorld('electron', {
   storeClear: () => ipcRenderer.invoke('store:clear'),
 
   // ── Sistema de arquivos ──────────────────────────────────────────────────
+  // File.path foi removido do Electron (a partir da v32) por segurança — o caminho
+  // absoluto de um arquivo arrastado (drag&drop) só pode ser obtido via webUtils,
+  // que só existe no processo com Node (preload), nunca no renderer isolado.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   selectFile: (options) => ipcRenderer.invoke('fs:select-file', options),
   selectFolder: (options) => ipcRenderer.invoke('fs:select-folder', options),
   saveDialog: (options) => ipcRenderer.invoke('fs:save-dialog', options),
@@ -75,6 +85,7 @@ contextBridge.exposeInMainWorld('electron', {
   mediaSetBaseFolder: (folderPath) => ipcRenderer.invoke('media:set-base-folder', folderPath),
   mediaScanFolder: (folderPath) => ipcRenderer.invoke('media:scan-folder', folderPath),
   mediaResolveFile: (filename) => ipcRenderer.invoke('media:resolve-file', filename),
+  mediaDownloadFile: (params) => ipcRenderer.invoke('media:download-file', params),
   mediaGetImagesFolder: () => ipcRenderer.invoke('media:get-images-folder'),
   mediaSetImagesFolder: (folderPath) => ipcRenderer.invoke('media:set-images-folder', folderPath),
   mediaResolveImage: (filename) => ipcRenderer.invoke('media:resolve-image', filename),
@@ -112,8 +123,10 @@ contextBridge.exposeInMainWorld('electron', {
   dbLocalDownload: (filename, url, token) => ipcRenderer.invoke('db:local-download', filename, url, token),
   albumDownloadFull: (albumId, dbBaseUrl, filesBaseUrl, token, overwrite = false) =>
     ipcRenderer.invoke('album:download-full', albumId, dbBaseUrl, filesBaseUrl, token, overwrite),
-  scanMissingFiles: () => ipcRenderer.invoke('files:scan-missing'),
-  scanAlbumsFiles: () => ipcRenderer.invoke('files:scan-albums'),
+  scanMissingFiles: (dbBaseUrl, token) => ipcRenderer.invoke('files:scan-missing', dbBaseUrl, token),
+  scanAlbumsFiles: (dbBaseUrl, token) => ipcRenderer.invoke('files:scan-albums', dbBaseUrl, token),
+  checkAlbumsComplete: (albumIds, dbBaseUrl, token) =>
+    ipcRenderer.invoke('files:check-albums-complete', albumIds, dbBaseUrl, token),
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
     ipcRenderer.invoke('files:download-missing', missingList, filesBaseUrl, token),
 
@@ -121,6 +134,19 @@ contextBridge.exposeInMainWorld('electron', {
   openReturnScreen:  (displayId) => ipcRenderer.invoke('return:open', displayId),
   closeReturnScreen: ()          => ipcRenderer.invoke('return:close'),
   isReturnScreenOpen: ()         => ipcRenderer.invoke('return:is-open'),
+
+  // ── Janela flutuante (PIP) do player de vídeo ────────────────────────────
+  pipOpen: () => ipcRenderer.invoke('video-pip:open'),
+  pipClose: () => ipcRenderer.invoke('video-pip:close'),
+  pipIsOpen: () => ipcRenderer.invoke('video-pip:is-open'),
+  sendPipTogglePlay: () => ipcRenderer.send('video-pip:toggle-play'),
+  sendPipStop: () => ipcRenderer.send('video-pip:stop'),
+  // Progresso de reprodução (currentTime/duration) — canal dedicado da janela
+  // de saída pra janela principal. O canal genérico de estado (state-update)
+  // não serve aqui: escritas feitas pela janela de saída (is_popup=true)
+  // nunca voltam por ali, então a barra do rodapé/painel nunca sabiam o
+  // tempo real de reprodução e ficavam parados em 0:00.
+  sendVideoProgress: (data) => ipcRenderer.send('video-player:progress', data),
 
   // ── Sistema ───────────────────────────────────────────────────────────────
   getHostname: () => ipcRenderer.invoke('app:hostname'),
@@ -143,7 +169,13 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Sincronização de estado (janela principal → janela de saída) ─────────
   sendStateUpdate: (data) => ipcRenderer.send('state-update', data),
-  notifyOutputReady: () => ipcRenderer.send('output:ready'),
+  // Lote atômico — vários campos entregues numa única mensagem/evento, pra
+  // quem recebe nunca computar um estado combinado intermediário incorreto
+  // (ver AppData.js setMultiple).
+  sendStateUpdateBatch: (entries) => ipcRenderer.send('state-update-batch', entries),
+  // Foco de áudio — bidirecional entre janela principal e janela de saída
+  sendAudioFocusRequest: (data) => ipcRenderer.send('audio-focus-request', data),
+  notifyOutputReady: (target) => ipcRenderer.send('output:ready', target),
   appLoaded: () => ipcRenderer.send('app:loaded'),
 
   // ── Eventos (main → renderer) ────────────────────────────────────────────

@@ -94,12 +94,9 @@
             <v-icon size="60" color="grey-lighten-1">mdi-script-text-outline</v-icon>
             <div class="lt-empty-title">Liturgia vazia</div>
             <div class="lt-empty-sub">
-              Adicione músicas, anotações, versículos, mídias e categorias para montar seu culto,
+              Adicione músicas, anotações, mídias e categorias para montar seu culto,
               ou arraste qualquer arquivo até aqui.
             </div>
-            <button class="lt-add-center-btn" @click="openAdd">
-              <v-icon size="16">mdi-plus</v-icon> Adicionar item
-            </button>
           </div>
 
           <!-- Items list -->
@@ -118,7 +115,7 @@
                   'lt-item--done':     item.done,
                   'lt-item--locked':   item.locked,
                 }]"
-                @click="toggleSelect(idx)"
+                @click="onItemRowClick(item, idx)"
               >
                 <div class="lt-item-stripe" :style="{ background: item.color }" />
 
@@ -153,7 +150,14 @@
                 <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
                 <div class="lt-item-actions" @click.stop>
-                  <button v-if="isPlayable(item)" class="lt-row-btn lt-row-btn--play" @click="playItem(item)">
+                  <!-- Música (coletânea/hinário) já tem seus próprios controles no
+                       MusicMenuTable (cantado/instrumental/letra) — o botão de play
+                       genérico aqui seria redundante. -->
+                  <button
+                    v-if="isPlayable(item) && item.type !== 'musica'"
+                    class="lt-row-btn lt-row-btn--play"
+                    @click="playItem(item)"
+                  >
                     <v-icon size="17">mdi-play-circle-outline</v-icon>
                   </button>
                   <MusicMenuTable
@@ -208,10 +212,10 @@
               <button :class="['lt-fb', { 'lt-fb--on': nStrike }]" @click="nStrike = !nStrike" style="text-decoration:line-through">S</button>
               <button :class="['lt-fb', { 'lt-fb--on': nUnder }]"  @click="nUnder  = !nUnder"  style="text-decoration:underline">abc</button>
               <span class="lt-vbar" />
-              <button class="lt-fb lt-fb--color" @click="$refs.nColor.click()">
+              <label class="lt-fb lt-fb--color">
                 <div class="lt-fb-swatch" :style="{ background: nColor || 'currentColor' }" />
-              </button>
-              <input ref="nColor" type="color" :value="nColor || '#ffffff'" style="display:none" @change="nColor = $event.target.value" />
+                <input type="color" :value="nColor || '#ffffff'" class="lt-color-input" @change="nColor = $event.target.value" />
+              </label>
             </div>
             <div class="lt-notes-bar-row">
               <button :class="['lt-fb', { 'lt-fb--on': nAlign==='left' }]"    @click="nAlign='left'">
@@ -305,8 +309,9 @@
           <div class="lt-form-row" style="margin-top:10px; align-items:flex-end">
             <div class="lt-form-field">
               <label class="lt-label">Cor:</label>
-              <button class="lt-color-swatch" :style="{ background: form.color }" @click="$refs.formColor.click()" />
-              <input ref="formColor" type="color" v-model="form.color" style="display:none" />
+              <label class="lt-color-swatch" :style="{ background: form.color }">
+                <input type="color" v-model="form.color" class="lt-color-input" />
+              </label>
             </div>
             <div class="lt-form-field">
               <label class="lt-label">Duração (min):</label>
@@ -326,7 +331,7 @@
           <!-- Música -->
           <template v-else-if="form.type === 'musica'">
             <div class="lt-section-lbl">MÚSICA</div>
-            <input v-model="musicSearch" class="lt-input lt-input--full" placeholder="Buscar música..." style="margin-bottom:8px" />
+            <input ref="musicSearchInput" v-model="musicSearch" class="lt-input lt-input--full" placeholder="Buscar música..." style="margin-bottom:8px" />
             <div class="lt-music-list">
               <div v-if="musicLoading" class="d-flex justify-center pa-4">
                 <v-progress-circular indeterminate size="24" color="primary" />
@@ -411,8 +416,8 @@
             <div class="lt-section-lbl">MÍDIA (QUALQUER ARQUIVO)</div>
             <label class="lt-label">Arquivo local:</label>
             <div class="lt-file-row">
-              <input :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
-              <button class="lt-btn-outline" @click="pickMediaFile">
+              <input ref="mediaUrlInput" :value="form.url" class="lt-input" readonly placeholder="Nenhum arquivo selecionado" />
+              <button type="button" class="lt-btn-outline" @click="pickMediaFile">
                 <v-icon size="15">mdi-magnify</v-icon> Selecionar
               </button>
             </div>
@@ -564,7 +569,6 @@ const TYPES = [
   { value: 'anotacao',  title: 'Anotação',  desc: 'Texto livre sem ação (ex: Oração, Doxologia)',  icon: 'mdi-text-long',                      color: '#42a5f5' },
   { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
   { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
-  { value: 'versiculo', title: 'Versículo', desc: 'Selecione um versículo bíblico',                 icon: 'mdi-book-open-page-variant-outline', color: '#8e24aa' },
   { value: 'midia',     title: 'Mídia',     desc: 'Selecione qualquer arquivo (vídeo, imagem, áudio ou outro)', icon: 'mdi-file-video-outline', color: '#fb8c00' },
   { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
 ];
@@ -951,6 +955,10 @@ export default {
       this.form.has_instrumental_music = !!m.has_instrumental_music;
       const sec = Number(m.duration) || 0;
       this.form.duration = sec ? Math.ceil(sec / 60) : 0;
+      // A linha da lista é um <div> (não focável) — clicar nela tira o foco
+      // do campo de busca, e sem nenhum campo focado o Enter não dispara o
+      // submit nativo do <form>. Devolve o foco pro campo pra Enter confirmar.
+      this.$nextTick(() => this.$refs.musicSearchInput?.focus());
     },
 
     /* ── bíblia / versículo ── */
@@ -1026,6 +1034,11 @@ export default {
           this.form.name = fp.split(/[\\/]/).pop() || '';
         }
       }
+      // O botão "Selecionar" continua focado depois que o diálogo nativo
+      // fecha — e qualquer <button> focado dispara seu próprio clique ao
+      // apertar Enter (reabrindo o seletor), independente de type="button".
+      // Devolve o foco pro campo de arquivo pra Enter adicionar o item.
+      this.$nextTick(() => this.$refs.mediaUrlInput?.focus());
     },
     pickFromVideoPlaylist(v) {
       this.form.url = v.path;
@@ -1130,6 +1143,16 @@ export default {
       const l = [...this.dayItems];
       l[idx] = { ...l[idx], selected: !l[idx].selected };
       this.dayItems = l;
+    },
+    // Para mídia de áudio/vídeo, a linha inteira reproduz o item (a seleção
+    // continua acessível pelo checkbox do badge, que já tem @click.stop).
+    // Para os demais tipos, o clique na linha continua selecionando.
+    onItemRowClick(item, idx) {
+      if ((item.type === 'midia' || item.type === 'arquivo') && this.isPlayable(item)) {
+        this.playItem(item);
+      } else {
+        this.toggleSelect(idx);
+      }
     },
     setSelected(idx, v) {
       const l = [...this.dayItems];
@@ -1458,22 +1481,6 @@ export default {
   max-width: 380px;
   line-height: 1.5;
 }
-.lt-add-center-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 20px;
-  padding: 8px 22px;
-  background: rgb(var(--v-theme-primary));
-  color: rgb(var(--v-theme-on-primary));
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: filter 0.15s;
-}
-.lt-add-center-btn:hover { filter: brightness(1.1); }
-
 /* Item rows */
 .lt-list { flex: 1; }
 
@@ -1693,6 +1700,7 @@ export default {
   border-color: rgba(var(--v-theme-primary), 0.4);
   color: rgb(var(--v-theme-primary));
 }
+.lt-fb--color { position: relative; overflow: hidden; }
 .lt-fb-swatch {
   width: 14px;
   height: 10px;
@@ -1760,9 +1768,25 @@ export default {
   border-radius: 6px;
   cursor: pointer;
   display: block;
+  position: relative;
+  overflow: hidden;
   transition: border-color 0.15s, transform 0.1s;
 }
 .lt-color-swatch:hover { border-color: rgba(var(--v-theme-primary), 0.8); transform: scale(1.05); }
+
+/* Input real (não display:none) sobreposto ao swatch visível — só assim o
+   seletor de cor nativo do Chromium tem uma posição/tamanho válidos pra se
+   ancorar ali, em vez de abrir deslocado no canto da tela. */
+.lt-color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
 
 .lt-section-lbl {
   font-size: 11px;
