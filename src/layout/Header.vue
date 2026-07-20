@@ -49,6 +49,18 @@
       @click="changeLayout()"
     />
 
+    <v-tooltip location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn
+          v-bind="props"
+          :icon="offlineModeEnabled ? 'mdi-wifi-off' : 'mdi-wifi'"
+          :color="offlineModeEnabled ? 'grey' : 'green'"
+          @click="toggleOfflineMode()"
+        />
+      </template>
+      {{ offlineModeEnabled ? "Modo Offline" : "Modo Online" }}
+    </v-tooltip>
+
     <v-tooltip v-if="isOnline" location="bottom">
       <template v-slot:activator="{ props }">
         <v-btn v-bind="props" icon="mdi-cloud-download-outline" @click="openDownload()" />
@@ -68,6 +80,7 @@ import LanguageSelector from "@/components/LanguageSelector.vue";
 import MonitorSelector from "@/components/MonitorSelector.vue";
 import DownloadCenter from "@/components/DownloadCenter.vue";
 import QuickSearch from "@/components/QuickSearch.vue";
+import $storage from "@/helpers/Storage";
 
 export default {
   name: "HeaderLayout",
@@ -82,6 +95,7 @@ export default {
     downloadSection: 'home',
     quickSearchOpen: false,
     isOnline: navigator.onLine,
+    offlineModeEnabled: $storage.get("db_local_enabled", false) === true,
     _downloadHandler: null,
     _quickSearchHandler: null,
     _onlineHandler: null,
@@ -133,6 +147,14 @@ export default {
     openDownload(section = 'home') {
       this.downloadSection = section;
       this.downloadDialog = true;
+    },
+
+    toggleOfflineMode() {
+      this.offlineModeEnabled = !this.offlineModeEnabled;
+      $storage.set("db_local_enabled", this.offlineModeEnabled);
+      // Limpa o cache de sessão da API (db:*) pra próxima leitura já respeitar
+      // o modo novo, em vez de servir dados em cache do modo anterior.
+      $storage.removeAll("db", "session");
     },
 
     changeLayout() {

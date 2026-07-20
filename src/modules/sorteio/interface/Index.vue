@@ -58,83 +58,78 @@
       <l-toolbar v-show="activeTab === 'numbers'">
         <l-toolbar-item>
           <v-btn
+            stacked
             color="green"
             size="small"
             variant="tonal"
             :disabled="isAnimating"
             @click="draw()"
           >
-            <v-icon left>mdi-play</v-icon>
+            <v-icon size="22">mdi-play</v-icon>
             {{ t("draw") }}
           </v-btn>
-          <span v-if="isDesktop" class="text-caption ml-1" style="opacity:0.5">F4</span>
+          <div v-if="isDesktop" class="text-caption text-center" style="opacity:0.5">F4</div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-text-field
-            v-model.number="initialVal"
-            :label="t('initial')"
-            type="number"
-            variant="outlined"
-            density="compact"
-            hide-details
-            style="width: 75px"
-            @keyup.enter="addNumbers()"
-          />
+          <div class="d-flex align-end sorteio-input-row">
+            <v-text-field
+              v-model.number="initialVal"
+              :label="t('initial')"
+              type="number"
+              variant="outlined"
+              density="compact"
+              hide-details
+              style="width: 70px"
+              @keyup.enter="addNumbers()"
+            />
+            <v-text-field
+              v-model.number="finalVal"
+              :label="t('final')"
+              type="number"
+              variant="outlined"
+              density="compact"
+              hide-details
+              style="width: 70px"
+              @keyup.enter="addNumbers()"
+            />
+            <v-btn icon size="small" color="primary" variant="tonal" :title="t('add')" @click="addNumbers()">
+              <v-icon size="18">mdi-plus</v-icon>
+            </v-btn>
+          </div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-text-field
-            v-model.number="finalVal"
-            :label="t('final')"
-            type="number"
-            variant="outlined"
-            density="compact"
-            hide-details
-            style="width: 75px"
-            @keyup.enter="addNumbers()"
-          />
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="addNumbers()">
-            <v-icon left>mdi-plus</v-icon>
-            {{ t("add") }}
-          </v-btn>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="showImportDialog = true">
-            <v-icon left>mdi-import</v-icon>
+          <v-btn stacked size="small" variant="tonal" @click="showImportDialog = true">
+            <v-icon size="22">mdi-import</v-icon>
             {{ t("import_list") }}
           </v-btn>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <div class="sorteio-counter">
-            <span class="sorteio-counter__value">{{ availableList.length }}</span>
-            <span class="sorteio-counter__label">{{ t("available") }}</span>
+          <div class="sorteio-counter-group">
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ availableList.length }}</span>
+              <span class="sorteio-counter__label">{{ t("available") }}</span>
+            </div>
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ drawnList.length }}</span>
+              <span class="sorteio-counter__label">{{ t("drawn") }}</span>
+            </div>
           </div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <div class="sorteio-counter">
-            <span class="sorteio-counter__value">{{ drawnList.length }}</span>
-            <span class="sorteio-counter__label">{{ t("drawn") }}</span>
+          <div class="sorteio-stack-group">
+            <v-btn size="x-small" variant="tonal" color="orange" @click="reiniciar()">
+              <v-icon size="14" class="me-1">mdi-restore</v-icon>
+              {{ t("reiniciar") }}
+            </v-btn>
+            <v-btn size="x-small" variant="tonal" color="red" @click="clearAll()">
+              <v-icon size="14" class="me-1">mdi-delete</v-icon>
+              {{ t("clear_all") }}
+            </v-btn>
           </div>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn color="orange" size="small" icon variant="tonal" :title="t('reiniciar')" @click="reiniciar()">
-            <v-icon size="18">mdi-restore</v-icon>
-          </v-btn>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn color="red" size="small" variant="tonal" @click="clearAll()">
-            <v-icon left>mdi-delete</v-icon>
-            {{ t("clear_all") }}
-          </v-btn>
         </l-toolbar-item>
 
         <l-toolbar-item>
@@ -152,11 +147,10 @@
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-checkbox v-model="showNumbers" :label="t('numbers')" density="compact" hide-details />
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-checkbox v-model="showDrawn" :label="t('show_drawn')" density="compact" hide-details />
+          <div class="sorteio-checkbox-group">
+            <v-checkbox v-model="showNumbers" :label="t('numbers')" density="compact" hide-details />
+            <v-checkbox v-model="showDrawn" :label="t('show_drawn')" density="compact" hide-details />
+          </div>
         </l-toolbar-item>
       </l-toolbar>
 
@@ -164,69 +158,67 @@
       <l-toolbar v-show="activeTab === 'names'">
         <l-toolbar-item>
           <v-btn
+            stacked
             color="green"
             size="small"
             variant="tonal"
             :disabled="isAnimating"
             @click="draw()"
           >
-            <v-icon left>mdi-play</v-icon>
+            <v-icon size="22">mdi-play</v-icon>
             {{ t("draw") }}
           </v-btn>
-          <span v-if="isDesktop" class="text-caption ml-1" style="opacity:0.5">F4</span>
+          <div v-if="isDesktop" class="text-caption text-center" style="opacity:0.5">F4</div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-text-field
-            v-model="nameInput"
-            :label="t('name_input')"
-            variant="outlined"
-            density="compact"
-            hide-details
-            style="width: 160px"
-            @keyup.enter="addName()"
-          />
+          <div class="d-flex align-end sorteio-input-row">
+            <v-text-field
+              v-model="nameInput"
+              :label="t('name_input')"
+              variant="outlined"
+              density="compact"
+              hide-details
+              style="width: 150px"
+              @keyup.enter="addName()"
+            />
+            <v-btn icon size="small" color="primary" variant="tonal" :title="t('add')" @click="addName()">
+              <v-icon size="18">mdi-plus</v-icon>
+            </v-btn>
+          </div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="addName()">
-            <v-icon left>mdi-plus</v-icon>
-            {{ t("add") }}
-          </v-btn>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="showImportDialog = true">
-            <v-icon left>mdi-import</v-icon>
+          <v-btn stacked size="small" variant="tonal" @click="showImportDialog = true">
+            <v-icon size="22">mdi-import</v-icon>
             {{ t("import_list") }}
           </v-btn>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <div class="sorteio-counter">
-            <span class="sorteio-counter__value">{{ namesAvailableList.length }}</span>
-            <span class="sorteio-counter__label">{{ t("available") }}</span>
+          <div class="sorteio-counter-group">
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ namesAvailableList.length }}</span>
+              <span class="sorteio-counter__label">{{ t("available") }}</span>
+            </div>
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ namesDrawnList.length }}</span>
+              <span class="sorteio-counter__label">{{ t("drawn") }}</span>
+            </div>
           </div>
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <div class="sorteio-counter">
-            <span class="sorteio-counter__value">{{ namesDrawnList.length }}</span>
-            <span class="sorteio-counter__label">{{ t("drawn") }}</span>
+          <div class="sorteio-stack-group">
+            <v-btn size="x-small" variant="tonal" color="orange" @click="reiniciar()">
+              <v-icon size="14" class="me-1">mdi-restore</v-icon>
+              {{ t("reiniciar") }}
+            </v-btn>
+            <v-btn size="x-small" variant="tonal" color="red" @click="clearAll()">
+              <v-icon size="14" class="me-1">mdi-delete</v-icon>
+              {{ t("clear_all") }}
+            </v-btn>
           </div>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn color="orange" size="small" icon variant="tonal" :title="t('reiniciar')" @click="reiniciar()">
-            <v-icon size="18">mdi-restore</v-icon>
-          </v-btn>
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-btn color="red" size="small" variant="tonal" @click="clearAll()">
-            <v-icon left>mdi-delete</v-icon>
-            {{ t("clear_all") }}
-          </v-btn>
         </l-toolbar-item>
 
         <l-toolbar-item>
@@ -244,87 +236,106 @@
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-checkbox v-model="showNumbers" :label="t('names_list')" density="compact" hide-details />
-        </l-toolbar-item>
-
-        <l-toolbar-item>
-          <v-checkbox v-model="showDrawn" :label="t('show_drawn')" density="compact" hide-details />
+          <div class="sorteio-checkbox-group">
+            <v-checkbox v-model="showNumbers" :label="t('names_list')" density="compact" hide-details />
+            <v-checkbox v-model="showDrawn" :label="t('show_drawn')" density="compact" hide-details />
+          </div>
         </l-toolbar-item>
       </l-toolbar>
       <!-- Toolbar ROLETA -->
       <l-toolbar v-show="activeTab === 'roulette'">
         <l-toolbar-item>
           <v-btn
-            icon
+            stacked
             color="green"
-            size="36"
+            size="small"
             variant="tonal"
             :disabled="rouletteSpinning || rouletteItems.length === 0"
             @click="rouletteSpin()"
           >
-            <v-icon size="20">mdi-ferris-wheel</v-icon>
+            <v-icon size="22">mdi-ferris-wheel</v-icon>
+            {{ t("roulette_spin") }}
           </v-btn>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-text-field
-            v-model="rouletteInput"
-            :label="t('roulette_item_input')"
-            variant="outlined"
-            density="compact"
-            hide-details
-            style="width:160px"
-            @keyup.enter="rouletteAdd()"
-          />
+          <div class="d-flex align-end sorteio-input-row">
+            <v-text-field
+              v-model="rouletteInput"
+              :label="t('roulette_item_input')"
+              variant="outlined"
+              density="compact"
+              hide-details
+              style="width:150px"
+              @keyup.enter="rouletteAdd()"
+            />
+            <v-btn icon size="small" color="primary" variant="tonal" :title="t('roulette_add')" @click="rouletteAdd()">
+              <v-icon size="18">mdi-plus</v-icon>
+            </v-btn>
+          </div>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="rouletteAdd()">
-            <v-icon left>mdi-plus</v-icon>
-            {{ t("roulette_add") }}
-          </v-btn>
-        </l-toolbar-item>
-        <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="showRouletteImport = true">
-            <v-icon left>mdi-import</v-icon>
+          <v-btn stacked size="small" variant="tonal" @click="showRouletteImport = true">
+            <v-icon size="22">mdi-import</v-icon>
             {{ t("roulette_import") }}
           </v-btn>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-btn size="small" variant="tonal" @click="showFormsDialog = true">
-            <v-icon left>mdi-google</v-icon>
+          <v-btn stacked size="small" variant="tonal" @click="showFormsDialog = true">
+            <v-icon size="22">mdi-google</v-icon>
             {{ t("roulette_forms") }}
           </v-btn>
         </l-toolbar-item>
+
         <l-toolbar-item>
           <v-btn
+            stacked
             :color="regRunning ? 'success' : 'default'"
             size="small"
             variant="tonal"
             @click="toggleRegServer()"
           >
-            <v-icon left>mdi-qrcode</v-icon>
+            <v-badge :content="regCount" :model-value="regCount > 0" color="primary">
+              <v-icon size="22">mdi-qrcode</v-icon>
+            </v-badge>
             {{ t("roulette_qr") }}
-            <v-badge v-if="regCount > 0" :content="regCount" color="primary" inline />
           </v-btn>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-checkbox v-model="rouletteRemoveDrawn" :label="t('roulette_remove_drawn')" density="compact" hide-details />
+          <div class="sorteio-counter-group">
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ rouletteActiveItems.length }}</span>
+              <span class="sorteio-counter__label">{{ t("available") }}</span>
+            </div>
+            <div class="sorteio-counter sorteio-counter--row">
+              <span class="sorteio-counter__value">{{ rouletteDrawn.length }}</span>
+              <span class="sorteio-counter__label">{{ t("drawn") }}</span>
+            </div>
+          </div>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-checkbox v-model="rouletteShowParticipants" :label="t('roulette_participants')" density="compact" hide-details />
+          <div class="sorteio-stack-group">
+            <v-btn size="x-small" variant="tonal" color="orange" @click="rouletteReset()">
+              <v-icon size="14" class="me-1">mdi-restore</v-icon>
+              {{ t("roulette_reset") }}
+            </v-btn>
+            <v-btn size="x-small" variant="tonal" color="red" @click="rouletteClear()">
+              <v-icon size="14" class="me-1">mdi-delete</v-icon>
+              {{ t("roulette_clear") }}
+            </v-btn>
+          </div>
         </l-toolbar-item>
+
         <l-toolbar-item>
-          <v-checkbox v-model="rouletteShowHistory" :label="t('roulette_history')" density="compact" hide-details />
-        </l-toolbar-item>
-        <l-toolbar-item>
-          <v-btn color="orange" size="small" icon variant="tonal" :title="t('roulette_reset')" @click="rouletteReset()">
-            <v-icon size="18">mdi-restore</v-icon>
-          </v-btn>
-        </l-toolbar-item>
-        <l-toolbar-item>
-          <v-btn color="red" size="small" variant="tonal" @click="rouletteClear()">
-            <v-icon left>mdi-delete</v-icon>
-            {{ t("roulette_clear") }}
-          </v-btn>
+          <div class="sorteio-checkbox-group">
+            <v-checkbox v-model="rouletteRemoveDrawn" :label="t('roulette_remove_drawn')" density="compact" hide-details />
+            <v-checkbox v-model="rouletteShowParticipants" :label="t('roulette_participants')" density="compact" hide-details />
+            <v-checkbox v-model="rouletteShowHistory" :label="t('roulette_history')" density="compact" hide-details />
+          </div>
         </l-toolbar-item>
       </l-toolbar>
     </template>
@@ -1166,6 +1177,40 @@ export default {
   text-transform: uppercase;
   opacity: 0.6;
   letter-spacing: 0.04em;
+}
+
+.sorteio-input-row {
+  gap: 6px;
+}
+
+.sorteio-counter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sorteio-counter--row {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.sorteio-counter--row .sorteio-counter__value {
+  font-size: 18px;
+}
+.sorteio-counter--row .sorteio-counter__label {
+  font-size: 12px;
+}
+
+.sorteio-stack-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sorteio-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .sorteio-footer {

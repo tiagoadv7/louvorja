@@ -63,11 +63,11 @@ Var featureSlideIndex
     ${EndIf}
 
     ; Painel de cor sólida (fundo) — o "recurso" fica só no texto, sem imagem
-    ${NSD_CreateLabel} 0 0 100% 80% ""
+    ${NSD_CreateLabel} 0 0 100% 76% ""
     Pop $picFeatureHwnd
     SetCtlColors $picFeatureHwnd 0xFFFFFF 0x1B2A41
 
-    ${NSD_CreateLabel} 5% 84% 90% 16% ""
+    ${NSD_CreateLabel} 5% 78% 90% 22% ""
     Pop $lblFeatureHwnd
 
     StrCpy $featureSlideIndex -1
@@ -79,20 +79,14 @@ Var featureSlideIndex
 
   Function FeatureSlidesAdvance
     IntOp $featureSlideIndex $featureSlideIndex + 1
-    IntOp $featureSlideIndex $featureSlideIndex % 4
+    IntOp $featureSlideIndex $featureSlideIndex % 2
 
     ${If} $featureSlideIndex == 0
-      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\n$\r$\nApresentação em tela"
-      ${NSD_SetText} $lblFeatureHwnd "Exiba a letra da música em tela durante a apresentação."
-    ${ElseIf} $featureSlideIndex == 1
-      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\n$\r$\nOrganização"
-      ${NSD_SetText} $lblFeatureHwnd "Hinários, álbuns e coletâneas organizados em um só lugar."
-    ${ElseIf} $featureSlideIndex == 2
-      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\n$\r$\nPersonalização"
-      ${NSD_SetText} $lblFeatureHwnd "Personalize fundo, fonte e cores dos slides de apresentação."
+      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\nMúsicas para projeção."
+      ${NSD_SetText} $lblFeatureHwnd "Projete músicas para sua igreja, evento ou pequeno grupo.$\r$\nUtilize as músicas do programa, ou crie suas próprias músicas."
     ${Else}
-      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\n$\r$\nControle remoto"
-      ${NSD_SetText} $lblFeatureHwnd "Acione as músicas remotamente direto do celular."
+      ${NSD_SetText} $picFeatureHwnd "$\r$\n$\r$\nTotalmente Grátis."
+      ${NSD_SetText} $lblFeatureHwnd "A utilização do programa é totalmente grátis. Mas sinta-se a vontade para enviar uma doação para ajudar nos custos de operação."
     ${EndIf}
   FunctionEnd
 

@@ -7,6 +7,8 @@
 /bundled/
 
 .env.development
+.env
+.env.production
 
 .DS_Store
 node_modules
@@ -17,6 +19,9 @@ node_modules
 # local env files
 .env.local
 .env.*.local
+
+# Credenciais do Dropbox (usadas pelo auto-updater em electron/main.js)
+electron/dropbox.env
 
 # Log files
 npm-debug.log*

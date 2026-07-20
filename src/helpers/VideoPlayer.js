@@ -196,12 +196,28 @@ export default {
     });
   },
 
+  // Monta um item "avulso" (mesmo formato de addToPlaylist) sem gravar na fila
+  // persistida — usado por open({ addToPlaylist: false }) para tocar um vídeo
+  // sem que ele apareça na playlist do módulo Vídeo.
+  _buildTransientItem(fp, name) {
+    const src = toFileUrl(fp);
+    const image = isImageFile(fp);
+    return {
+      id: Date.now() + Math.random(),
+      path: fp, src, name: name || fp.split(/[\\/]/).pop(),
+      mediaType: image ? "image" : "video",
+      rotation: 0,
+      flip: false,
+    };
+  },
+
   // Abre (adiciona se necessário) e já manda tocar — usado por outros módulos
   // (ex. Liturgia) para reproduzir um vídeo ou exibir uma imagem local direto
-  // no player/projeção.
-  open(fp, name) {
+  // no player/projeção. addToPlaylist:false (padrão true) toca sem gravar o
+  // arquivo na fila do módulo Vídeo — reprodução avulsa, ex. item da Liturgia.
+  open(fp, name, { addToPlaylist = true } = {}) {
     if (!fp) return;
-    const item = this.addToPlaylist(fp, name);
+    const item = addToPlaylist ? this.addToPlaylist(fp, name) : this._buildTransientItem(fp, name);
     // Sem isso, "modules.video_player.show" nunca vira true e o Popup.vue da
     // tela de saída nunca considera o módulo ativo (fica sem renderizar nada).
     $modules.open("video_player");

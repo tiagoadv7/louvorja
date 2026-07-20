@@ -241,39 +241,12 @@
           <template v-else-if="section === 'settings'">
             <div class="dc-section-title">Configurações</div>
 
-            <!-- Modo offline -->
-            <v-card
-              variant="tonal"
-              :color="localEnabled ? 'success' : 'primary'"
-              class="mt-3 mb-3"
-            >
-              <v-card-text class="pa-4">
-                <div class="d-flex align-center">
-                  <v-icon class="mr-3" size="28">
-                    {{ localEnabled ? 'mdi-wifi-off' : 'mdi-wifi' }}
-                  </v-icon>
-                  <div class="flex-grow-1">
-                    <div class="text-body-2 font-weight-medium">
-                      {{ localEnabled ? 'Modo Offline' : 'Modo Online' }}
-                    </div>
-                    <div class="text-caption text-medium-emphasis">
-                      {{ userFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}
-                    </div>
-                  </div>
-                  <v-switch
-                    :model-value="localEnabled"
-                    @update:modelValue="setOfflineMode"
-                    :color="localEnabled ? 'success' : 'grey'"
-                    density="compact"
-                    hide-details
-                  />
-                </div>
-              </v-card-text>
-            </v-card>
-
             <div class="text-caption text-medium-emphasis mb-4">
-              Com o <b>Modo offline</b> ativado, o app usa os arquivos já baixados
-              em vez de acessar a internet. Baixe os conteúdos em <b>Coletâneas</b>.
+              {{ userFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}.
+              O alternador de <b>Modo Online/Offline</b> agora fica no menu
+              superior. Com o modo offline ativado, o app usa os arquivos já
+              baixados em vez de acessar a internet — baixe os conteúdos em
+              <b>Coletâneas</b>.
             </div>
 
             <v-divider class="mb-4" />
@@ -680,8 +653,6 @@ export default {
     navItems:    NAV_ITEMS,
     hymnalItems: HYMNAL_ITEMS,
     bibleItems:  BIBLE_ITEMS,
-    // Modo offline (data reativo — localStorage não é reativo sozinho)
-    localEnabled: false,
     // Configurações
     clearing: false,
     // Verificação de arquivos
@@ -787,7 +758,6 @@ export default {
         if (this.initialSection && this.initialSection !== 'home') {
           this.section = this.initialSection;
         }
-        this.localEnabled = $storage.get('db_local_enabled', false) === true;
         this.init();
         this.subscribeProgress();
       } else {
@@ -795,18 +765,6 @@ export default {
         this.unsubscribeProgress();
         this.unsubscribeMissingProgress();
       }
-    },
-
-    setOfflineMode(val) {
-      this.localEnabled = val;
-      $storage.set('db_local_enabled', val);
-
-      // Limpa o cache de sessão da API (db:*) para que o próximo acesso
-      // use o modo correto (local ou API) sem servir dados em cache
-      $storage.removeAll('db', 'session');
-
-      // Recarrega os dados do álbum/categorias com o novo modo
-      this.init();
     },
 
     async init() {

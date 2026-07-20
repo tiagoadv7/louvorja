@@ -188,15 +188,13 @@ export default {
         el.currentTime = 0;
         this.$appdata.set('modules.video_player.config.isPlaying', false);
         this.$appdata.set('modules.video_player.config.currentTime', 0);
-        // Limpa o src depois do fade visual (1s, ver .vp-video transition) —
-        // sem isso, shouldRender continua true (src não fica vazio) e o
-        // .vp-popup-root (fundo preto) fica cobrindo a projeção indefinidamente,
-        // só com o vídeo pausado e invisível por cima. Mesmo padrão já usado
-        // pela imagem (_closeImageWithFade clearSrc=true): a projeção fica
-        // "sem nada" (transparente, módulo ainda selecionado), não preta.
-        setTimeout(() => {
-          this.$appdata.set('modules.video_player.config.src', '');
-        }, 1000);
+        // Limpa o src assim que o fade termina — sem isso, shouldRender
+        // continua true (src não fica vazio) e o .vp-popup-root (fundo preto)
+        // fica cobrindo a projeção, só com o vídeo pausado e invisível por
+        // cima. O fade de áudio (_fadeVolume) já leva ~1s, o mesmo tempo da
+        // transição visual (.vp-video), então os dois terminam juntos — uma
+        // espera extra aqui só prolongava a tela preta sem motivo.
+        this.$appdata.set('modules.video_player.config.src', '');
       });
     },
 

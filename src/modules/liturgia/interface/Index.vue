@@ -51,7 +51,7 @@
 
           <span class="lt-toolbar-sep" />
 
-          <button class="lt-btn-icon" title="Marcar Todos" @click="selectAll">
+          <button class="lt-btn-icon" title="Marcar/Desmarcar Todos" @click="toggleSelectAll">
             <v-icon size="18">mdi-checkbox-multiple-marked-outline</v-icon>
           </button>
           <button class="lt-btn-icon" title="Desmarcar Todos" @click="deselectAll">
@@ -115,23 +115,11 @@
                   'lt-item--done':     item.done,
                   'lt-item--locked':   item.locked,
                 }]"
+                :style="{ border: `2px solid ${item.color}`, background: item.type === 'categoria' ? item.color : undefined }"
                 @click="onItemRowClick(item, idx)"
               >
-                <div class="lt-item-stripe" :style="{ background: item.color }" />
 
-                <v-icon size="16" class="lt-drag-handle" @click.stop>mdi-drag-vertical</v-icon>
-
-                <div class="lt-item-badge" @click.stop>
-                  <span class="lt-badge-num">{{ idx + 1 }}</span>
-                  <input
-                    type="checkbox"
-                    class="lt-badge-check"
-                    :checked="item.selected"
-                    @change="setSelected(idx, $event.target.checked)"
-                  />
-                </div>
-
-                <button class="lt-status-btn" @click.stop="toggleDone(idx)">
+                <button v-if="item.type !== 'categoria'" class="lt-status-btn" @click.stop="toggleDone(idx)">
                   <v-icon size="18" :color="item.done ? 'success' : undefined" :class="{ 'lt-status-off': !item.done }">
                     {{ item.done ? 'mdi-check-circle' : 'mdi-circle-outline' }}
                   </v-icon>
@@ -144,8 +132,8 @@
                   <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
                 <div class="lt-item-info">
-                  <div class="lt-item-name">{{ item.name }}</div>
-                  <div class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
+                  <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
+                  <div v-if="item.type !== 'categoria'" class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
                 <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
@@ -156,18 +144,33 @@
                   <button
                     v-if="isPlayable(item) && item.type !== 'musica'"
                     class="lt-row-btn lt-row-btn--play"
-                    @click="playItem(item)"
+                    @click="playItem(item, idx)"
                   >
                     <v-icon size="17">mdi-play-circle-outline</v-icon>
                   </button>
                   <MusicMenuTable
-                    v-if="item.type === 'musica'"
+                    v-if="item.type === 'musica' && item.id_music"
                     :id_music="item.id_music"
                     :has_instrumental_music="item.has_instrumental_music"
                     class="lt-item-music-menu"
+                    @action="markItemDone(idx)"
                   />
-                  <button class="lt-row-btn" title="Copiar para outros dias" @click="openCopyToDays([item])">
-                    <v-icon size="13">mdi-content-copy</v-icon>
+                  <template v-else-if="item.type === 'musica' && !item.id_music">
+                    <button class="lt-row-btn" title="Cantado" @click="openPendingPicker(idx, 'audio')">
+                      <v-icon size="15">mdi-play-box-multiple</v-icon>
+                    </button>
+                    <button class="lt-row-btn" title="Playback" @click="openPendingPicker(idx, 'instrumental')">
+                      <v-icon size="15">mdi-play-box-multiple-outline</v-icon>
+                    </button>
+                    <button class="lt-row-btn" title="Sem Áudio" @click="openPendingPicker(idx, null)">
+                      <v-icon size="15">mdi-checkbox-multiple-blank-outline</v-icon>
+                    </button>
+                    <button class="lt-row-btn" title="Letra" @click="openPendingPicker(idx, 'lyrics')">
+                      <v-icon size="15">mdi-text-box-outline</v-icon>
+                    </button>
+                  </template>
+                  <button class="lt-row-btn" title="Duplicar item" @click="duplicateItemBelow(idx)">
+                    <v-icon size="13">mdi-content-duplicate</v-icon>
                   </button>
                   <button class="lt-row-btn" @click="openEdit(idx)">
                     <v-icon size="13">mdi-pencil</v-icon>
@@ -176,6 +179,8 @@
                     <v-icon size="13">mdi-close</v-icon>
                   </button>
                 </div>
+
+                <v-icon size="16" class="lt-drag-handle" @click.stop>mdi-drag-vertical</v-icon>
               </div>
             </template>
           </draggable>
@@ -299,8 +304,8 @@
               <input
                 v-model="form.name"
                 class="lt-input"
-                :placeholder="form.type === 'musica' ? 'Selecione uma música abaixo...' : 'Ex.: Boas-vindas, Oração inicial, Oferta...'"
-                :readonly="form.type === 'musica'"
+                :placeholder="form.type === 'musica' ? (form.chooseLater ? 'Música (nome opcional)' : 'Selecione uma música abaixo...') : 'Ex.: Boas-vindas, Oração inicial, Oferta...'"
+                :readonly="form.type === 'musica' && !form.chooseLater"
               />
             </div>
           </div>
@@ -331,24 +336,30 @@
           <!-- Música -->
           <template v-else-if="form.type === 'musica'">
             <div class="lt-section-lbl">MÚSICA</div>
-            <input ref="musicSearchInput" v-model="musicSearch" class="lt-input lt-input--full" placeholder="Buscar música..." style="margin-bottom:8px" />
-            <div class="lt-music-list">
-              <div v-if="musicLoading" class="d-flex justify-center pa-4">
-                <v-progress-circular indeterminate size="24" color="primary" />
-              </div>
-              <template v-else>
-                <div
-                  v-for="m in filteredMusics"
-                  :key="m.id_music"
-                  :class="['lt-music-row', { 'lt-music-row--sel': form.id_music === m.id_music }]"
-                  @click="pickMusic(m)"
-                >
-                  <div class="lt-music-name">{{ m.name }}</div>
-                  <div class="lt-music-sub">{{ m.albums_names }}</div>
+            <label class="lt-checkbox-row">
+              <input type="checkbox" v-model="form.chooseLater" />
+              A música será escolhida na hora
+            </label>
+            <template v-if="!form.chooseLater">
+              <input ref="musicSearchInput" v-model="musicSearch" class="lt-input lt-input--full" placeholder="Buscar música..." style="margin-bottom:8px" />
+              <div class="lt-music-list">
+                <div v-if="musicLoading" class="d-flex justify-center pa-4">
+                  <v-progress-circular indeterminate size="24" color="primary" />
                 </div>
-                <div v-if="!filteredMusics.length" class="lt-music-empty">Nenhuma música encontrada</div>
-              </template>
-            </div>
+                <template v-else>
+                  <div
+                    v-for="m in filteredMusics"
+                    :key="m.id_music"
+                    :class="['lt-music-row', { 'lt-music-row--sel': form.id_music === m.id_music }]"
+                    @click="pickMusic(m)"
+                  >
+                    <div class="lt-music-name">{{ m.name }}</div>
+                    <div class="lt-music-sub">{{ m.albums_names }}</div>
+                  </div>
+                  <div v-if="!filteredMusics.length" class="lt-music-empty">Nenhuma música encontrada</div>
+                </template>
+              </div>
+            </template>
           </template>
 
           <!-- Versículo -->
@@ -466,6 +477,41 @@
             {{ dialogMode === 'edit' ? 'Salvar' : 'Adicionar item' }}
           </v-btn>
         </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── ESCOLHER MÚSICA (item "escolhida na hora") ────────────────────── -->
+    <v-dialog v-model="pickMusicDialog" max-width="480" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-icon start size="18">mdi-music-note</v-icon>
+          Escolher música
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="pickMusicDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <input v-model="pickMusicSearch" class="lt-input lt-input--full" placeholder="Buscar música..." style="margin-bottom:8px" autofocus />
+          <div class="lt-music-list">
+            <div v-if="musicLoading" class="d-flex justify-center pa-4">
+              <v-progress-circular indeterminate size="24" color="primary" />
+            </div>
+            <template v-else>
+              <div
+                v-for="m in pickMusicFiltered"
+                :key="m.id_music"
+                class="lt-music-row"
+                @click="resolvePendingMusic(m)"
+              >
+                <div class="lt-music-name">{{ m.name }}</div>
+                <div class="lt-music-sub">{{ m.albums_names }}</div>
+              </div>
+              <div v-if="!pickMusicFiltered.length" class="lt-music-empty">Nenhuma música encontrada</div>
+            </template>
+          </div>
+        </v-card-text>
       </v-card>
     </v-dialog>
 
@@ -726,7 +772,7 @@ function parseJaLiturgia(raw, musicsById) {
 }
 
 function emptyForm() {
-  return { type: '', name: '', color: '#1a237e', duration: 0, text: '', url: '', id_music: null, has_instrumental_music: false };
+  return { type: '', name: '', color: '#1a237e', duration: 0, text: '', url: '', id_music: null, has_instrumental_music: false, chooseLater: false };
 }
 
 function emptyVersicle() {
@@ -757,6 +803,11 @@ export default {
     musicSearch:   '',
     musicLoading:  false,
     allMusics:     [],
+
+    pickMusicDialog: false,
+    pickMusicIndex:  null,
+    pickMusicMode:   null,
+    pickMusicSearch: '',
 
     versicle:    emptyVersicle(),
     vsVersions:  [],
@@ -831,12 +882,20 @@ export default {
         .slice(0, 60);
     },
 
+    pickMusicFiltered() {
+      const q = this.$string.clean(this.pickMusicSearch.trim());
+      if (!q) return this.allMusics.slice(0, 60);
+      return this.allMusics
+        .filter(m => (m._nc || '').includes(q) || (m._ac || '').includes(q))
+        .slice(0, 60);
+    },
+
     currentTypeConfig() {
       return this.TYPES.find(t => t.value === this.form.type);
     },
 
     canAdd() {
-      if (this.form.type === 'musica') return !!this.form.id_music;
+      if (this.form.type === 'musica') return this.form.chooseLater || !!this.form.id_music;
       if (this.form.type === 'versiculo' && this.dialogMode === 'add') return this.versicle.verses.length > 0;
       return !!this.form.name.trim();
     },
@@ -921,6 +980,7 @@ export default {
       return this.typeIcon(item.type);
     },
     itemTypeLabel(item) {
+      if (item.type === 'musica' && !item.id_music) return 'Clique para escolher a música';
       if (item.type === 'midia' && isImageFile(item.url)) return 'Imagem';
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'Áudio';
       return this.typeLabel(item.type);
@@ -959,6 +1019,36 @@ export default {
       // do campo de busca, e sem nenhum campo focado o Enter não dispara o
       // submit nativo do <form>. Devolve o foco pro campo pra Enter confirmar.
       this.$nextTick(() => this.$refs.musicSearchInput?.focus());
+    },
+
+    /* ── música "escolhida na hora" ── */
+    openPendingPicker(idx, mode) {
+      this.pickMusicIndex = idx;
+      this.pickMusicMode = mode;
+      this.pickMusicSearch = '';
+      if (!this.allMusics.length) this.loadMusics();
+      this.pickMusicDialog = true;
+    },
+    resolvePendingMusic(m) {
+      const l = [...this.dayItems];
+      const item = l[this.pickMusicIndex];
+      l[this.pickMusicIndex] = {
+        ...item,
+        name: m.name,
+        id_music: m.id_music,
+        has_instrumental_music: !!m.has_instrumental_music,
+        duration: m.duration ? Math.ceil(Number(m.duration) / 60) : item.duration,
+        done: true,
+      };
+      this.dayItems = l;
+      this.pickMusicDialog = false;
+      this.runMusicAction(m.id_music, this.pickMusicMode);
+    },
+    runMusicAction(id_music, mode) {
+      if (mode === 'audio') this.$media.open({ id_music, mode: 'audio' });
+      else if (mode === 'instrumental') this.$media.open({ id_music, mode: 'instrumental' });
+      else if (mode === 'lyrics') this.$media.openLyric(id_music);
+      else this.$media.open(id_music);
     },
 
     /* ── bíblia / versículo ── */
@@ -1066,6 +1156,7 @@ export default {
         url: item.url || '',
         id_music: item.id_music || null,
         has_instrumental_music: !!item.has_instrumental_music,
+        chooseLater: item.type === 'musica' && !item.id_music,
       };
       this.musicSearch = item.type === 'musica' ? item.name : '';
       this.dialogStep = 'form';
@@ -1098,12 +1189,13 @@ export default {
 
     confirmAdd() {
       if (!this.canAdd) return;
-      const { type, name, color, duration, text, url, id_music, has_instrumental_music } = this.form;
+      const { type, name, color, duration, text, url, id_music, has_instrumental_music, chooseLater } = this.form;
       const finalText = type === 'versiculo' ? this.vsText : text;
+      const finalName = name.trim() || (type === 'musica' && chooseLater ? 'Música' : '');
       this.dayItems = [...this.dayItems, {
         id:                    Date.now(),
         type:                  this.resolvedType(type, url),
-        name:                  name.trim(),
+        name:                  finalName,
         color:                 color || '#1a237e',
         duration:              Number(duration) || 0,
         text:                  finalText || '',
@@ -1118,12 +1210,13 @@ export default {
     },
     confirmEdit() {
       if (!this.canAdd || this.editingIndex === null) return;
-      const { type, name, color, duration, text, url, id_music, has_instrumental_music } = this.form;
+      const { type, name, color, duration, text, url, id_music, has_instrumental_music, chooseLater } = this.form;
+      const finalName = name.trim() || (type === 'musica' && chooseLater ? 'Música' : '');
       const l = [...this.dayItems];
       l[this.editingIndex] = {
         ...l[this.editingIndex],
         type:                  this.resolvedType(type, url),
-        name:                  name.trim(),
+        name:                  finalName,
         color:                 color || '#1a237e',
         duration:              Number(duration) || 0,
         text:                  text || '',
@@ -1139,7 +1232,13 @@ export default {
     removeItem(idx) {
       const l = [...this.dayItems]; l.splice(idx, 1); this.dayItems = l;
     },
+    duplicateItemBelow(idx) {
+      const l = [...this.dayItems];
+      l.splice(idx + 1, 0, { ...l[idx], id: newId(), selected: false });
+      this.dayItems = l;
+    },
     toggleSelect(idx) {
+      if (this.dayItems[idx]?.type === 'categoria') return;
       const l = [...this.dayItems];
       l[idx] = { ...l[idx], selected: !l[idx].selected };
       this.dayItems = l;
@@ -1149,19 +1248,21 @@ export default {
     // Para os demais tipos, o clique na linha continua selecionando.
     onItemRowClick(item, idx) {
       if ((item.type === 'midia' || item.type === 'arquivo') && this.isPlayable(item)) {
-        this.playItem(item);
+        this.playItem(item, idx);
       } else {
         this.toggleSelect(idx);
       }
     },
-    setSelected(idx, v) {
-      const l = [...this.dayItems];
-      l[idx] = { ...l[idx], selected: v };
-      this.dayItems = l;
-    },
     toggleDone(idx) {
+      if (this.dayItems[idx]?.type === 'categoria') return;
       const l = [...this.dayItems];
       l[idx] = { ...l[idx], done: !l[idx].done };
+      this.dayItems = l;
+    },
+    markItemDone(idx) {
+      if (this.dayItems[idx]?.done) return;
+      const l = [...this.dayItems];
+      l[idx] = { ...l[idx], done: true };
       this.dayItems = l;
     },
     isPlayable(item) {
@@ -1179,23 +1280,28 @@ export default {
       if (type === 'midia' && !isImageFile(url) && !isVideoFile(url)) return 'arquivo';
       return type;
     },
-    playItem(item) {
+    playItem(item, idx) {
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
-      else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name);
+      else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name, { addToPlaylist: false });
       else if (item.type === 'link' && item.url) this.$electron.openExternal(item.url);
       else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
+      if (idx != null) this.markItemDone(idx);
     },
 
     /* ── toolbar ── */
-    selectAll()      { this.dayItems = this.dayItems.map(i => ({ ...i, selected: true  })); },
-    deselectAll()    { this.dayItems = this.dayItems.map(i => ({ ...i, selected: false })); },
-    invertSel()      { this.dayItems = this.dayItems.map(i => ({ ...i, selected: !i.selected })); },
+    toggleSelectAll() {
+      const selectable = this.dayItems.filter(i => i.type !== 'categoria');
+      const allSelected = selectable.length > 0 && selectable.every(i => i.selected);
+      this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: !allSelected });
+    },
+    deselectAll()    { this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: false }); },
+    invertSel()      { this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: !i.selected }); },
     deleteSelected() { this.dayItems = this.dayItems.filter(i => !i.selected); },
-    markDone()       { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, done: !i.done } : i); },
+    markDone()       { this.dayItems = this.dayItems.map(i => i.selected && i.type !== 'categoria' ? { ...i, done: !i.done } : i); },
     toggleLock()     { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, locked: !i.locked } : i); },
     showPresentation() {
-      const item = this.dayItems.find(i => i.selected && i.type === 'musica') ||
-                   this.dayItems.find(i => i.type === 'musica');
+      const item = this.dayItems.find(i => i.selected && i.type === 'musica' && i.id_music) ||
+                   this.dayItems.find(i => i.type === 'musica' && i.id_music);
       if (item) this.$media.open({ id_music: item.id_music, mode: 'audio' });
     },
     confirmClearAll() {
@@ -1487,60 +1593,30 @@ export default {
 .lt-item {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.6));
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.1s, outline-color 0.1s;
   min-height: 44px;
+  margin-bottom: 3px;
+  border-radius: 4px;
+  box-sizing: border-box;
+  outline: 2px solid transparent;
+  outline-offset: -1px;
 }
 .lt-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
-.lt-item--selected { background: rgba(var(--v-theme-primary), 0.08) !important; }
+.lt-item--selected {
+  background: rgba(var(--v-theme-primary), 0.16) !important;
+  outline-color: rgb(var(--v-theme-primary));
+}
 .lt-item--done .lt-item-name { text-decoration: line-through; opacity: 0.4; }
-
-.lt-item-stripe { width: 4px; align-self: stretch; flex-shrink: 0; }
 
 .lt-drag-handle {
   cursor: grab;
   opacity: 0.35;
-  margin: 0 4px 0 8px;
+  margin: 0 8px 0 4px;
   flex-shrink: 0;
 }
 .lt-drag-handle:active { cursor: grabbing; }
 .lt-item:hover .lt-drag-handle { opacity: 0.7; }
-
-.lt-item-badge {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  margin-right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lt-badge-num {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgb(var(--v-theme-primary));
-  color: rgb(var(--v-theme-on-primary));
-  font-size: 11px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lt-badge-check {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  display: none;
-  cursor: pointer;
-  accent-color: rgb(var(--v-theme-primary));
-}
-.lt-item:hover .lt-badge-num,
-.lt-item--selected .lt-badge-num { display: none; }
-.lt-item:hover .lt-badge-check,
-.lt-item--selected .lt-badge-check { display: block; }
 
 .lt-status-btn {
   border: none;
@@ -1549,7 +1625,7 @@ export default {
   display: flex;
   align-items: center;
   padding: 0;
-  margin-right: 8px;
+  margin: 0 8px 0 10px;
   flex-shrink: 0;
 }
 .lt-status-off { color: rgba(var(--v-theme-on-surface), 0.3); }
@@ -1564,6 +1640,9 @@ export default {
   flex-shrink: 0;
   margin-right: 10px;
 }
+.lt-item-icon-badge:first-child {
+  margin-left: 10px;
+}
 
 .lt-item-info { flex: 1; overflow: hidden; padding: 5px 4px 5px 0; }
 .lt-item-name {
@@ -1573,6 +1652,7 @@ export default {
   text-overflow: ellipsis;
   color: rgb(var(--v-theme-on-surface));
 }
+.lt-item-name--categoria { text-align: center; font-weight: 700; }
 .lt-item-sub  { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); }
 .lt-item-dur  { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); padding: 0 8px; white-space: nowrap; }
 .lt-item-lock { opacity: 0.4; margin-right: 4px; }
@@ -1797,6 +1877,20 @@ export default {
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   padding-bottom: 5px;
   margin: 16px 0 8px;
+}
+
+.lt-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.lt-checkbox-row input {
+  accent-color: rgb(var(--v-theme-primary));
+  cursor: pointer;
 }
 
 .lt-textarea {

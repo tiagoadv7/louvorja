@@ -7,31 +7,33 @@
     color="primary"
     rounded="lg"
     elevation="6"
-    min-width="320"
-    max-width="400"
+    min-width="340"
+    max-width="420"
+    style="margin-bottom: 48px"
   >
-    <div class="d-flex align-center gap-3">
-      <v-icon size="22" class="flex-shrink-0">{{ snackIcon }}</v-icon>
+    <div class="d-flex align-start gap-5">
+      <v-icon size="22" class="flex-shrink-0 mt-1 mr-1">{{ snackIcon }}</v-icon>
       <div class="flex-grow-1 min-w-0">
         <div class="text-body-2 font-weight-semibold">{{ snackTitle }}</div>
-        <div v-if="snackSubtitle" class="text-caption" style="opacity:0.85">{{ snackSubtitle }}</div>
+        <div v-if="snackSubtitle" class="text-caption mt-1" style="opacity:0.85">{{ snackSubtitle }}</div>
         <v-progress-linear
           v-if="step === 'downloading'"
           :model-value="downloadPercent"
           color="white"
           height="3"
           rounded
-          class="mt-1"
+          class="mt-2"
         />
       </div>
+      <v-btn size="small" variant="text" color="white" density="comfortable" icon="mdi-close" class="flex-shrink-0" @click="snackbar = false" />
     </div>
-    <template #actions>
+    <div v-if="step === 'available' || step === 'downloaded'" class="d-flex justify-end gap-2 mt-4">
       <template v-if="step === 'available'">
-        <v-btn size="small" variant="flat" color="white" class="text-primary px-3" @click="startDownload">
-          Baixar
-        </v-btn>
         <v-btn size="small" variant="text" color="white" class="px-2" @click="openDialog">
           Detalhes
+        </v-btn>
+        <v-btn size="small" variant="flat" color="white" class="text-primary px-3" @click="startDownload">
+          Baixar
         </v-btn>
       </template>
       <template v-else-if="step === 'downloaded'">
@@ -39,8 +41,7 @@
           Instalar
         </v-btn>
       </template>
-      <v-btn size="small" variant="text" color="white" density="comfortable" icon="mdi-close" @click="snackbar = false" />
-    </template>
+    </div>
   </v-snackbar>
 
   <!-- ── Dialog completo (abre via menu "Verificar atualizações") ── -->
@@ -79,9 +80,9 @@
           <v-icon size="40">mdi-check-circle-outline</v-icon>
         </v-avatar>
         <div class="text-center">
-          <div class="text-h6 font-weight-bold">Tudo atualizado!</div>
+          <div class="text-h6 font-weight-bold">Você está atualizado!</div>
           <div class="text-body-2 text-medium-emphasis mt-1">
-            Versão <strong>{{ currentVersion }}</strong> é a mais recente.
+            A versão instalada (<strong>v{{ currentVersion }}</strong>) já é a mais recente disponível.
           </div>
         </div>
       </v-card-text>
@@ -143,7 +144,7 @@
           <v-icon size="40">mdi-alert-circle-outline</v-icon>
         </v-avatar>
         <div class="text-center px-4">
-          <div class="text-h6 font-weight-bold">Erro ao verificar</div>
+          <div class="text-h6 font-weight-bold">Erro ao baixar atualização</div>
           <div class="text-body-2 text-medium-emphasis mt-2">{{ errorMessage }}</div>
         </div>
       </v-card-text>
@@ -207,16 +208,20 @@ export default {
       if (this.step === 'available')   return 'mdi-arrow-up-circle-outline';
       if (this.step === 'downloading') return 'mdi-download-circle-outline';
       if (this.step === 'downloaded')  return 'mdi-check-circle-outline';
+      if (this.step === 'error')       return 'mdi-alert-circle-outline';
       return 'mdi-information-outline';
     },
     snackTitle() {
-      if (this.step === 'available')   return `Nova versão disponível — v${this.updateInfo?.version || '?'}`;
-      if (this.step === 'downloading') return `Baixando v${this.updateInfo?.version || '?'} — ${this.downloadPercent}%`;
-      if (this.step === 'downloaded')  return `v${this.updateInfo?.version} pronta — reinicie para instalar`;
+      if (this.step === 'available')   return 'Nova versão disponível';
+      if (this.step === 'downloading') return `Baixando atualização — ${this.downloadPercent}%`;
+      if (this.step === 'downloaded')  return 'Pronta para instalar';
+      if (this.step === 'error')       return this.errorMessage || 'Erro ao baixar a atualização';
       return '';
     },
     snackSubtitle() {
+      if (this.step === 'available')   return `v${this.updateInfo?.version || '?'}`;
       if (this.step === 'downloading') return this.downloadStatus;
+      if (this.step === 'downloaded')  return `v${this.updateInfo?.version} — reinicie para instalar`;
       return '';
     },
 
@@ -249,8 +254,8 @@ export default {
         available:    'Atualização disponível',
         downloading:  'Baixando atualização',
         downloaded:   'Atualização pronta',
-        'up-to-date': 'LouvorJA atualizado',
-        error:        'Erro ao verificar',
+        'up-to-date': 'Verificar atualizações',
+        error:        'Erro ao baixar atualização',
       };
       return map[this.step] || 'Atualizações';
     },
@@ -327,8 +332,9 @@ export default {
       try {
         await this.$electron.updaterCheck();
       } catch (_) {
-        this.step         = 'error';
-        this.errorMessage = 'Não foi possível verificar atualizações.';
+        // Falha ao verificar não deve assustar o usuário com uma tela de erro
+        // — trata como "sem atualização disponível" (ver electron/main.js).
+        this.step = 'up-to-date';
       }
     },
 

@@ -106,9 +106,14 @@ export default {
     });
     if (onProgress) this._handlers.push(['sqlite:progress', onProgress]);
 
-    // 3. Abre verificador de arquivos após o app carregar
-    //    Delay maior para garantir que o router e os refs estão prontos
-    setTimeout(() => this.openFileCheck(), 4000);
+    // 3. Abre verificador de arquivos após o app carregar — só automaticamente na
+    //    primeira vez (flag persistida via Store). Nas próximas aberturas do app,
+    //    só roda de novo se houver conteúdo novo (ver checkSqliteUpdate) ou
+    //    manualmente via "Sincronizar arquivos" no menu (fileCheck.open(true)).
+    //    Delay maior para garantir que o router e os refs estão prontos.
+    this.$electron.storeGet('startup_file_check_done', false)
+      .then(done => { if (!done) this.scheduleStartupFileCheck(); })
+      .catch(() => this.scheduleStartupFileCheck());
 
     // 4. Verifica atualização do banco SQLite via API (após 6s para não competir com o auto-import)
     setTimeout(() => this.checkSqliteUpdate(), 6000);
@@ -148,6 +153,15 @@ export default {
         await this.$nextTick();
         this.$refs.fileCheck?.open();
       } catch (_) {}
+    },
+
+    // Roda a verificação automática de arquivos uma única vez e marca a flag,
+    // para que não rode de novo sozinha nas próximas aberturas do app.
+    scheduleStartupFileCheck() {
+      setTimeout(async () => {
+        await this.openFileCheck();
+        this.$electron.storeSet('startup_file_check_done', true).catch(() => {});
+      }, 4000);
     },
 
     async checkSqliteUpdate() {
