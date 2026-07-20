@@ -159,20 +159,27 @@ async function downloadDropboxUpdate(installerLink, fileName, onProgress) {
   const dir = getSetupDir();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const destPath = path.join(dir, fileName);
+  // Baixa com extensão .download em vez do nome final .exe — evita que o
+  // antivírus trave o arquivo em tempo real por scan durante a escrita (mais
+  // comum em executáveis) e evita que uma queda no meio do download deixe um
+  // "instalador" corrompido com o nome final, como se estivesse pronto pra usar.
+  const tempPath = `${destPath}.download`;
 
-  // Remove um instalador de tentativa anterior (parcial ou já usado) antes de
-  // escrever — createWriteStream sozinho já sobrescreve, mas um arquivo
-  // travado por antivírus/indexação após um download anterior pode impedir
-  // a escrita; apagar antes evita esse conflito.
-  try {
-    if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
-  } catch (_) {
-    // Não crítico — segue e deixa createWriteStream tentar sobrescrever
+  // Remove um instalador/temp de tentativa anterior (parcial ou já usado)
+  // antes de escrever — createWriteStream sozinho já sobrescreve, mas um
+  // arquivo travado por antivírus/indexação após um download anterior pode
+  // impedir a escrita; apagar antes evita esse conflito.
+  for (const p of [destPath, tempPath]) {
+    try {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    } catch (_) {
+      // Não crítico — segue e deixa createWriteStream tentar sobrescrever
+    }
   }
 
   let transferred = 0;
   const startTime = Date.now();
-  const writeStream = fs.createWriteStream(destPath);
+  const writeStream = fs.createWriteStream(tempPath);
   const nodeStream   = Readable.fromWeb(resp.body);
 
   await new Promise((resolve, reject) => {
@@ -193,6 +200,11 @@ async function downloadDropboxUpdate(installerLink, fileName, onProgress) {
     writeStream.on('finish', resolve);
     nodeStream.pipe(writeStream);
   });
+
+  // Só vira o instalador "de verdade" depois que o download inteiro confirmou
+  // sucesso — renomear é atômico no mesmo volume, sem a janela de risco de
+  // gravar direto por cima do nome final.
+  fs.renameSync(tempPath, destPath);
 
   return destPath;
 }
