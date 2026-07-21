@@ -1,17 +1,12 @@
 <template>
   <div
     ref="container"
-    :class="[
-      'd-flex',
-      `align-${userdata.vertical_align}`,
-      `justify-${userdata.horizontal_align}`,
-    ]"
     :style="{
       position: 'relative',
-      background: userdata.background_color,
+      overflow: 'hidden',
+      background: backgroundColor,
       width: '100%',
       height: height ? height + 'px' : '100%',
-      padding: `${this.fontSizePc(userdata.border_spacing)}px`,
     }"
   >
     <img
@@ -23,46 +18,64 @@
         width: '100%',
         height: '100%',
         position: 'absolute',
-        objectFit: userdata.image_fit,
-        opacity: userdata.image_opacity / 100,
+        objectFit: imageFit,
+        opacity: imageOpacity,
       }"
     />
 
-    <div v-if="bible" class="d-flex flex-column">
-      <span
-        v-if="bible.text"
-        :class="
-          'text-' +
-          (userdata.horizontal_align == 'start'
-            ? 'left'
-            : userdata.horizontal_align == 'end'
-              ? 'right'
-              : 'center')
-        "
+    <transition name="fade" mode="out-in">
+      <div
+        :key="layerKey"
+        class="d-flex flex-column"
+        :class="[
+          `align-${verticalAlign}`,
+          `justify-${horizontalAlign}`,
+        ]"
         :style="{
-          zIndex: 1,
-          color: userdata.font_color,
-          fontSize: `${this.fontSizePc(userdata.font_size)}px`,
-          fontFamily: userdata.font || 'Arial, sans-serif',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          padding: `${fontSizePc(borderSpacing)}px`,
         }"
       >
-        {{ bible.text }}
-      </span>
-      <span
-        v-if="bible.scriptural_reference"
-        :class="
-          'text-' + (userdata.horizontal_align == 'start' ? 'left' : 'right')
-        "
-        :style="{
-          zIndex: 1,
-          color: userdata.reference_font_color,
-          fontSize: `${this.fontSizePc(userdata.reference_font_size)}px`,
-          fontFamily: userdata.reference_font || 'Arial, sans-serif',
-        }"
-      >
-        {{ bible.scriptural_reference }}
-      </span>
-    </div>
+        <span
+          v-if="bible && bible.text"
+          :class="
+            'text-' +
+            (horizontalAlign == 'start'
+              ? 'left'
+              : horizontalAlign == 'end'
+                ? 'right'
+                : 'center')
+          "
+          :style="{
+            zIndex: 1,
+            color: fontColor,
+            fontSize: `${fontSizePc(fontSize)}px`,
+            fontFamily: userdata.font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.text }}
+        </span>
+        <span
+          v-if="bible && bible.scriptural_reference"
+          :class="
+            'text-' + (horizontalAlign == 'start' ? 'left' : 'right')
+          "
+          :style="{
+            zIndex: 1,
+            color: referenceFontColor,
+            fontSize: `${fontSizePc(referenceFontSize)}px`,
+            fontFamily: userdata.reference_font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.scriptural_reference }}
+        </span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -102,8 +115,25 @@ export default {
       );
     },
     /* COMPUTEDS OBRIGATÓRIAS - FIM */
+    // Valores padrão — sem eles, userdata.xxx fica null até o operador
+    // customizar a exibição pelo menos uma vez, e font_size null vira
+    // fontSizePc(null) === 0 (texto montado no DOM com tamanho zero,
+    // portanto invisível mesmo com bible.text preenchido corretamente).
+    backgroundColor() { return this.userdata.background_color || "#000000"; },
+    fontColor()       { return this.userdata.font_color || "#ffffff"; },
+    fontSize()        { return this.userdata.font_size || 48; },
+    referenceFontColor() { return this.userdata.reference_font_color || "#aaaaaa"; },
+    referenceFontSize()  { return this.userdata.reference_font_size || 32; },
+    borderSpacing()   { return this.userdata.border_spacing || 10; },
+    verticalAlign()   { return this.userdata.vertical_align || "center"; },
+    horizontalAlign() { return this.userdata.horizontal_align || "center"; },
+    imageFit()        { return this.userdata.image_fit || "cover"; },
+    imageOpacity()    { return (this.userdata.image_opacity || 100) / 100; },
     bible() {
       return this.$appdata.get("modules.bible.data");
+    },
+    layerKey() {
+      return (this.bible?.text || "") + "||" + (this.bible?.scriptural_reference || "");
     },
   },
   methods: {
@@ -117,7 +147,7 @@ export default {
         this.s_width = container.offsetWidth;
         this.s_height = container.offsetHeight;
 
-        if (this.width <= 0 || this.height <= 0) {
+        if (this.s_width <= 0 || this.s_height <= 0) {
           const self = this;
           setTimeout(function () {
             self.windowResize();
@@ -135,3 +165,18 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.fade-enter-active {
+  transition: opacity 0.4s ease-in-out;
+  will-change: opacity;
+}
+.fade-leave-active {
+  transition: opacity 0.25s ease-in-out;
+  will-change: opacity;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

@@ -16,6 +16,7 @@
           v-if="countModules(group.modules) != 0"
           class="my-0 py-0"
         >
+          <v-icon v-if="group.icon" size="18" class="mr-2">{{ group.icon }}</v-icon>
           {{ $t(group.title) }}
         </v-expansion-panel-title>
         <v-expansion-panel-text
@@ -58,7 +59,7 @@
                       class="text-center font-weight-light text-title-small"
                       style="text-wrap: initial"
                     >
-                      <small>{{ module.title ? $t(module.title) : "" }}</small>
+                      <small>{{ moduleTitle(module) }}</small>
                     </v-card-title>
                   </v-card-text>
                 </v-card>
@@ -113,6 +114,11 @@ export default {
     },
   },
   methods: {
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      return translated !== module.title ? translated : (module.manifest?.name || translated);
+    },
     sortModules(modules) {
       //Ordena pelo idioma selecionado
       return this.$modules.sort(modules, this.$t);

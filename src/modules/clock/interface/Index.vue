@@ -148,7 +148,19 @@ export default {
     /* METHODS OBRIGATÓRIAS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIAS - FIM */
 
@@ -158,6 +170,10 @@ export default {
     },
 
     close() {
+      // Só sai da projeção se o Relógio for de fato o módulo projetado agora —
+      // senão, fechar o painel (só uma ferramenta do operador) apagaria o que
+      // estiver sendo exibido (ex.: uma música), sem ele ter pedido isso.
+      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
       this.$modules.close(this.module_id);
     },
   },

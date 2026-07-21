@@ -2,11 +2,18 @@
 /tmp/
 /dev-dist
 
+# Arquivos bundlados para o instalador (gerados por npm run bundle:prepare)
+# Não commitar — contém o database.db (85 MB) e capas dos álbuns
+/bundled/
+
 .env.development
+.env
+.env.production
 
 .DS_Store
 node_modules
 /dist
+/release
 
 
 # local env files

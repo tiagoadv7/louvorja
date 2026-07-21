@@ -1,7 +1,14 @@
 {
   "name": "louvorja",
-  "version": "1.27.0",
+  "version": "1.28.2",
+  "description": "LouvorJA - Software de Louvor Adventista",
+  "author": {
+    "name": "Mayco Rolbuche",
+    "email": "mayco_rolbuche@hotmail.com"
+  },
+  "homepage": "https://louvorja.com.br/",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "version:major": "npm version major",
     "version:minor": "npm version minor",
@@ -15,16 +22,27 @@
     "dev": "vite",
     "host": "vite --host",
     "files": "node node/server.js",
-    "git:tag": "git tag -a -f v%npm_package_version% -m \"Versão %npm_package_version%\" && git push origin -f v%npm_package_version% && git push -u origin main"
+    "git:tag": "git tag -a -f v%npm_package_version% -m \"Versão %npm_package_version%\" && git push origin -f v%npm_package_version% && git push -u origin main",
+    "electron:dev": "concurrently -n VITE,ELECTRON -c yellow,blue \"vite --port 5002 --strictPort\" \"wait-on http://localhost:5002 && node electron/dev.js\"",
+    "electron:build": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder",
+    "electron:publish": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder --publish always",
+    "electron:preview": "cross-env ELECTRON_BUILD=true vite build && node electron/dev.js",
+    "electron:pack": "cross-env ELECTRON_BUILD=true vite build && electron-builder --dir",
+    "electron:rebuild": "echo better-sqlite3 nao necessario — usando sql.js",
+    "bundle:prepare": "node scripts/prepare-bundle.js",
+    "bundle:dev-only": "node scripts/prepare-bundle.js --dev-only",
+    "bundle:build-only": "node scripts/prepare-bundle.js --bundle-only"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
     "archiver": "^7.0.1",
     "basic-ftp": "^5.0.5",
     "core-js": "^3.40.0",
-    "dotenv": "^17.3.1",
+    "electron-updater": "^6.8.9",
     "fs-extra": "^11.2.0",
+    "qrcode": "^1.5.4",
     "roboto-fontface": "*",
+    "sql.js": "^1.14.1",
     "vue": "^3.5.29",
     "vue-country-flag-next": "^2.3.2",
     "vue-fullscreen": "^3.1.3",
@@ -39,12 +57,18 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.4",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.3",
     "eslint-plugin-vue": "^9.33.0",
+    "playwright-core": "^1.60.0",
     "sass": "^1.83.0",
     "vite": "^7.3.1",
     "vite-plugin-pwa": "^1.2.0",
-    "vite-plugin-vuetify": "^2.1.3"
+    "vite-plugin-vuetify": "^2.1.3",
+    "wait-on": "^9.0.10"
   },
   "eslintConfig": {
     "root": true,
@@ -56,6 +80,62 @@
       "eslint:recommended"
     ],
     "rules": {}
+  },
+  "build": {
+    "appId": "louvorja.com.br",
+    "productName": "Louvor JA",
+    "copyright": "Copyright © 2026 Louvor JA",
+    "directories": {
+      "output": "release",
+      "buildResources": "public"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/ico/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LouvorJA",
+      "include": "build/installer.nsh"
+    },
+    "asarUnpack": [
+      "node_modules/sql.js/**/*",
+      "node_modules/qrcode/**/*"
+    ],
+    "extraFiles": [
+      {
+        "from": "bundled/config",
+        "to": "config",
+        "filter": [
+          "database.db",
+          "capas/**/*"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "tiagoadv7",
+      "repo": "louvorja",
+      "releaseType": "release"
+    }
   },
   "browserslist": [
     "> 1%",

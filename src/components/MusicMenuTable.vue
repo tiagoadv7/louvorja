@@ -83,10 +83,17 @@
 <script>
 export default {
   name: "MusicMenuTableComponent",
+  emits: ['action'],
   props: {
     id_music: Number,
     has_instrumental_music: [Boolean, Number],
     color: String,
+  },
+  methods: {
+    _run(fn) {
+      this.$emit('action');
+      fn();
+    },
   },
   computed: {
     buttons() {
@@ -94,25 +101,22 @@ export default {
         {
           disabled: false,
           icon: "mdi-play-box-multiple",
-
-          click: () =>
-            this.$media.open({ id_music: this.id_music, mode: "audio" }),
+          click: () => this._run(() => this.$media.open({ id_music: this.id_music, mode: "audio" })),
         },
         {
           disabled: !this.has_instrumental_music,
           icon: "mdi-play-box-multiple-outline",
-          click: () =>
-            this.$media.open({ id_music: this.id_music, mode: "instrumental" }),
+          click: () => this._run(() => this.$media.open({ id_music: this.id_music, mode: "instrumental" })),
         },
         {
           disabled: false,
           icon: "mdi-checkbox-multiple-blank-outline",
-          click: () => this.$media.open(this.id_music),
+          click: () => this._run(() => this.$media.open(this.id_music)),
         },
         {
           disabled: false,
           icon: "mdi-text-box-outline",
-          click: () => this.$media.openLyric(this.id_music),
+          click: () => this._run(() => this.$media.openLyric(this.id_music)),
         },
       ];
     },
@@ -146,28 +150,23 @@ export default {
             {
               title: "Cantado",
               icon: "mdi-play-box-multiple",
-              click: () =>
-                this.$media.open({ id_music: this.id_music, mode: "audio" }),
+              click: () => this._run(() => this.$media.open({ id_music: this.id_music, mode: "audio" })),
             },
             {
               title: "Playback",
               icon: "mdi-play-box-multiple-outline",
-              click: () =>
-                this.$media.open({
-                  id_music: this.id_music,
-                  mode: "instrumental",
-                }),
+              click: () => this._run(() => this.$media.open({ id_music: this.id_music, mode: "instrumental" })),
               disabled: !this.has_instrumental_music,
             },
             {
               title: "Sem Áudio",
               icon: "mdi-checkbox-multiple-blank-outline",
-              click: () => this.$media.open(this.id_music),
+              click: () => this._run(() => this.$media.open(this.id_music)),
             },
             {
               title: "Letra",
               icon: "mdi-text-box-outline",
-              click: () => this.$media.openLyric(this.id_music),
+              click: () => this._run(() => this.$media.openLyric(this.id_music)),
             },
             {
               title: "-",
@@ -175,16 +174,12 @@ export default {
             {
               title: "Arquivo Cantado",
               icon: "mdi-file-music",
-              click: () => this.$media.openAudio(this.id_music),
+              click: () => this._run(() => this.$media.openAudio(this.id_music)),
             },
             {
               title: "Arquivo Playback",
               icon: "mdi-file-music-outline",
-              click: () =>
-                this.$media.openAudio({
-                  id_music: this.id_music,
-                  mode: "instrumental",
-                }),
+              click: () => this._run(() => this.$media.openAudio({ id_music: this.id_music, mode: "instrumental" })),
               disabled: !this.has_instrumental_music,
             },
           ],

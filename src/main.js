@@ -1,4 +1,4 @@
-import { createApp } from "vue";
+import { createApp, nextTick } from "vue";
 import App from "./App.vue";
 import router from "./router";
 import vuetify from "./plugins/vuetify";
@@ -28,9 +28,13 @@ import DateTime from "@/helpers/DateTime";
 import Theme from "@/helpers/Theme";
 import Path from "@/helpers/Path";
 import Media from "@/helpers/Media";
+import VideoPlayer from "@/helpers/VideoPlayer";
+import SoundMaster from "@/helpers/SoundMaster";
 import Alert from "@/helpers/Alert";
 import Popup from "@/helpers/Popup";
 import Database from "@/helpers/Database";
+import Electron from "@/helpers/Electron";
+
 app.mixin({
   beforeCreate() {
     this.$userdata = UserData;
@@ -42,11 +46,15 @@ app.mixin({
     this.$theme = Theme;
     this.$path = Path;
     this.$media = Media;
+    this.$videoPlayer = VideoPlayer;
+    this.$soundMaster = SoundMaster;
     this.$alert = Alert;
     this.$popup = Popup;
     this.$database = Database;
+    this.$electron = Electron;
   },
 });
+
 
 app.use(router);
 app.use(vuetify);
@@ -54,8 +62,15 @@ app.use(store);
 app.use(shortkey, { prevent: ["input", "textarea"] });
 app.use(VueFullscreen);
 
-createI18nInstance().then((i18n) => {
+createI18nInstance().then(async (i18n) => {
   app.use(i18n);
-  ModuleManager.init(i18n);
+  await ModuleManager.init(i18n);
   app.mount("#app");
+  await nextTick();
+  window.electron?.appLoaded?.();
+}).catch((err) => {
+  console.error('[App] Erro na inicialização:', err);
+  // Garante que a loading window feche mesmo em caso de erro,
+  // para não travar o app com a janela de carregamento presa na frente
+  window.electron?.appLoaded?.();
 });

@@ -1,0 +1,30 @@
+{
+  "title": "Fundo Personalizado",
+  "bg_type_label": "Tipo de fundo",
+  "type_none": "Sem fundo",
+  "type_image": "Imagem",
+  "type_video": "Vídeo",
+  "type_none_desc": "Slides usam fundo preto padrão com efeito de texto.",
+  "pick_image": "Carregar imagem",
+  "pick_video": "Carregar vídeo",
+  "opacity_label": "Opacidade",
+  "text_section":   "Personalização do Texto",
+  "text_font":      "Fonte",
+  "text_size":      "Tamanho",
+  "text_color":     "Cor do texto",
+  "text_aux_size":  "Tamanho texto auxiliar",
+  "customization": {
+    "background": "Fundo",
+    "text": "Texto",
+    "window": "Janela",
+    "color": "Cor de fundo",
+    "image": "URL da imagem",
+    "transparency": "Transparência",
+    "adjust": "Ajuste",
+    "font": "Fonte",
+    "size": "Tamanho",
+    "font_color": "Cor",
+    "panel_size": "Tamanho lateral",
+    "border": "Borda"
+  }
+}

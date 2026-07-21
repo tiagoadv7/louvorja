@@ -25,7 +25,7 @@
               >
                 <v-icon :icon="element.icon"></v-icon>
                 <v-tooltip activator="parent" location="start">
-                  {{ $t(element.title) }}
+                  {{ moduleTitle(element) }}
                 </v-tooltip>
               </v-btn>
               <v-btn
@@ -77,6 +77,17 @@ export default {
       set(value) {
         this.$modules.setTray(value.map((module) => module.id));
       },
+    },
+  },
+  methods: {
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      if (translated !== module.title) return translated;
+      if (module.manifest?.name) return module.manifest.name;
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+      const translations = module.manifest?.translations?.[locale] || module.manifest?.translations?.['pt'];
+      return translations?.title || translated;
     },
   },
 };

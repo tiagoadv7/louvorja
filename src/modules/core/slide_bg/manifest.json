@@ -1,0 +1,61 @@
+{
+  "id": "slide_bg",
+  "name": "Fundo Personalizado",
+  "description": "Personaliza o fundo, texto e janela dos slides de músicas e apresentações.",
+  "category": null,
+  "showInMainMenu": true,
+  "icon": "mdi-image-multiple-outline",
+  "dependencies": [],
+  "moduleOptions": {
+    "size": "small"
+  },
+  "customization": {
+    "bg_type":        { "default": "none" },
+    "background_color": {
+      "type": "color",
+      "label": "customization.color",
+      "default": "#000000"
+    },
+    "image": {
+      "type": "image",
+      "label": "customization.image",
+      "default": ""
+    },
+    "image_opacity": {
+      "type": "opacity",
+      "label": "customization.transparency",
+      "default": 85
+    },
+    "image_fit": {
+      "type": "object-fit",
+      "label": "customization.adjust",
+      "default": "cover"
+    },
+    "video": { "default": "" },
+    "font": {
+      "type": "font",
+      "label": "customization.font",
+      "default": "DINCondensedBold, sans-serif"
+    },
+    "font_size": {
+      "type": "font-size",
+      "label": "customization.size",
+      "default": 20
+    },
+    "font_color": {
+      "type": "color",
+      "label": "customization.font_color",
+      "default": "#FFFFFF"
+    },
+    "panel_font_size": {
+      "type": "font-size",
+      "label": "customization.panel_size",
+      "default": 14
+    },
+    "border_spacing": {
+      "type": "border-spacing",
+      "label": "customization.border",
+      "default": 5
+    }
+  }
+}

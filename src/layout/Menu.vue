@@ -4,7 +4,7 @@
     :location="$vuetify.display.width < 600 ? 'bottom' : undefined"
     temporary
   >
-    <v-list :baseColor="$theme.primary()" nav>
+    <v-list :baseColor="$appdata.get('is_dark') ? undefined : $theme.primary()" nav>
       <template
         v-for="(module, module_key) in sortModules(menu_modules)"
         :key="module_key"
@@ -21,9 +21,24 @@
             $modules.open(module_key);
           "
         >
-          <v-list-item-title>{{ $t(module.title) }}</v-list-item-title>
+          <v-list-item-title>{{ moduleTitle(module) }}</v-list-item-title>
         </v-list-item>
       </template>
+      <v-divider class="my-1" />
+      <v-list-item
+        v-if="$electron.isElectron()"
+        prepend-icon="mdi-folder-sync-outline"
+        @click="$appdata.toogle('menu.show'); dispatchSyncFiles()"
+      >
+        <v-list-item-title>Sincronizar arquivos</v-list-item-title>
+      </v-list-item>
+      <v-list-item
+        v-if="$electron.isElectron()"
+        prepend-icon="mdi-update"
+        @click="$appdata.toogle('menu.show'); dispatchCheckUpdates()"
+      >
+        <v-list-item-title>Verificar atualizações</v-list-item-title>
+      </v-list-item>
     </v-list>
   </v-navigation-drawer>
 </template>
@@ -31,6 +46,7 @@
 <script>
 export default {
   name: "MenuLayout",
+  emits: ['sync-files'],
   computed: {
     show: {
       get() {
@@ -70,8 +86,25 @@ export default {
     },
   },
   methods: {
+    dispatchSyncFiles() {
+      // Aguarda a transição de fechamento do drawer terminar antes de abrir o
+      // diálogo — do contrário o scrim do drawer (ainda fechando) pode ficar
+      // por cima do novo diálogo e bloquear cliques nos botões dele.
+      setTimeout(() => window.dispatchEvent(new CustomEvent('sync-files')), 300);
+    },
+    dispatchCheckUpdates() {
+      window.dispatchEvent(new CustomEvent('check-updates'));
+    },
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      if (translated !== module.title) return translated;
+      if (module.manifest?.name) return module.manifest.name;
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+      const translations = module.manifest?.translations?.[locale] || module.manifest?.translations?.['pt'];
+      return translations?.title || translated;
+    },
     sortModules(modules) {
-      //Ordena pelo idioma selecionado
       return this.$modules.sort(modules, this.$t);
     },
   },

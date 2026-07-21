@@ -3,7 +3,7 @@
     <template v-slot:prepend>
       <v-app-bar-nav-icon @click="$appdata.toogle('menu.show')" />
     </template>
-    <v-app-bar-title>{{ $t("app.name") }}</v-app-bar-title>
+    <v-app-bar-title v-if="!$appdata.get('is_desktop')">{{ $t("app.name") }}</v-app-bar-title>
     <v-spacer />
 
     <v-bottom-sheet v-if="remote">
@@ -27,33 +27,86 @@
       </v-card>
     </v-bottom-sheet>
 
-    <v-tooltip v-if="remote" :text="remote_url">
+    <v-tooltip v-if="remote" location="bottom">
       <template v-slot:activator="{ props }">
         <v-btn v-bind="props" icon="mdi-remote" @click="openRemote()" />
       </template>
+      {{ remote_url }}
     </v-tooltip>
 
     <v-divider v-if="remote" vertical />
+
+    <v-tooltip location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn v-bind="props" icon="mdi-magnify" @click="quickSearchOpen = true" />
+      </template>
+      Busca rápida (Ctrl+F)
+    </v-tooltip>
+    <QuickSearch v-model="quickSearchOpen" />
 
     <v-btn
       :icon="layout == 'apps' ? 'mdi-tab' : 'mdi-apps'"
       @click="changeLayout()"
     />
+
+    <v-tooltip location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn
+          v-bind="props"
+          :icon="offlineModeEnabled ? 'mdi-wifi-off' : 'mdi-wifi'"
+          :color="offlineModeEnabled ? 'grey' : 'green'"
+          @click="toggleOfflineMode()"
+        />
+      </template>
+      {{ offlineModeEnabled ? "Modo Offline" : "Modo Online" }}
+    </v-tooltip>
+
+    <v-tooltip v-if="isOnline" location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn v-bind="props" icon="mdi-cloud-download-outline" @click="openDownload()" />
+      </template>
+      Centro de Downloads
+    </v-tooltip>
+    <DownloadCenter v-if="isOnline" v-model="downloadDialog" :initial-section="downloadSection" />
+
+    <MonitorSelector />
+
     <LanguageSelector />
   </v-app-bar>
 </template>
 
 <script>
 import LanguageSelector from "@/components/LanguageSelector.vue";
+import MonitorSelector from "@/components/MonitorSelector.vue";
+import DownloadCenter from "@/components/DownloadCenter.vue";
+import QuickSearch from "@/components/QuickSearch.vue";
+import $storage from "@/helpers/Storage";
 
 export default {
   name: "HeaderLayout",
   components: {
     LanguageSelector,
+    MonitorSelector,
+    DownloadCenter,
+    QuickSearch,
   },
+  data: () => ({
+    downloadDialog: false,
+    downloadSection: 'home',
+    quickSearchOpen: false,
+    isOnline: navigator.onLine,
+    offlineModeEnabled: $storage.get("db_local_enabled", false) === true,
+    _downloadHandler: null,
+    _quickSearchHandler: null,
+    _onlineHandler: null,
+    _offlineHandler: null,
+  }),
   computed: {
     layout() {
       return this.$userdata.get("layout");
+    },
+    is_desktop() {
+      return this.$appdata.get("is_desktop");
     },
     remote() {
       return this.$userdata.get("remote.is_connected");
@@ -62,7 +115,48 @@ export default {
       return this.$userdata.get("remote.url");
     },
   },
+  mounted() {
+    this._downloadHandler = (e) => {
+      this.downloadSection = e.detail?.section || 'home';
+      this.downloadDialog = true;
+    };
+    window.addEventListener('open-download-center', this._downloadHandler);
+
+    this._quickSearchHandler = (e) => {
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        this.quickSearchOpen = !this.quickSearchOpen;
+      }
+    };
+    window.addEventListener('keydown', this._quickSearchHandler);
+
+    this._onlineHandler  = () => { this.isOnline = true; };
+    this._offlineHandler = () => { this.isOnline = false; };
+    window.addEventListener('online',  this._onlineHandler);
+    window.addEventListener('offline', this._offlineHandler);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('open-download-center', this._downloadHandler);
+    window.removeEventListener('keydown', this._quickSearchHandler);
+    window.removeEventListener('online',  this._onlineHandler);
+    window.removeEventListener('offline', this._offlineHandler);
+  },
+
   methods: {
+    openDownload(section = 'home') {
+      this.downloadSection = section;
+      this.downloadDialog = true;
+    },
+
+    toggleOfflineMode() {
+      this.offlineModeEnabled = !this.offlineModeEnabled;
+      $storage.set("db_local_enabled", this.offlineModeEnabled);
+      // Limpa o cache de sessão da API (db:*) pra próxima leitura já respeitar
+      // o modo novo, em vez de servir dados em cache do modo anterior.
+      $storage.removeAll("db", "session");
+    },
+
     changeLayout() {
       if (this.layout == "apps") {
         this.$userdata.set("layout", "ribbon");
