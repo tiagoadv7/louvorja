@@ -8,21 +8,13 @@ protocol.registerSchemesAsPrivileged([
 ]);
 const path = require('path');
 const fs   = require('fs');
-const { spawn } = require('child_process');
 const Store = require('./store');
 const { setupIpc } = require('./ipc');
 const { createMenu } = require('./menu');
 const { createTray } = require('./tray');
-const dropboxUpdater = require('./dropbox-updater');
 
 const isDev = process.env.ELECTRON_DEV === 'true';
 const DEV_URL = 'http://localhost:5002';
-
-// Estado do último check de atualização, compartilhado entre check/download/install
-// ('dropbox' = fonte primária; null = usa electron-updater/GitHub, o fallback)
-let updateSource        = null;
-let dropboxUpdateInfo   = null; // { version, file, notes } — resultado do último check no Dropbox
-let dropboxInstallerPath = null; // caminho local do instalador já baixado do Dropbox
 
 // ── Otimizações de memória (antes do app.whenReady) ───────────────────────────
 
@@ -413,38 +405,18 @@ function sendToRenderer(channel, payload) {
   }
 }
 
-// Fonte primária: Dropbox (electron/dropbox-updater.js). Se não configurado, sem
-// atualização lá, ou qualquer erro (rede, credenciais, manifesto inválido) →
-// cai para o fallback de sempre (electron-updater / GitHub Releases).
+// Fonte: GitHub Releases via electron-updater (ver build.publish em package.json).
 //
-// Qualquer falha durante a VERIFICAÇÃO (Dropbox ou GitHub) é tratada como
-// "sem atualização disponível" — o usuário que clica em "Verificar
-// atualizações" não precisa saber a razão técnica, só se há ou não uma versão
-// nova. A tela de erro fica reservada para falhas de download (ver
-// isCheckingUpdate abaixo e o handler 'updater:download').
+// Qualquer falha durante a VERIFICAÇÃO é tratada como "sem atualização
+// disponível" — o usuário que clica em "Verificar atualizações" não precisa
+// saber a razão técnica, só se há ou não uma versão nova. A tela de erro fica
+// reservada para falhas de download (ver isCheckingUpdate abaixo e o handler
+// 'updater:download').
 let isCheckingUpdate = false;
 
 async function runUpdateCheck() {
   sendToRenderer('updater:checking');
 
-  try {
-    const result = await dropboxUpdater.checkForDropboxUpdate(app.getVersion());
-    if (result.available) {
-      updateSource      = 'dropbox';
-      dropboxUpdateInfo = result;
-      sendToRenderer('updater:available', {
-        version:      result.version,
-        releaseNotes: result.notes,
-        releaseDate:  null,
-      });
-      return;
-    }
-  } catch (e) {
-    console.error('[updater] Falha ao verificar no Dropbox:', e.message || e);
-    // Dropbox indisponível/mal configurado — segue para o fallback abaixo
-  }
-
-  updateSource = null;
   isCheckingUpdate = true;
   try {
     await autoUpdater.checkForUpdates();
@@ -480,47 +452,18 @@ function setupAutoUpdater() {
   ipcMain.handle('updater:check', () => runUpdateCheck());
 
   ipcMain.handle('updater:download', async () => {
-    if (updateSource === 'dropbox' && dropboxUpdateInfo) {
-      try {
-        dropboxInstallerPath = await dropboxUpdater.downloadDropboxUpdate(
-          dropboxUpdateInfo.installerLink,
-          dropboxUpdateInfo.file,
-          (prog) => sendToRenderer('updater:progress', prog),
-        );
-        sendToRenderer('updater:downloaded', {
-          version:      dropboxUpdateInfo.version,
-          releaseNotes: dropboxUpdateInfo.notes,
-          releaseDate:  null,
-        });
-      } catch (e) {
-        console.error('[updater] Falha ao baixar do Dropbox:', e.stack || e);
-        sendToRenderer('updater:error', e.message || String(e));
-      }
-      return;
-    }
     try { await autoUpdater.downloadUpdate(); } catch (e) { sendToRenderer('updater:error', e.message); }
   });
 
   ipcMain.handle('updater:install', () => {
-    if (updateSource === 'dropbox' && dropboxInstallerPath) {
-      const installerPath = dropboxInstallerPath;
-      setImmediate(() => {
-        spawn(installerPath, [], { detached: true, stdio: 'ignore' }).unref();
-        app.quit();
-      });
-      return;
-    }
     setImmediate(() => autoUpdater.quitAndInstall());
   });
 }
 
 // ── Registrar handlers IPC ────────────────────────────────────────────────────
 function registerIpcHandlers() {
-  // Auto-updater: sempre com o fluxo real (Dropbox funciona independente de
-  // empacotamento; o fallback GitHub/electron-updater já trata sua própria
-  // falha em dev — sem app-update.yml — como "sem atualização", ver
-  // runUpdateCheck). Isso permite testar o check/download/install do Dropbox
-  // rodando em modo dev, sem precisar empacotar o instalador.
+  // Auto-updater: electron-updater/GitHub Releases já trata sua própria falha
+  // em dev (sem app-update.yml) como "sem atualização", ver runUpdateCheck().
   setupAutoUpdater();
 
   ipcMain.handle('window:minimize',     () => mainWindow?.minimize());
@@ -678,7 +621,7 @@ function registerIpcHandlers() {
     step();
 
     // Verifica atualizações automaticamente em produção (15s de delay para não competir com o startup)
-    // Checa o Dropbox primeiro, cai para o GitHub (electron-updater) se indisponível — ver runUpdateCheck().
+    // via GitHub Releases (electron-updater) — ver runUpdateCheck().
     if (!isDev && app.isPackaged) {
       setTimeout(() => {
         runUpdateCheck().catch(() => {});

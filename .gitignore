@@ -20,9 +20,6 @@ node_modules
 .env.local
 .env.*.local
 
-# Credenciais do Dropbox (usadas pelo auto-updater em electron/main.js)
-electron/dropbox.env
-
 # Log files
 npm-debug.log*
 yarn-debug.log*
