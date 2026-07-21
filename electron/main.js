@@ -405,6 +405,15 @@ function sendToRenderer(channel, payload) {
   }
 }
 
+// console.error some no vazio numa GUI empacotada sem terminal anexado — sem
+// isso, uma falha real de update é indiagnosticável depois do fato.
+function logUpdaterError(context, err) {
+  try {
+    const line = `[${new Date().toISOString()}] ${context}: ${err?.stack || err?.message || err}\n`;
+    fs.appendFileSync(path.join(app.getPath('userData'), 'updater.log'), line);
+  } catch (_) { /* não crítico — só o console.error já emitido segue valendo */ }
+}
+
 // Fonte: GitHub Releases via electron-updater (ver build.publish em package.json).
 //
 // Qualquer falha durante a VERIFICAÇÃO é tratada como "sem atualização
@@ -422,6 +431,7 @@ async function runUpdateCheck() {
     await autoUpdater.checkForUpdates();
   } catch (e) {
     console.error('[updater] Falha ao verificar no GitHub:', e.message || e);
+    logUpdaterError('check', e);
     sendToRenderer('updater:not-available', {});
   } finally {
     isCheckingUpdate = false;
@@ -441,6 +451,7 @@ function setupAutoUpdater() {
   autoUpdater.on('error', (err) => {
     const msg = err?.message || String(err);
     console.error('[updater] Erro do autoUpdater:', msg);
+    logUpdaterError('autoUpdater error event', err);
     // Erro durante a verificação (não durante o download) → sem atualização
     if (isCheckingUpdate) {
       sendToRenderer('updater:not-available', {});
@@ -452,7 +463,12 @@ function setupAutoUpdater() {
   ipcMain.handle('updater:check', () => runUpdateCheck());
 
   ipcMain.handle('updater:download', async () => {
-    try { await autoUpdater.downloadUpdate(); } catch (e) { sendToRenderer('updater:error', e.message); }
+    try {
+      await autoUpdater.downloadUpdate();
+    } catch (e) {
+      logUpdaterError('download', e);
+      sendToRenderer('updater:error', e.message);
+    }
   });
 
   ipcMain.handle('updater:install', () => {

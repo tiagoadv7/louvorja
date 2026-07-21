@@ -343,13 +343,17 @@ export default {
     },
 
     async startDownload() {
-      this.step     = 'downloading';
-      this.snackbar = true;
+      this.step         = 'downloading';
+      this.snackbar     = true;
+      this.errorMessage = '';
       try {
         await this.$electron.updaterDownload();
       } catch (_) {
-        this.step         = 'error';
-        this.errorMessage = 'Erro ao baixar a atualização.';
+        this.step = 'error';
+        // O handler principal (electron/main.js) já manda a mensagem real via
+        // 'updater:error' antes de resolver essa chamada — só cai no genérico
+        // se por algum motivo nenhuma mensagem específica chegou.
+        if (!this.errorMessage) this.errorMessage = 'Erro ao baixar a atualização.';
       }
     },
 
