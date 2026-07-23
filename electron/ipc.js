@@ -690,10 +690,29 @@ function setupIpc(mainWindow) {
         const baseDirs = [getWritableConfigDir(), userDataConfigDir, getConfigDir()];
         if (delphiConfigDir) baseDirs.push(delphiConfigDir);
         if (folder === 'musicas') {
-          // Busca recursiva em todas as raízes de musicas
+          // 1. Caminho exato primeiro (com a subpasta do álbum, ex: "2024 - Maranata/Maranata.mp3")
+          //    — mesma lógica usada abaixo pras outras pastas (capas/imagens).
+          for (const base of baseDirs) {
+            const p = path.join(base, subpath);
+            if (fs.existsSync(p)) {
+              return new Response(fs.readFileSync(p), { headers: { 'Content-Type': mime } });
+            }
+          }
+
+          // 2. Fallback: a subpasta do álbum no disco pode divergir da do banco —
+          //    busca recursiva, mas RESTRITA à própria subpasta do álbum esperada.
+          //    Nunca varre a raiz de "musicas" inteira por nome de arquivo: títulos
+          //    genéricos ("Maranata.mp3", "Prefixo de Louvor.mp3" etc.) se repetem em
+          //    dezenas de álbuns diferentes no catálogo — uma busca ampla encontraria
+          //    a primeira ocorrência de QUALQUER álbum, tocando a gravação errada
+          //    (era exatamente isso que fazia o álbum "2024 - Maranata" tocar a
+          //    "Maranata" de outro álbum).
+          const albumFolder = path.dirname(filename);
+          const baseName    = path.basename(filename);
           for (const base of baseDirs) {
             const musicasRoot = path.join(base, 'musicas');
-            const found = findFileInTree(musicasRoot, path.basename(filename));
+            const scopedDir   = albumFolder && albumFolder !== '.' ? path.join(musicasRoot, albumFolder) : musicasRoot;
+            const found = findFileInTree(scopedDir, baseName);
             if (found) {
               return new Response(fs.readFileSync(found), { headers: { 'Content-Type': mime } });
             }
@@ -815,18 +834,33 @@ function setupIpc(mainWindow) {
         try { md = JSON.parse(fs.readFileSync(mPath, 'utf8')); } catch (_) { continue; }
         let mChanged = false;
 
-        // url_music — busca recursiva em ambas as raízes de musicas.
-        // Se encontrado localmente: file:// (acesso direto, mais rápido).
+        // url_music — se encontrado localmente: file:// (acesso direto, mais rápido).
         // Se não encontrado: app-local://musicas/folder/nome — protocolo serve ou busca na API.
         const resolveAudioUrl = (rawUrl) => {
           if (!rawUrl || rawUrl.startsWith('app-local://musicas/') || fileUrlExists(rawUrl)) return rawUrl; // já é local
           const name = safeBasename(rawUrl);
           if (!name) return rawUrl;
-          // 1. Tenta encontrar localmente (busca recursiva)
+          const folder = extractFolderFromMusicUrl(rawUrl);
+
+          // 1. Tenta a subpasta do álbum específica primeiro — evita pegar por engano
+          //    o arquivo de mesmo nome de OUTRO álbum (títulos genéricos como
+          //    "Maranata.mp3"/"Prefixo de Louvor.mp3" se repetem em dezenas de álbuns
+          //    diferentes no catálogo).
+          if (folder) {
+            const scopedW = path.join(musicasW, folder, name);
+            const scopedR = path.join(musicasR, folder, name);
+            if (fs.existsSync(scopedW)) return toLocalFileUrl(scopedW);
+            if (fs.existsSync(scopedR)) return toLocalFileUrl(scopedR);
+          }
+
+          // 2. Fallback: busca recursiva ampla — só quando a subpasta esperada não
+          //    bateu (pode ter sido reorganizada no disco). Ainda arrisca pegar o
+          //    arquivo errado nesse caso raro, mas é estritamente melhor que nunca
+          //    tentar o caminho certo primeiro.
           const found = findFileInTree(musicasW, name) || findFileInTree(musicasR, name);
           if (found) return toLocalFileUrl(found);
-          // 2. Extrai subpasta do URL (ANO - ALBUM) para app-local com caminho correto
-          const folder = extractFolderFromMusicUrl(rawUrl);
+
+          // 3. Não encontrado localmente — app-local:// com a subpasta conhecida
           if (folder) return `app-local://musicas/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`;
           return rawUrl; // mantém API URL
         };
@@ -1185,8 +1219,22 @@ function setupIpc(mainWindow) {
 
   ipcMain.handle('media:resolve-file', (_, filename) => {
     if (!filename) return null;
+
+    // Se já chegou um file:// resolvido (ex: sqlite-reader.js já achou o arquivo
+    // certo, dentro da subpasta certa do álbum) e ele realmente existe, usa direto
+    // — sem isso, a busca por basename abaixo (que ignora de qual álbum é o
+    // arquivo) podia SOBRESCREVER um resultado já correto com o arquivo de mesmo
+    // nome de OUTRO álbum. Era exatamente isso que fazia o álbum "2024 - Maranata"
+    // tocar a "Maranata" de outro álbum mesmo com sqlite-reader.js já certo.
+    if (filename.startsWith('file://')) {
+      return fileUrlExists(filename) ? filename : null;
+    }
+
     const name = safeBasename(filename);
     if (!name) return null;
+    // Pasta do álbum, se dá pra extrair da URL (ex: API .../musics/pt/2017 - Eu Creio/...)
+    // — usada pra priorizar a busca na subpasta certa antes de cair pra busca ampla.
+    const folder = extractFolderFromMusicUrl(filename);
 
     const search = (dir, depth) => {
       if (!dir || !fs.existsSync(dir)) return null;
@@ -1205,32 +1253,45 @@ function setupIpc(mainWindow) {
       return null;
     };
 
+    // Busca com prioridade: primeiro na subpasta do álbum esperada (se conhecida)
+    // — evita pegar o arquivo de mesmo nome de OUTRO álbum (títulos genéricos como
+    // "Maranata.mp3"/"Prefixo de Louvor.mp3" se repetem em dezenas de álbuns
+    // diferentes no catálogo). Só cai pra busca ampla se não achar na subpasta certa.
+    const searchScoped = (baseDir) => {
+      if (!baseDir) return null;
+      if (folder) {
+        const scoped = path.join(baseDir, folder, name);
+        if (fs.existsSync(scoped)) return scoped;
+      }
+      return search(baseDir, 0);
+    };
+
     // 1. Pasta configurada pelo usuário
     const userFolder = Store.get('media_base_folder');
     if (userFolder) {
-      const found = search(userFolder, 0);
+      const found = searchScoped(userFolder);
       if (found) return toFileUrl(found);
     }
 
     // 2. Pasta gravável (getWritableBase()/config/musicas/) — downloads do app
-    const writableFound = search(getAutoMediaDir(null, true), 0);
+    const writableFound = searchScoped(getAutoMediaDir(null, true));
     if (writableFound) return toFileUrl(writableFound);
 
     // 3. userData/config/musicas/ — fallback para downloads feitos em dev ou build anterior
     const userDataMusicDir = path.join(app.getPath('userData'), 'config', 'musicas');
     if (userDataMusicDir !== getAutoMediaDir(null, true)) {
-      const userDataFound = search(userDataMusicDir, 0);
+      const userDataFound = searchScoped(userDataMusicDir);
       if (userDataFound) return toFileUrl(userDataFound);
     }
 
     // 4. Pasta da instalação original (config/musicas/ com subpastas do Delphi)
-    const installFound = search(getAutoMediaDir(), 0);
+    const installFound = searchScoped(getAutoMediaDir());
     if (installFound) return toFileUrl(installFound);
 
     // 5. Pasta config/ da instalação Delphi (config\musicas\ com subpastas por álbum)
     const delphiCfg = getSqliteConfigDir();
     if (delphiCfg) {
-      const delphiFound = search(path.join(delphiCfg, 'musicas'), 0);
+      const delphiFound = searchScoped(path.join(delphiCfg, 'musicas'));
       if (delphiFound) return toFileUrl(delphiFound);
     }
 

@@ -59,9 +59,12 @@ export default {
       return this.module?.config;
     },
     lyric() {
-      return this.module?.data?.lyric
-        ?.slice()
-        .sort((a, b) => a.order - b.order);
+      // A API online expõe o campo como `lyric`; o leitor SQLite offline expõe o
+      // mesmo conteúdo como `slides` (mesmo fallback que Media.js::slides() já usa) —
+      // sem isso, a janela "Letra" abre vazia sempre que os dados vêm do modo offline.
+      const data = this.module?.data;
+      const arr = Object.values(data?.lyric || data?.slides || {});
+      return arr.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
   },
   methods: {

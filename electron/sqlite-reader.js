@@ -43,8 +43,13 @@ function findInTree(dir, lowerName, depth = 0, maxDepth = 3) {
  * Estratégia em dois passos:
  *   1. Busca flat em cada dir (rápida — cobre o caso comum albumDir/fileName)
  *   2. Busca recursiva em cada dir como fallback (cobre pastas com nome diferente do esperado)
+ *
+ * options.recursive=false desliga o passo 2 — usar quando `dirs` é uma pasta-base
+ * ampla (várias músicas de vários álbuns dentro), onde uma busca recursiva correria
+ * o risco de encontrar o arquivo de OUTRO álbum com o mesmo nome (ex.: "Maranata.mp3"
+ * existe em pelo menos 4 álbuns diferentes no catálogo) antes do arquivo certo.
  */
-function findLocalFile(dirs, fileName) {
+function findLocalFile(dirs, fileName, { recursive = true } = {}) {
   if (!fileName) return '';
   const lower = fileName.toLowerCase();
 
@@ -62,6 +67,8 @@ function findLocalFile(dirs, fileName) {
       if (found) return 'file:///' + path.join(dir, found).replace(/\\/g, '/');
     } catch (_) {}
   }
+
+  if (!recursive) return '';
 
   // Passo 2: busca recursiva como fallback (ex: arquivo em subpasta com nome diferente)
   for (const dir of dirs) {
@@ -199,7 +206,12 @@ class SQLiteReader {
     const hCa  = this._hasTable('categories_albums')? this._hasCols('categories_albums','order', 'id_language') : {};
     const hAm  = this._hasTable('albums_musics')    ? this._hasCols('albums_musics',    'track') : {};
     const hMu  = this._hasCols('musics',    'id_file_music', 'id_file_instrumental_music', 'has_instrumental_music', 'id_language', 'duration', 'id_file_image');
-    const hLy  = this._hasCols('lyrics',    'id_file_image', 'image_position', 'aux_lyric', 'show_slide', 'order', 'id_language', 'instrumental_time', 'time');
+    // lyrics: _hasCols() não falha se a tabela não existir (PRAGMA table_info de uma
+    // tabela inexistente só retorna 0 linhas, todas as colunas viram false) — por isso
+    // guardamos hasLyrics separado, senão "letra vazia" fica indistinguível de "tabela
+    // lyrics não existe neste banco" (ver uso em _getMusic()).
+    const hasLyrics = this._hasTable('lyrics');
+    const hLy  = hasLyrics ? this._hasCols('lyrics', 'id_lyric', 'id_file_image', 'image_position', 'aux_lyric', 'show_slide', 'order', 'id_language', 'instrumental_time', 'time') : {};
     const hFi  = this._hasTable('files')            ? this._hasCols('files',           'dir', 'file_name', 'duration') : {};
 
     this._schema = {
@@ -207,6 +219,7 @@ class SQLiteReader {
       hasAlbums:    this._hasTable('albums'),
       hasAlbMusics: this._hasTable('albums_musics'),
       hasFiles:     this._hasTable('files'),
+      hasLyrics,
       cat: hCat, alb: hAlb, ca: hCa, am: hAm, mu: hMu, ly: hLy, fi: hFi,
     };
     return this._schema;
@@ -253,6 +266,15 @@ class SQLiteReader {
    * Resolve URL de áudio incluindo a subpasta do álbum (ANO - ALBUM).
    * O URL fallback app-local:// usa o formato correto com a subpasta
    * para que o protocolo handler encontre o arquivo em disco.
+   *
+   * Importante: a busca recursiva NUNCA varre a pasta-base de músicas inteira.
+   * Vários títulos genéricos ("Maranata.mp3", "Prefixo de Louvor.mp3" etc.) se
+   * repetem em dezenas de álbuns diferentes no catálogo — uma busca recursiva
+   * ampla encontraria o primeiro arquivo de mesmo nome que aparecesse na
+   * varredura (de QUALQUER álbum), não necessariamente o do álbum certo,
+   * fazendo o app tocar a gravação errada. A recursão fica restrita à própria
+   * subpasta do álbum; na pasta-base só é permitida busca direta (sem entrar
+   * em subpastas de outros álbuns).
    */
   _resolveAudio(fileName, albumFolder) {
     if (!fileName) return '';
@@ -260,8 +282,17 @@ class SQLiteReader {
     const albumDirs = albumFolder
       ? this._musicasDirs.map(d => path.join(d, albumFolder))
       : [];
-    const local = findLocalFile([...albumDirs, ...this._musicasDirs], fileName);
-    if (local) return local;
+
+    if (albumDirs.length) {
+      const local = findLocalFile(albumDirs, fileName);
+      if (local) return local;
+    }
+
+    // Fallback: arquivo solto direto na pasta-base (sem subpasta) — só busca
+    // direta, nunca recursiva (ver aviso acima).
+    const flatBase = findLocalFile(this._musicasDirs, fileName, { recursive: false });
+    if (flatBase) return flatBase;
+
     // URL com subpasta: app-local://musicas/2017 - Eu Creio/Arquivo.mp3
     if (albumFolder) {
       return `app-local://musicas/${encodeURIComponent(albumFolder)}/${encodeURIComponent(fileName)}`;
@@ -548,22 +579,39 @@ class SQLiteReader {
     const urlMusic        = this._resolveAudio(audName, albumFolder);
     const urlInstrumental = this._resolveAudio(instrName, instrFolder);
 
-    const orderCol   = s.ly.order             ? '"order"'          : 'rowid';
-    const showSlCol  = s.ly.show_slide        ? 'show_slide'       : '1 AS show_slide';
-    const auxCol     = s.ly.aux_lyric         ? 'aux_lyric'        : 'NULL AS aux_lyric';
-    const imgIdCol   = s.ly.id_file_image     ? 'id_file_image'    : 'NULL AS id_file_image';
-    const imgPosCol  = s.ly.image_position    ? 'image_position'   : '5 AS image_position';
-    const timeCol    = s.ly.time              ? 'time'             : "'00:00' AS time";
-    const instrTCol  = s.ly.instrumental_time ? 'instrumental_time': "'00:00' AS instrumental_time";
+    let lRows = [];
+    if (!s.hasLyrics) {
+      // Sem isso, "letra vazia" e "tabela lyrics não existe neste banco" ficam
+      // indistinguíveis no app — só aparece como slides:[] sem pista nenhuma.
+      console.warn(`[SQLiteReader] Tabela "lyrics" não encontrada neste banco — música ${idMusic} ficará sem slides de letra.`);
+    } else {
+      const orderCol   = s.ly.order             ? '"order"'          : 'rowid';
+      const showSlCol  = s.ly.show_slide        ? 'show_slide'       : '1 AS show_slide';
+      const auxCol     = s.ly.aux_lyric         ? 'aux_lyric'        : 'NULL AS aux_lyric';
+      const imgIdCol   = s.ly.id_file_image     ? 'id_file_image'    : 'NULL AS id_file_image';
+      const imgPosCol  = s.ly.image_position    ? 'image_position'   : '5 AS image_position';
+      const timeCol    = s.ly.time              ? 'time'             : "'00:00' AS time";
+      const instrTCol  = s.ly.instrumental_time ? 'instrumental_time': "'00:00' AS instrumental_time";
+      // id_lyric: mesmo campo que a API expõe, usado pelo componente "Letra completa"
+      // (`:key="line.id_lyric"`) — sem ele o Vue trata todas as linhas como a mesma key.
+      const idLyricCol = s.ly.id_lyric           ? 'id_lyric'         : 'rowid AS id_lyric';
 
-    const lRows = this._query(`
-      SELECT lyric, ${auxCol}, ${timeCol}, ${instrTCol},
-             ${showSlCol}, ${imgIdCol}, ${imgPosCol},
-             ${orderCol} AS sort_order
-      FROM   lyrics
-      WHERE  id_music = ${idMusic}
-      ORDER BY sort_order
-    `);
+      try {
+        lRows = this._query(`
+          SELECT ${idLyricCol}, lyric, ${auxCol}, ${timeCol}, ${instrTCol},
+                 ${showSlCol}, ${imgIdCol}, ${imgPosCol},
+                 ${orderCol} AS sort_order
+          FROM   lyrics
+          WHERE  id_music = ${idMusic}
+          ORDER BY sort_order
+        `);
+      } catch (e) {
+        // Erro real de schema (coluna/tipo inesperado) — sem o try/catch isso derrubava
+        // a leitura da música inteira (áudio incluso) por causa só da letra.
+        console.warn(`[SQLiteReader] Falha ao ler "lyrics" da música ${idMusic}:`, e.message || e);
+        lRows = [];
+      }
+    }
 
     const slides = lRows.map(l => {
       let slideImg = '';
@@ -572,6 +620,9 @@ class SQLiteReader {
         slideImg = this._resolveImage(f[0]?.file_name);
       }
       return {
+        id_lyric:          l.id_lyric,
+        id_music:          idMusic,
+        order:             l.sort_order,
         lyric:             l.lyric              || '',
         aux_lyric:         l.aux_lyric          || '',
         time:              l.time               || '00:00',
