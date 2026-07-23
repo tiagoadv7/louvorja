@@ -34,3 +34,6 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Relatório gerado por scripts/auditar-integridade.js (dados do banco local, não commitar)
+/auditoria-resultado.csv
