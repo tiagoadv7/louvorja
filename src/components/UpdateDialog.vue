@@ -100,8 +100,9 @@
             </template>
           </div>
         </div>
-        <div v-if="updateInfo?.releaseNotes" class="upd-notes text-body-2 text-medium-emphasis">
-          {{ stripHtml(updateInfo.releaseNotes) }}
+        <div v-if="updateInfo?.releaseNotes">
+          <h3 class="upd-notes-title">Novidades desta versão</h3>
+          <div class="upd-notes text-body-2" v-html="formatChangelog(updateInfo.releaseNotes)" />
         </div>
       </v-card-text>
 
@@ -380,9 +381,20 @@ export default {
       } catch { return ''; }
     },
 
-    stripHtml(html) {
-      if (!html) return '';
-      return String(html).replace(/<[^>]*>/g, '').trim();
+    // Formata o changelog (texto puro do corpo do release do GitHub) pro mesmo
+    // estilo do FreeShow: escapa HTML (defensivo — o texto vira v-html), preserva
+    // quebra de linha e troca marcadores de lista ("- item"/"* item") por "• item".
+    formatChangelog(text) {
+      if (!text) return '';
+      const escaped = String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return escaped
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((line) => line.replace(/^\s*[-*]\s+/, '• '))
+        .join('<br>');
     },
   },
 };
@@ -396,13 +408,21 @@ export default {
   padding: 16px 18px;
 }
 
+.upd-notes-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-decoration: underline solid rgb(var(--v-theme-primary));
+  text-underline-offset: 3px;
+}
+
 .upd-notes {
   background: rgba(var(--v-theme-surface-variant), 0.3);
   border-radius: 8px;
   padding: 12px 14px;
-  max-height: 120px;
+  max-height: 220px;
   overflow-y: auto;
-  white-space: pre-wrap;
+  line-height: 1.5;
   word-break: break-word;
 }
 </style>

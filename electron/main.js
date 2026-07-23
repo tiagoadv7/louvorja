@@ -438,10 +438,54 @@ async function runUpdateCheck() {
   }
 }
 
+// Tenta o download algumas vezes com espera entre tentativas antes de desistir.
+// Motivo: um release recém-publicado no GitHub pode levar de segundos a alguns
+// MINUTOS pra terminar de propagar (arquivos grandes de ~150MB passam por
+// verificação antes de ficar baixáveis via browser_download_url) — confirmado
+// na prática: um release apareceu com os assets listados na API mas retornando
+// 404 no download por vários minutos seguidos. Sem isso, um "Baixar agora"
+// clicado logo após o publish falha mesmo o release já estando "publicado".
+// Atraso progressivo (10s, 15s, 20s, 25s, 30s) soma ~100s de tolerância total.
+const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 25000, 30000];
+
+// isRetryingDownload sinaliza pro listener global 'error' (abaixo) não repassar
+// pro renderer as falhas das tentativas intermediárias — só a última, se todas
+// falharem — senão o usuário veria a tela de erro piscar mesmo quando uma
+// tentativa posterior dá certo.
+let isRetryingDownload = false;
+
+async function downloadUpdateWithRetry() {
+  isRetryingDownload = true;
+  try {
+    const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await autoUpdater.downloadUpdate();
+      } catch (e) {
+        lastErr = e;
+        logUpdaterError(`download tentativa ${attempt}/${maxAttempts} falhou`, e);
+        const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
+        if (delayMs) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+    throw lastErr;
+  } finally {
+    isRetryingDownload = false;
+  }
+}
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null; // silencia logs internos do electron-updater
+  // Histórico de releases já teve tags reaproveitadas apontando pra conteúdo
+  // diferente do esperado — um download diferencial (baseado no .blockmap da
+  // versão anterior) é bem mais frágil nesse cenário do que baixar o instalador
+  // completo de novo. Desliga a otimização em troca de confiabilidade.
+  autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on('checking-for-update',  ()       => sendToRenderer('updater:checking'));
   autoUpdater.on('update-available',     (info)   => sendToRenderer('updater:available', info));
@@ -457,6 +501,10 @@ function setupAutoUpdater() {
       sendToRenderer('updater:not-available', {});
       return;
     }
+    // Falha de uma tentativa intermediária do retry — não repassa ainda (ver
+    // downloadUpdateWithRetry); só a falha final (lançada pro catch do handler
+    // 'updater:download' abaixo) chega no renderer.
+    if (isRetryingDownload) return;
     sendToRenderer('updater:error', msg);
   });
 
@@ -464,7 +512,7 @@ function setupAutoUpdater() {
 
   ipcMain.handle('updater:download', async () => {
     try {
-      await autoUpdater.downloadUpdate();
+      await downloadUpdateWithRetry();
     } catch (e) {
       logUpdaterError('download', e);
       sendToRenderer('updater:error', e.message);
