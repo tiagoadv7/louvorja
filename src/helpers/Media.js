@@ -70,20 +70,26 @@ const Media = {
       return;
     }
 
-    // Crossfade: se havia áudio tocando ao trocar de música, faz fade-out independente
     const _newMode = params.mode || "no_audio";
     if (_newMode === "audio" || _newMode === "instrumental") {
       // Avisa outros donos de áudio (soundmaster, video_player) para pararem com fade
       $audioBus.requestFocus("media");
     }
+
+    // Crossfade: se já havia áudio tocando e a nova abertura também produz áudio,
+    // faz um crossfade real (ver _crossfadeAudioTrack) em vez de cortar na hora —
+    // por isso NÃO chama stopAudio()/_detachAndFadeOut() aqui: o áudio atual continua
+    // tocando normalmente durante a busca assíncrona da nova música; o crossfade só
+    // começa lá embaixo, no ponto exato em que a nova URL de áudio está pronta.
+    // this._crossfading também bloqueia checkTime()/_onAudioEnded()/timeUpdate() de
+    // reagirem ao elemento antigo (que ainda gera eventos) enquanto a troca ocorre.
     const _wasPlayingAudio = !$appdata.get("modules.media.config.is_paused") &&
       ["audio", "instrumental"].includes($appdata.get("modules.media.config.mode"));
-    if (_wasPlayingAudio && (_newMode === "audio" || _newMode === "instrumental")) {
-      this._detachAndFadeOut();
+    const _willCrossfade = _wasPlayingAudio && (_newMode === "audio" || _newMode === "instrumental");
+    this._crossfading = _willCrossfade;
+    if (!_willCrossfade) {
+      this.stopAudio();
     }
-
-    this.stopAudio();
-    this.clearVariables();
 
     const id_music = params.id_music;
     const minimized = params.minimized ? params.minimized : false;
@@ -94,6 +100,7 @@ const Media = {
 
     let data = await $database.get(`music_${id_music}`);
     if (data == null) {
+      this._crossfading = false;
       if (typeof this._autoCloseCallback === 'function') {
         // Modo "reproduzir todos": pula para a próxima faixa silenciosamente
         this._autoCloseCallback();
@@ -126,15 +133,32 @@ const Media = {
       }
     }
 
-    $appdata.set("modules.media.data", data);
-
-    $appdata.set("modules.media.id_music", id_music);
-    $appdata.set("modules.media.id_album", id_album);
-    $appdata.set("modules.media.config.slide_index", 0);
-    $appdata.set("modules.media.config.title", data.name);
-    $appdata.set("modules.media.config.last_slide", this.slides().length);
-    $appdata.set("modules.media.times", []);
-    this.setAlbumInfo(id_album);
+    // Lote atômico: título/imagem/slides da música ANTERIOR só saem de cena no mesmo
+    // instante em que os da NOVA música entram — a janela de saída nunca recebe um
+    // estado intermediário "vazio" (era isso que causava o fundo preto entre uma
+    // faixa e outra no "Reproduzir todos": clearVariables() antigo usava vários
+    // $appdata.set() individuais, cada um virando uma mensagem IPC própria).
+    const computedSlides = this.slides(data);
+    const batch = [
+      ["modules.media.data", data],
+      ["modules.media.id_music", id_music],
+      ["modules.media.id_album", id_album],
+      ["modules.media.config.title", data.name],
+      ["modules.media.config.slide_index", 0],
+      ["modules.media.config.last_slide", computedSlides.length],
+      ["modules.media.times", []],
+      ["modules.media.config.audio", ""],
+      ["modules.media.config.lazy", false],
+      ["modules.media.config.current_time", 0],
+      ["modules.media.config.duration", 0],
+      ["modules.media.config.progress", 0],
+      ["modules.media.config.slide_progress", 0],
+      ["modules.media.config.buffered", 0],
+      ["modules.media.config.volume", 100],
+      ["modules.media.config.is_fading", false],
+    ];
+    this.setAlbumInfo(id_album, "media", data, batch);
+    $appdata.setMultiple(batch);
 
     if (minimized) {
       this.minimize();
@@ -143,13 +167,18 @@ const Media = {
     }
 
     if (mode == "audio" || mode == "instrumental") {
-      //Será executado com áudio... cria o elemento de audio
-      const audio = this.getElement();
-      const volume = $appdata.get("modules.media.config.volume");
-      audio.volume = volume / 100;
+      //Será executado com áudio... cria o elemento de audio (a menos que seja
+      // crossfade: aí o elemento atual continua tocando intocado até o ponto exato
+      // de início do crossfade, mais abaixo — ver _crossfadeAudioTrack)
+      let audio = null;
+      if (!_willCrossfade) {
+        audio = this.getElement();
+        const volume = $appdata.get("modules.media.config.volume");
+        audio.volume = volume / 100;
 
-      this.pause(true);
-      audio.currentTime = 0;
+        this.pause(true);
+        audio.currentTime = 0;
+      }
 
       //Grava os tempos dos slides
       const openTimes = this.slides().map((item) =>
@@ -181,6 +210,7 @@ const Media = {
       const hasInternet = typeof navigator === "undefined" || navigator.onLine;
       if (!localUrl && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
         && typeof this._autoCloseCallback !== 'function') {
+        this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
         const albumEntry = data.albums?.length > 0
@@ -223,6 +253,7 @@ const Media = {
 
       // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar
       if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
+        this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
         if (typeof this._autoCloseCallback === 'function') {
@@ -268,10 +299,15 @@ const Media = {
         ($appdata.get("is_online") && $userdata.get("modules.media.lazy_load"))
       ) {
         $appdata.set("modules.media.config.lazy", true);
-        audio.src = $appdata.get("modules.media.config.audio");
-        audio.load();
+        const audioUrl = $appdata.get("modules.media.config.audio");
         $appdata.set("modules.media.loading", false);
-        this.play();
+        if (_willCrossfade) {
+          this._crossfadeAudioTrack(audioUrl, $appdata.get("modules.media.config.volume") / 100);
+        } else {
+          audio.src = audioUrl;
+          audio.load();
+          this.play();
+        }
       } else {
         //Se a opção lazy_load estiver desmarcada, execução lenta (o audio só é executado depois de totalmente carregado)
         $appdata.set("modules.media.config.lazy", false);
@@ -280,6 +316,7 @@ const Media = {
         try {
           request.open("GET", $appdata.get("modules.media.config.audio"), true);
         } catch (error) {
+          self._crossfading = false;
           if (typeof self._autoCloseCallback === 'function') {
             self._autoCloseCallback();
           } else {
@@ -296,10 +333,16 @@ const Media = {
         request.responseType = "blob";
         request.onload = function () {
           if (this.status == 200) {
-            audio.src = URL.createObjectURL(this.response);
-            audio.load();
-            self.play();
+            const blobUrl = URL.createObjectURL(this.response);
+            if (_willCrossfade) {
+              self._crossfadeAudioTrack(blobUrl, $appdata.get("modules.media.config.volume") / 100);
+            } else {
+              audio.src = blobUrl;
+              audio.load();
+              self.play();
+            }
           } else {
+            self._crossfading = false;
             if (typeof self._autoCloseCallback === 'function') {
               self._autoCloseCallback();
             } else {
@@ -316,6 +359,7 @@ const Media = {
           }
         };
         request.onerror = function () {
+          self._crossfading = false;
           if (typeof self._autoCloseCallback === 'function') {
             self._autoCloseCallback();
           } else {
@@ -551,9 +595,8 @@ const Media = {
     ]);
     // show=false e minimized=false tiram a projeção do modo ativo (Popup.vue do módulo
     // media passa a renderizar em standby/transparente), mas a janela de saída permanece
-    // aberta até o operador clicar em "Parar projeção". Não chama clearVariables() aqui:
-    // os dados do slide ficam intactos para reabertura rápida (F5); clearVariables() só
-    // roda no próximo open().
+    // aberta até o operador clicar em "Parar projeção". Os dados do slide ficam intactos
+    // (reabertura rápida via F5) — só são substituídos no próximo open().
   },
 
   // Chamado quando o áudio termina naturalmente (fim da música ou dos slides).
@@ -566,8 +609,8 @@ const Media = {
       ["modules.media.show", false],
       ["modules.media.minimized", false],
     ]);
-    // Não chama clearVariables() nem closeOutput() — dados preservados para reabertura
-    // rápida; a janela de saída permanece aberta (modo de projeção ativo).
+    // Não chama closeOutput() — dados preservados para reabertura rápida; a janela
+    // de saída permanece aberta (modo de projeção ativo).
   },
 
   async openLyric(params) {
@@ -677,6 +720,95 @@ const Media = {
     await this.open({ id_music: params.id_music, mode: params.mode || "audio", minimized: true });
   },
 
+  // Crossfade real entre músicas DIFERENTES — usado por open() quando já havia
+  // áudio tocando (troca manual de faixa ou avanço da fila "Reproduzir todos").
+  // Mesmo padrão de switchMode() (dois <audio>, xfade_in/xfade_out em paralelo,
+  // 1200ms/40ms por passo), mas sem sincronizar currentTime (é uma música nova,
+  // começa do zero) e sem tocar no elemento antigo antes deste ponto — quem chamou
+  // (open()) já garantiu que ele seguiu tocando normalmente durante a busca
+  // assíncrona da nova música.
+  _crossfadeAudioTrack(url, targetVolume) {
+    const oldAudio = this.getElement();
+
+    const existing = document.getElementById("__audio_xfade");
+    if (existing) { existing.pause(); existing.remove(); }
+
+    const xfade = document.createElement("audio");
+    xfade.id = "__audio_xfade";
+    xfade.preload = "auto";
+    xfade.volume = 0;
+    xfade.src = url;
+    document.body.appendChild(xfade);
+
+    this._fadeKey = (this._fadeKey || 0) + 1;
+    const xfadeKey = this._fadeKey;
+    if (!this._fades) this._fades = {};
+    clearInterval(this._fades.xfade_out);
+    clearInterval(this._fades.xfade_in);
+    $appdata.set("modules.media.config.is_fading", true);
+
+    xfade.addEventListener("canplay", () => {
+      if (this._fadeKey !== xfadeKey) {
+        xfade.pause();
+        xfade.src = "";
+        xfade.remove();
+        this._crossfading = false;
+        $appdata.set("modules.media.config.is_fading", false);
+        return;
+      }
+
+      xfade.currentTime = 0;
+      xfade.play().catch(() => {});
+
+      const FADE_MS = 1200;
+      const INTERVAL = 40;
+      const steps = Math.max(1, Math.round(FADE_MS / INTERVAL));
+
+      // FADE OUT — música antiga sai enquanto a nova entra
+      const outStart = oldAudio.volume;
+      const outD = outStart / steps;
+      let outN = 0;
+      this._fades.xfade_out = setInterval(() => {
+        if (this._fadeKey !== xfadeKey) { clearInterval(this._fades.xfade_out); return; }
+        outN++;
+        oldAudio.volume = Math.max(0, outStart - outD * outN);
+        if (outN >= steps) {
+          clearInterval(this._fades.xfade_out);
+          oldAudio.pause();
+          oldAudio.src = "";
+          oldAudio.removeAttribute("id");
+          oldAudio.remove();
+        }
+      }, INTERVAL);
+
+      // FADE IN — promove xfade a elemento principal ao terminar
+      const inD = targetVolume / steps;
+      let inN = 0;
+      this._fades.xfade_in = setInterval(() => {
+        if (this._fadeKey !== xfadeKey) { clearInterval(this._fades.xfade_in); return; }
+        inN++;
+        xfade.volume = Math.min(targetVolume, inD * inN);
+        if (inN >= steps) {
+          clearInterval(this._fades.xfade_in);
+          clearInterval(this._fades.xfade_out);
+
+          xfade.id = "__audio";
+          xfade.setAttribute("preload", "auto");
+          xfade.setAttribute("autoplay", "true");
+          xfade.addEventListener("timeupdate", this.timeUpdate.bind(this));
+          xfade.addEventListener("progress", this.timeUpdate.bind(this));
+          xfade.addEventListener("ended", this._onAudioEnded.bind(this));
+
+          this._crossfading = false;
+          $appdata.set("modules.media.config.is_paused", false);
+          $appdata.set("modules.media.config.is_fading", false);
+        }
+      }, INTERVAL);
+    }, { once: true });
+
+    xfade.load();
+  },
+
   _detachAndFadeOut() {
     const audio = this.getElement();
     if (!audio || audio.paused) return;
@@ -714,30 +846,6 @@ const Media = {
     });
   },
 
-  clearVariables() {
-    $appdata.set("modules.media.data", {});
-    $appdata.set("modules.media.id_music", null);
-    $appdata.set("modules.media.config.title", "");
-    $appdata.set("modules.media.config.subtitle", "");
-    $appdata.set("modules.media.config.track", 0);
-    $appdata.set("modules.media.config.image", "");
-    $appdata.set("modules.media.config.slide_index", 0);
-    $appdata.set("modules.media.config.last_slide", 0);
-    $appdata.set("modules.media.config.audio", "");
-    $appdata.set("modules.media.config.lazy", false);
-    $appdata.set("modules.media.config.current_time", 0);
-    $appdata.set("modules.media.config.duration", 0);
-    $appdata.set("modules.media.config.progress", 0);
-    $appdata.set("modules.media.config.slide_progress", 0);
-    $appdata.set("modules.media.config.buffered", 0);
-    $appdata.set("modules.media.config.volume", 100);
-    // Não reseta is_paused aqui: stopAudio() já o define como true antes de clearVariables().
-    // Manter true durante a transição garante que checkTime() e _onAudioEnded() não disparem
-    // novamente para a faixa que acabou. open() chama pause(true) e depois play() para
-    // restaurar o estado correto conforme a reprodução avança.
-    $appdata.set("modules.media.config.is_fading", false);
-  },
-
   minimize() {
     // setMultiple: uma única mensagem IPC com os dois campos — mesmo motivo
     // do $modules.minimize() genérico (ver Modules.js). Com dois set()
@@ -772,8 +880,8 @@ const Media = {
     return $appdata.get("modules.media.config");
   },
 
-  slides() {
-    let data = $appdata.get("modules.media.data");
+  slides(data) {
+    data = data || $appdata.get("modules.media.data");
 
     let prev_image = data?.url_image;
     let prev_image_position = data?.image_position;
@@ -1009,34 +1117,44 @@ const Media = {
     $appdata.set("modules.media.config.fullscreen", value);
   },
 
-  setAlbumInfo(id_album, module = "media") {
-    const data = $appdata.get(`modules.${module}.data`);
+  // data/batch opcionais: quando open() já tem os dados carregados localmente
+  // (ainda não gravados no store) e quer fundir subtitle/track/image num único
+  // setMultiple maior, passa os dois; chamadas existentes sem eles continuam
+  // lendo do store e aplicando via setMultiple próprio, como antes.
+  setAlbumInfo(id_album, module = "media", data = null, batch = null) {
+    data = data || $appdata.get(`modules.${module}.data`);
+
+    const empty = () => ([
+      [`modules.${module}.config.subtitle`, ""],
+      [`modules.${module}.config.track`, 0],
+      [`modules.${module}.config.image`, ""],
+    ]);
+
+    let entries;
     if (!data?.albums || data.albums.length <= 0) {
-      $appdata.set(`modules.${module}.config.subtitle`, "");
-      $appdata.set(`modules.${module}.config.track`, 0);
-      $appdata.set(`modules.${module}.config.image`, "");
-      return;
-    }
-
-    let album = null;
-    if (id_album) {
-      album = data.albums.filter((item) => item.id_album == id_album)[0];
-    } else if (data.albums.length === 1) {
-      album = data.albums[0];
+      entries = empty();
     } else {
-      album = data.albums.sort((a, b) => a.order - b.order)[0];
+      let album = null;
+      if (id_album) {
+        album = data.albums.filter((item) => item.id_album == id_album)[0];
+      } else if (data.albums.length === 1) {
+        album = data.albums[0];
+      } else {
+        album = data.albums.sort((a, b) => a.order - b.order)[0];
+      }
+
+      entries = !album ? empty() : [
+        [`modules.${module}.config.subtitle`, album.name],
+        [`modules.${module}.config.track`, album.track],
+        [`modules.${module}.config.image`, album.url_image],
+      ];
     }
 
-    if (!album) {
-      $appdata.set(`modules.${module}.config.subtitle`, "");
-      $appdata.set(`modules.${module}.config.track`, 0);
-      $appdata.set(`modules.${module}.config.image`, "");
-      return;
+    if (batch) {
+      batch.push(...entries);
+    } else {
+      $appdata.setMultiple(entries);
     }
-
-    $appdata.set(`modules.${module}.config.subtitle`, album.name);
-    $appdata.set(`modules.${module}.config.track`, album.track);
-    $appdata.set(`modules.${module}.config.image`, album.url_image);
   },
 
   timeUpdate() {
@@ -1075,6 +1193,14 @@ const Media = {
 
     $appdata.set("modules.media.config.buffered", buffered);
 
+    // Crossfade em andamento: o elemento lido acima (this.getElement()) ainda é a
+    // faixa ANTIGA, só tocando para o fade-out — os dados/slide já são os da nova
+    // música (trocados atomicamente em open()). Não recalcula slide_index a partir
+    // do tempo da faixa antiga contra os `times` da faixa nova (índices não
+    // corresponderiam). checkTime() também não roda: quem decide o próximo passo
+    // durante um crossfade é o próprio open()/_crossfadeAudioTrack.
+    if (this._crossfading) return;
+
     const times = $appdata.get("modules.media.times");
 
     const slide_index =
@@ -1095,14 +1221,24 @@ const Media = {
 
     this.checkTime();
   },
+  // Segundos de antecedência para iniciar o avanço automático da fila (ver checkTime())
+  // ANTES do fim real da faixa — é esse "respiro" que dá tempo do crossfade (1200ms)
+  // rodar sobreposto ao finalzinho da música atual, em vez de esperar ela acabar.
+  _PLAYALL_CROSSFADE_LEAD: 1.5,
   checkTime() {
+    if (this._crossfading) return;
+
     const is_paused = $appdata.get("modules.media.config.is_paused");
     const current_time = $appdata.get("modules.media.config.current_time");
     const duration = $appdata.get("modules.media.config.duration");
-    if (!is_paused && current_time >= duration && duration > 0) {
-      if (typeof this._autoCloseCallback === 'function') {
-        // Reprodução contínua ativa: delega ao chamador (ex: "Reproduzir todos")
-        // sem destruir o output — a próxima faixa abre sobre o mesmo output.
+    if (is_paused || duration <= 0) return;
+
+    const hasQueueNext = typeof this._autoCloseCallback === 'function';
+    const lead = hasQueueNext ? this._PLAYALL_CROSSFADE_LEAD : 0;
+    if (current_time >= duration - lead) {
+      if (hasQueueNext) {
+        // Reprodução contínua ativa ("Reproduzir todos"): dispara a próxima faixa um
+        // pouco antes do fim real para o crossfade se sobrepor ao finalzinho da atual.
         this._autoCloseCallback();
       } else {
         this.endSong();
@@ -1110,12 +1246,15 @@ const Media = {
     }
   },
   _onAudioEnded() {
+    // Crossfade em andamento: quem decide o próximo passo é o próprio
+    // open()/_crossfadeAudioTrack — o elemento antigo só está tocando para o fade-out.
+    if (this._crossfading) return;
     // Fallback para quando o último timeupdate não chegou a current_time >= duration
     // (comum em arquivos locais). Se checkTime() já processou o fim, is_paused estará
     // true (stopAudio define is_paused=true imediatamente) — evita duplo disparo.
-    // Guarda adicional: clearVariables() zera duration antes do primeiro await de open(),
-    // então se duration===0 significa que checkTime() já acionou o callback e a próxima
-    // faixa está carregando — não dispara de novo.
+    // Guarda adicional: duration é zerada no lote atômico de open() assim que a próxima
+    // música é carregada (antes dela começar a tocar de fato); duration===0 aqui indica
+    // que uma troca de faixa já está em andamento — não dispara de novo.
     if ($appdata.get("modules.media.config.is_paused")) return;
     if ($appdata.get("modules.media.config.duration") === 0) return;
     if (typeof this._autoCloseCallback === 'function') {
