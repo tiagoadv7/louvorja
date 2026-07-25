@@ -1,51 +1,55 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
     <v-card flat>
-      <v-card-text class="px-0">
-        <small>{{ t("info_module") }}</small>
-      </v-card-text>
-      <v-card-text class="px-0">
-        <v-text-field
-          v-model="url"
-          :disabled="loading || is_connected"
-          :label="t('labels.ip')"
-          density="compact"
-          variant="outlined"
-          prepend-icon="mdi-ip-network"
-          :hint="t('messages.get_ip')"
-          persistent-hint
-          :loading="loading ? 'warning' : null"
-        />
-        <v-text-field
-          v-model="token"
-          :disabled="loading || is_connected"
-          :label="t('labels.token')"
-          class="mt-3"
-          density="compact"
-          variant="outlined"
-          prepend-icon="mdi-code-braces"
-          persistent-hint
-          :loading="loading ? 'warning' : null"
-        />
-      </v-card-text>
-      <v-card-actions class="px-0">
-        <v-spacer></v-spacer>
-        <v-btn color="info" :text="t('labels.test_connection')" @click="test" />
-        <v-btn
-          v-if="!is_connected"
-          color="success"
-          text="Conectar"
-          @click="connect"
-        />
-        <v-btn
-          v-else
-          color="error"
-          :text="t('labels.disconnect')"
-          @click="disonnect"
-        />
-      </v-card-actions>
+      <!-- Conectar-se a outro LouvorJA como controle remoto (usado pelo teclado
+           virtual em Header.vue) — oculto por ora, sem remover a funcionalidade. -->
+      <template v-if="false">
+        <v-card-text class="px-0">
+          <small>{{ t("info_module") }}</small>
+        </v-card-text>
+        <v-card-text class="px-0">
+          <v-text-field
+            v-model="url"
+            :disabled="loading || is_connected"
+            :label="t('labels.ip')"
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-ip-network"
+            :hint="t('messages.get_ip')"
+            persistent-hint
+            :loading="loading ? 'warning' : null"
+          />
+          <v-text-field
+            v-model="token"
+            :disabled="loading || is_connected"
+            :label="t('labels.token')"
+            class="mt-3"
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-code-braces"
+            persistent-hint
+            :loading="loading ? 'warning' : null"
+          />
+        </v-card-text>
+        <v-card-actions class="px-0">
+          <v-spacer></v-spacer>
+          <v-btn color="info" :text="t('labels.test_connection')" @click="test" />
+          <v-btn
+            v-if="!is_connected"
+            color="success"
+            text="Conectar"
+            @click="connect"
+          />
+          <v-btn
+            v-else
+            color="error"
+            :text="t('labels.disconnect')"
+            @click="disonnect"
+          />
+        </v-card-actions>
 
-      <v-divider class="my-2" />
+        <v-divider class="my-2" />
+      </template>
 
       <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
       <v-card-title class="px-0 text-subtitle-1 d-flex align-center gap-2">
@@ -69,42 +73,45 @@
       </v-card-text>
 
       <template v-if="serverStatus.running">
-        <v-card-text class="px-0">
-          <v-text-field
-            :model-value="serverStatus.token"
-            :label="t('transmit.token')"
-            readonly
-            density="compact"
-            variant="outlined"
-            prepend-icon="mdi-key-outline"
-            hide-details
-          >
-            <template v-slot:append>
-              <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(serverStatus.token)" />
-              <v-btn size="small" variant="text" icon="mdi-refresh" :title="t('transmit.regenerate_token')" @click="confirmRegenerateToken" />
-            </template>
-          </v-text-field>
+        <v-card-text class="px-0 d-flex gap-4 flex-wrap">
+          <div style="flex:1; min-width:280px">
+            <v-text-field
+              :model-value="serverStatus.token"
+              :label="t('transmit.token')"
+              readonly
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-key-outline"
+              hide-details
+            >
+              <template v-slot:append>
+                <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(serverStatus.token)" />
+                <v-btn size="small" variant="text" icon="mdi-refresh" :title="t('transmit.regenerate_token')" @click="confirmRegenerateToken" />
+              </template>
+            </v-text-field>
 
-          <v-text-field
-            v-for="url in serverUrls"
-            :key="url.label"
-            :model-value="url.value"
-            :label="url.label"
-            readonly
-            class="mt-3"
-            density="compact"
-            variant="outlined"
-            prepend-icon="mdi-link-variant"
-            hide-details
-          >
-            <template v-slot:append>
-              <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(url.value)" />
-            </template>
-          </v-text-field>
-        </v-card-text>
+            <v-text-field
+              v-for="link in serverUrls"
+              :key="link.label"
+              :model-value="link.value"
+              :label="link.label"
+              readonly
+              class="mt-3"
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-link-variant"
+              hide-details
+            >
+              <template v-slot:append>
+                <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(link.value)" />
+              </template>
+            </v-text-field>
+          </div>
 
-        <v-card-text v-if="qrDataUrl" class="px-0 d-flex justify-center">
-          <img :src="qrDataUrl" width="160" height="160" alt="QR" />
+          <div v-if="qrDataUrl" class="d-flex flex-column align-center justify-center">
+            <img :src="qrDataUrl" width="140" height="140" alt="QR" />
+            <span class="text-caption text-medium-emphasis mt-1">{{ t('transmit.control_page') }}</span>
+          </div>
         </v-card-text>
       </template>
     </v-card>
