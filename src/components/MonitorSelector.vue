@@ -213,15 +213,18 @@ export default {
       return m ? parseInt(m[0]) : '';
     },
 
-    // Persistido (sobrevive a reinícios) + propagado ao vivo (state-update)
-    // pro relay do main.js já entregar a mudança na janela de retorno aberta.
+    // $userdata.set já persiste (sobrevive a reinícios) E propaga ao vivo —
+    // por baixo dos panos ele chama $appdata.set("user_data.<param>", valor),
+    // que já é retransmitido via state-update pro relay do main.js entregar
+    // na janela de retorno aberta. NÃO chamar $appdata.set direto também com
+    // a chave sem prefixo aqui — isso criava uma segunda chave divergente
+    // ("return_screen.x" vs "user_data.return_screen.x") que ReturnScreen.vue
+    // não lia da mesma forma, e o relógio/cronômetro nunca aparecia.
     setShowClock(value) {
       this.$userdata.set('return_screen.show_clock', value);
-      this.$appdata.set('return_screen.show_clock', value);
     },
     setShowTimer(value) {
       this.$userdata.set('return_screen.show_timer', value);
-      this.$appdata.set('return_screen.show_timer', value);
     },
   },
 };

@@ -69,20 +69,18 @@ export default {
     visible: false,
     now: new Date(),
     _tickInterval: null,
-    // Preferência persistida (ver MonitorSelector.vue) — usada até a primeira
-    // atualização "ao vivo" chegar via state-update nesta sessão.
-    showClockPref: false,
-    showTimerPref: false,
   }),
 
   computed: {
+    // $userdata.get lê de $appdata (com prefixo "user_data.") — chave única,
+    // reativa via Vuex, e alimentada tanto pela carga inicial ($userdata.load()
+    // em initElectron/initBrowser) quanto pelo state-update ao vivo vindo de
+    // MonitorSelector.vue (ver comentário em setShowClock/setShowTimer lá).
     clockEnabled() {
-      const live = this.$appdata.get('return_screen.show_clock');
-      return live === null || live === undefined ? this.showClockPref : !!live;
+      return !!this.$userdata.get('return_screen.show_clock', false);
     },
     timerEnabled() {
-      const live = this.$appdata.get('return_screen.show_timer');
-      return live === null || live === undefined ? this.showTimerPref : !!live;
+      return !!this.$userdata.get('return_screen.show_timer', false);
     },
     wallClockText() {
       const d = this.now;
@@ -246,8 +244,6 @@ export default {
       if (savedTheme) {
         try { this.$vuetify.theme.global.name = savedTheme; } catch { /* */ }
       }
-      this.showClockPref = !!this.$userdata.get('return_screen.show_clock', false);
-      this.showTimerPref = !!this.$userdata.get('return_screen.show_timer', false);
 
       this.stateHandler = window.electron.on('state-update', (data) => {
         this._applyStateEntry(data);
@@ -270,8 +266,6 @@ export default {
 
     initBrowser() {
       this.$appdata.set('is_popup', true);
-      this.showClockPref = !!this.$userdata.get('return_screen.show_clock', false);
-      this.showTimerPref = !!this.$userdata.get('return_screen.show_timer', false);
       window.addEventListener('message', (event) => {
         if (event.origin !== window.location.origin) return;
         if (Array.isArray(event.data?.batch)) {
