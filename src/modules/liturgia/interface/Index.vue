@@ -1034,7 +1034,8 @@ export default {
       const item = l[this.pickMusicIndex];
       l[this.pickMusicIndex] = {
         ...item,
-        name: m.name,
+        // Mantém o nome do item (ex.: "Música 1") — só marca como concluído
+        // em vez de substituir pelo nome da música escolhida.
         id_music: m.id_music,
         has_instrumental_music: !!m.has_instrumental_music,
         duration: m.duration ? Math.ceil(Number(m.duration) / 60) : item.duration,
