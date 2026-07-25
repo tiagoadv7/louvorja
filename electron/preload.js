@@ -67,7 +67,7 @@ contextBridge.exposeInMainWorld('electron', {
   selectFolder: (options) => ipcRenderer.invoke('fs:select-folder', options),
   saveDialog: (options) => ipcRenderer.invoke('fs:save-dialog', options),
   readFile: (filePath, encoding) => ipcRenderer.invoke('fs:read-file', filePath, encoding),
-  writeFile: (filePath, data) => ipcRenderer.invoke('fs:write-file', filePath, data),
+  writeFile: (filePath, data, encoding) => ipcRenderer.invoke('fs:write-file', filePath, data, encoding),
   deleteFile: (filePath) => ipcRenderer.invoke('fs:delete-file', filePath),
   readDir: (dirPath) => ipcRenderer.invoke('fs:read-dir', dirPath),
   fileExists: (filePath) => ipcRenderer.invoke('fs:exists', filePath),

@@ -115,11 +115,11 @@ function setupIpc(mainWindow) {
     }
   });
 
-  ipcMain.handle('fs:write-file', (_, filePath, data) => {
+  ipcMain.handle('fs:write-file', (_, filePath, data, encoding = 'utf8') => {
     try {
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(filePath, data, 'utf8');
+      fs.writeFileSync(filePath, data, encoding);
       return true;
     } catch (e) {
       console.error('[IPC] write-file error:', e.message);

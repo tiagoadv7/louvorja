@@ -105,8 +105,8 @@ export default {
     isElectron() ? window.electron.saveDialog(options) : Promise.resolve(null),
   readFile: (filePath, encoding = 'utf8') =>
     isElectron() ? window.electron.readFile(filePath, encoding) : Promise.resolve(null),
-  writeFile: (filePath, data) =>
-    isElectron() ? window.electron.writeFile(filePath, data) : Promise.resolve(false),
+  writeFile: (filePath, data, encoding = 'utf8') =>
+    isElectron() ? window.electron.writeFile(filePath, data, encoding) : Promise.resolve(false),
   deleteFile: (filePath) =>
     isElectron() ? window.electron.deleteFile(filePath) : Promise.resolve(false),
   readDir: (dirPath) =>

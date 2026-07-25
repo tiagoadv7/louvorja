@@ -42,6 +42,9 @@
           <button class="lt-btn-outline" @click="importJaFile">
             <v-icon size="15">mdi-file-import-outline</v-icon> Importar
           </button>
+          <button class="lt-btn-outline" @click="exportJaFile">
+            <v-icon size="15">mdi-file-export-outline</v-icon> Exportar
+          </button>
           <button class="lt-btn-outline lt-btn-outline--danger" :disabled="!dayItems.length" @click="confirmClearAll">
             <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Tudo
           </button>
@@ -678,6 +681,11 @@ function isVideoFile(path) {
 function parseJaSections(raw) {
   const sections = {};
   let current = null;
+  // Remove BOM do início do arquivo — "﻿" (BOM real) ou "ï»¿"
+  // (bytes do BOM UTF-8 decodificados como latin1, já que o .ja é lido nessa
+  // codificação para os acentos). Sem isso a 1ª linha "[Geral]" não bate no
+  // regex de seção e o arquivo inteiro é ignorado (0 itens importados).
+  raw = raw.replace(/^﻿/, '').replace(/^ï»¿/, '');
   raw.split(/\r?\n/).forEach(line => {
     line = line.trim();
     if (!line) return;
@@ -720,14 +728,25 @@ function jaSectionToItem(sec, musicsById, stats) {
   let has_instrumental_music = false;
 
   if (type === 'musica') {
-    id_music = sec.musica ? Number(sec.musica) : null;
-    const found = id_music != null ? musicsById?.get(id_music) : null;
-    if (found) {
-      name = found.name;
-      duration = found.duration ? Math.ceil(Number(found.duration) / 60) : 0;
-      has_instrumental_music = !!found.has_instrumental_music;
-    } else if (id_music != null && stats) {
-      stats.unresolvedMusic += 1;
+    // "escolha=1" (subtipo=escolha, musica=-1) = música ainda não escolhida no
+    // Delphi — nesse caso "subitem" é só o texto de dica ("Clique para
+    // escolher a música"), não o nome do item; o nome real está em "item".
+    // id_music deve ficar null (e não -1), senão o botão de escolher música
+    // some da lista (o template usa "!item.id_music" pra decidir se mostra).
+    const pending = sec.escolha === '1' || sec.subtipo === 'escolha';
+    if (pending) {
+      name = (sec.item || '').trim() || name;
+      id_music = null;
+    } else {
+      id_music = sec.musica ? Number(sec.musica) : null;
+      const found = id_music != null ? musicsById?.get(id_music) : null;
+      if (found) {
+        name = found.name;
+        duration = found.duration ? Math.ceil(Number(found.duration) / 60) : 0;
+        has_instrumental_music = !!found.has_instrumental_music;
+      } else if (id_music != null && stats) {
+        stats.unresolvedMusic += 1;
+      }
     }
   } else if (type === 'arquivo' && sec.dir) {
     const base = sec.dir.split(/[\\/]/).pop() || sec.dir;
@@ -769,6 +788,76 @@ function parseJaLiturgia(raw, musicsById) {
     if (items.length) byDay[dayKey] = [...(byDay[dayKey] || []), ...items];
   });
   return { byDay, stats };
+}
+
+// Inverso de delphiColorToHex — "#rrggbb" vira "$00BBGGRR" (TColor do Delphi).
+function hexToDelphiColor(hex) {
+  const h = (hex || '#1a237e').replace('#', '').padStart(6, '0');
+  const rr = h.slice(0, 2), gg = h.slice(2, 4), bb = h.slice(4, 6);
+  return `$00${bb}${gg}${rr}`.toUpperCase();
+}
+
+function pad2(v) { return String(v).padStart(2, '0'); }
+function jaDateTime(d) {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} `
+    + `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+function jaDate(d) {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// Converte um item deste app para as chaves de uma seção [item_<id>] no
+// formato .ja — inverso de jaSectionToItem, para reabrir no Delphi ou nesta
+// própria tela sem perder o que faz sentido nesse formato (cor, escolha,
+// música vinculada, concluído, arquivo/diretório).
+function itemToJaLines(item) {
+  const lines = { tipo: item.type, item: item.name || '', cor: hexToDelphiColor(item.color) };
+
+  if (item.type === 'musica') {
+    const pending = item.id_music == null;
+    lines.escolha = pending ? '1' : '0';
+    lines.musica  = pending ? '-1' : String(item.id_music);
+    lines.subtipo = pending ? 'escolha' : 'ja';
+    lines.subitem = pending ? 'Clique para escolher a música' : `Música ${item.name || ''}`;
+  } else if (item.url) {
+    lines.subtipo = 'arq';
+    lines.subitem = `Arquivo ${item.url}`;
+    lines.dir = item.url;
+    lines.dir_info = 'E';
+  }
+
+  lines.checked = item.done ? jaDate(new Date()) : '';
+  return lines;
+}
+
+// Monta o conteúdo bruto de um arquivo .ja a partir de { [dayKey]: item[] }
+// (mesma forma que parseJaLiturgia retorna em byDay) — todos os dias que
+// tiverem itens entram no mesmo arquivo, exatamente como o Delphi salva.
+// "avulsa" não existe no formato original (só 7 dias da semana) e é ignorado.
+function serializeJaLiturgia(byDayItems) {
+  const now = new Date();
+  const reverseMap = Object.fromEntries(Object.entries(JA_DAY_MAP).map(([n, key]) => [key, n]));
+  const geralLines = [];
+  const itemSections = [];
+
+  Object.keys(byDayItems).forEach(dayKey => {
+    const dayNum = reverseMap[dayKey];
+    const items = byDayItems[dayKey];
+    if (!dayNum || !items?.length) return;
+
+    const ids = items.map(item => `item_${item.id}`);
+    geralLines.push(`${dayNum}=${ids.join(';')};`);
+    geralLines.push(`AlteraOrdem-${dayNum}=${jaDateTime(now)}`);
+
+    items.forEach(item => {
+      const lines = itemToJaLines(item);
+      itemSections.push(
+        `[item_${item.id}]\n` + Object.entries(lines).map(([k, v]) => `${k}=${v}`).join('\n'),
+      );
+    });
+  });
+
+  return `[Geral]\n${geralLines.join('\n')}\n\n${itemSections.join('\n\n')}\n`;
 }
 
 function emptyForm() {
@@ -1362,6 +1451,41 @@ export default {
         text += ` Atenção: ${stats.unresolvedMusic} música(s) do arquivo não foram encontradas na base atual.`;
       }
       this.$alert.info({ title: 'Importação concluída', text });
+    },
+
+    /* ── exportar arquivo .ja (formato legado do LouvorJA Delphi) ── */
+    async exportJaFile() {
+      // Exporta todos os dias da semana de uma vez, igual ao arquivo original
+      // do Delphi — "avulsa" não existe nesse formato (só domingo a sábado).
+      const byDayItems = {};
+      DAYS.forEach(d => {
+        const items = this.$userdata.get(`modules.liturgia.days.${d.key}.items`) || [];
+        if (items.length) byDayItems[d.key] = items;
+      });
+
+      if (!Object.keys(byDayItems).length) {
+        this.$alert.error({ title: 'Erro ao exportar', text: 'Não há itens de liturgia para exportar.' });
+        return;
+      }
+
+      const fp = await this.$electron.saveDialog({
+        title: 'Exportar Liturgia (.ja)',
+        defaultPath: 'liturgia.ja',
+        filters: [{ name: 'Liturgia (.ja)', extensions: ['ja'] }],
+      });
+      if (!fp) return;
+
+      const raw = serializeJaLiturgia(byDayItems);
+      // Mesma codificação usada pelo Delphi (e pela importação) — grava os
+      // acentos do jeito que o programa original espera ao reabrir o arquivo.
+      const ok = await this.$electron.writeFile(fp, raw, 'latin1');
+      if (!ok) {
+        this.$alert.error({ title: 'Erro ao exportar', text: 'Não foi possível salvar o arquivo.' });
+        return;
+      }
+
+      const total = Object.values(byDayItems).reduce((sum, items) => sum + items.length, 0);
+      this.$alert.info({ title: 'Exportação concluída', text: `${total} item(ns) exportado(s) para ${fp}.` });
     },
 
     /* ── arrastar e soltar arquivo ── */
