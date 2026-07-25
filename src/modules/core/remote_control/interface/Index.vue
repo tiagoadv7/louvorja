@@ -50,17 +50,17 @@
       <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
       <v-card-title class="px-0 text-subtitle-1 d-flex align-center gap-2">
         <v-icon size="18">mdi-broadcast</v-icon>
-        {{ t('transmit.title') }}
+        <span>{{ t('transmit.title') }}</span>
         <v-switch
           :model-value="serverStatus.running"
           :loading="serverLoading"
           color="success"
           hide-details
           density="compact"
-          class="flex-grow-0 ml-1"
+          class="flex-grow-0 ml-4"
           @update:modelValue="toggleServer"
         />
-        <span class="text-body-2 text-medium-emphasis">
+        <span class="text-body-2 text-medium-emphasis ml-1">
           {{ serverStatus.running ? t('transmit.running') : t('transmit.stopped') }}
         </span>
       </v-card-title>
