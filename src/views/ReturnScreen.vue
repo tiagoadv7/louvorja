@@ -1,53 +1,61 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root">
-      <!-- Barra de progresso da faixa (topo) -->
-      <div class="rs-track-bar">
-        <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
-      </div>
-
-      <!-- Área principal: letra / título atual -->
-      <div class="rs-main">
-        <div
-          v-if="displayText"
-          class="rs-main-text"
-          :class="{ 'rs-main-cover': isCover }"
-          v-html="displayText"
-        />
-        <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
-
-        <!-- Relógio / cronômetro individual — widgets independentes do slide,
-             ativados no Monitor de Retorno (MonitorSelector.vue) -->
-        <div v-if="clockEnabled || timerEnabled" class="rs-widgets">
-          <div v-if="clockEnabled" class="rs-widget rs-widget-clock">
-            <v-icon size="16" class="rs-widget-icon">mdi-clock-outline</v-icon>{{ wallClockText }}
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive }">
+      <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
+           junto com uma música realmente ativa; some com fade quando ela
+           termina. O relógio/cronômetro abaixo é independente disso. -->
+      <transition name="rs-fade">
+        <div v-if="mediaActive" class="rs-slide">
+          <!-- Barra de progresso da faixa (topo) -->
+          <div class="rs-track-bar">
+            <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
           </div>
-          <div
-            v-if="timerEnabled"
-            class="rs-widget rs-widget-timer"
-            :class="{ 'rs-widget-timer--running': ccIsRunning, 'rs-widget-timer--overtime': ccOvertime }"
-          >
-            <v-icon size="16" class="rs-widget-icon">mdi-timer-outline</v-icon>{{ timerText }}
+
+          <!-- Área principal: letra / título atual -->
+          <div class="rs-main">
+            <div
+              v-if="displayText"
+              class="rs-main-text"
+              :class="{ 'rs-main-cover': isCover }"
+              v-html="displayText"
+            />
+            <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
+
+            <!-- Contador discreto no canto inferior direito -->
+            <span v-if="slideCounter" class="rs-counter">{{ slideCounter }}</span>
+          </div>
+
+          <!-- Divisória: barra de progresso do slide -->
+          <div class="rs-slide-bar">
+            <div class="rs-slide-fill" :style="{ width: slideProgress + '%' }" />
+          </div>
+
+          <!-- Próxima letra -->
+          <div class="rs-next">
+            <div
+              v-if="nextText"
+              class="rs-next-text"
+              v-html="nextText"
+            />
+            <span v-else class="rs-next-empty">–</span>
           </div>
         </div>
+      </transition>
 
-        <!-- Contador discreto no canto inferior direito -->
-        <span v-if="slideCounter" class="rs-counter">{{ slideCounter }}</span>
-      </div>
-
-      <!-- Divisória: barra de progresso do slide -->
-      <div class="rs-slide-bar">
-        <div class="rs-slide-fill" :style="{ width: slideProgress + '%' }" />
-      </div>
-
-      <!-- Próxima letra -->
-      <div class="rs-next">
+      <!-- Relógio / cronômetro individual — widgets independentes do slide,
+           ativados no Monitor de Retorno (MonitorSelector.vue). Aparecem
+           mesmo sem nenhuma música ativa (por isso ficam fora do bloco acima). -->
+      <div v-if="clockEnabled || timerEnabled" class="rs-widgets">
+        <div v-if="clockEnabled" class="rs-widget rs-widget-clock">
+          <v-icon size="16" class="rs-widget-icon">mdi-clock-outline</v-icon>{{ wallClockText }}
+        </div>
         <div
-          v-if="nextText"
-          class="rs-next-text"
-          v-html="nextText"
-        />
-        <span v-else class="rs-next-empty">–</span>
+          v-if="timerEnabled"
+          class="rs-widget rs-widget-timer"
+          :class="{ 'rs-widget-timer--running': ccIsRunning, 'rs-widget-timer--overtime': ccOvertime }"
+        >
+          <v-icon size="16" class="rs-widget-icon">mdi-timer-outline</v-icon>{{ timerText }}
+        </div>
       </div>
     </div>
   </transition>
@@ -277,15 +285,6 @@ export default {
     },
   },
 
-  watch: {
-    // Aparece com fade junto com o slide da música (quando a apresentação
-    // fica ativa) e some com fade quando ela termina — em vez de mostrar a
-    // tela vazia assim que a janela abre, antes de qualquer música tocar.
-    mediaActive(active) {
-      this.visible = active;
-    },
-  },
-
   mounted() {
     // Transparência global (mesmo padrão de Popup.vue) — sem isso, o fundo
     // escuro padrão do tema (Vuetify) aparecia atrás da janela transparente
@@ -307,11 +306,10 @@ export default {
       this.initBrowser();
     }
     this._tickInterval = setInterval(() => { this.now = new Date(); }, 1000);
-    // Reflete o estado atual (pode já estar ativo se a apresentação já
-    // estiver rolando quando o retorno é aberto) — o resync completo pedido
-    // em initElectron() ainda está a caminho, então isso normalmente começa
-    // falso e o watcher acima liga o fade assim que os dados chegarem.
-    this.visible = this.mediaActive;
+    // Início suave: a janela em si entra com fade assim que abre — o slide
+    // da música (dentro dela) tem seu próprio fade, controlado por
+    // "mediaActive", e o relógio/cronômetro aparecem independente disso.
+    this.visible = true;
   },
   beforeUnmount() {
     clearInterval(this._tickInterval);
@@ -336,15 +334,29 @@ export default {
 }
 
 /* ── Raiz ────────────────────────────────────────────────────── */
+/* Transparente por padrão — só fica preta (visual de monitor de palco)
+   quando uma música está de fato ativa (.rs-root--active). O relógio/
+   cronômetro tem seu próprio fundo (.rs-widget) e não precisa disso. */
 .rs-root {
   position: fixed;
   inset: 0;
-  background: #000;
+  background: transparent;
+  transition: background-color 0.4s ease;
   display: flex;
   flex-direction: column;
   font-family: 'DINCondensedBold', 'Roboto Condensed', 'Arial Narrow', Arial, sans-serif;
   overflow: hidden;
   user-select: none;
+}
+.rs-root--active {
+  background: #000;
+}
+
+.rs-slide {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Barra de progresso da faixa (topo) ─────────────────────── */
