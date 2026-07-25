@@ -304,6 +304,11 @@ function createReturnWindow(displayId) {
     frame: false,
     closable: false,
     alwaysOnTop: !isDev,
+    // Transparente (igual à janela de saída) — sem isso, antes de qualquer
+    // música tocar (visible=false em ReturnScreen.vue) a janela mostrava o
+    // fundo escuro padrão do tema em vez de ficar em branco/transparente.
+    transparent: true,
+    backgroundColor: '#00000000',
     icon: path.join(__dirname, '../public/ico/favicon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

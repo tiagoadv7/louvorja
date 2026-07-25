@@ -293,6 +293,20 @@ export default {
   },
 
   mounted() {
+    // Transparência global (mesmo padrão de Popup.vue) — sem isso, o fundo
+    // escuro padrão do tema (Vuetify) aparecia atrás da janela transparente
+    // enquanto nenhuma música toca (visible=false), em vez de ficar limpo.
+    const style = document.createElement('style');
+    style.id = 'return-screen-transparent';
+    style.textContent = `
+      html, body, #app, #app-container,
+      .v-application, .v-application__wrap {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+    `;
+    document.head.appendChild(style);
+
     if (isElectron()) {
       this.initElectron();
     } else {
