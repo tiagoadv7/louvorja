@@ -129,6 +129,14 @@ export default {
     mediaShow() {
       return !!this.$appdata.get('modules.media.show');
     },
+    mediaMinimized() {
+      return !!this.$appdata.get('modules.media.minimized');
+    },
+    // Mesmo critério de "ativo" usado pela janela de saída (Popup.vue) — o
+    // retorno só aparece quando há de fato uma música em apresentação.
+    mediaActive() {
+      return this.mediaShow || this.mediaMinimized;
+    },
 
     computedSlides() {
       const data = this.mediaData;
@@ -275,6 +283,15 @@ export default {
     },
   },
 
+  watch: {
+    // Aparece com fade junto com o slide da música (quando a apresentação
+    // fica ativa) e some com fade quando ela termina — em vez de mostrar a
+    // tela vazia assim que a janela abre, antes de qualquer música tocar.
+    mediaActive(active) {
+      this.visible = active;
+    },
+  },
+
   mounted() {
     if (isElectron()) {
       this.initElectron();
@@ -282,9 +299,11 @@ export default {
       this.initBrowser();
     }
     this._tickInterval = setInterval(() => { this.now = new Date(); }, 1000);
-    // Início suave: o conteúdo entra com fade em vez de aparecer de repente
-    // assim que a janela é exibida (mesmo padrão do fade da janela de saída).
-    this.visible = true;
+    // Reflete o estado atual (pode já estar ativo se a apresentação já
+    // estiver rolando quando o retorno é aberto) — o resync completo pedido
+    // em initElectron() ainda está a caminho, então isso normalmente começa
+    // falso e o watcher acima liga o fade assim que os dados chegarem.
+    this.visible = this.mediaActive;
   },
   beforeUnmount() {
     clearInterval(this._tickInterval);
