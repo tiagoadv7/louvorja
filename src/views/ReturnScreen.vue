@@ -1,9 +1,9 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive }">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive }">
       <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
            junto com uma música realmente ativa; some com fade quando ela
-           termina. O relógio/cronômetro abaixo é independente disso. -->
+           termina. -->
       <transition name="rs-fade">
         <div v-if="mediaActive" class="rs-slide">
           <!-- Barra de progresso da faixa (topo) -->
@@ -42,26 +42,29 @@
         </div>
       </transition>
 
-      <!-- Relógio / cronômetro individual — widgets independentes do slide,
-           ativados no Monitor de Retorno (MonitorSelector.vue). Aparecem
-           mesmo sem nenhuma música ativa (por isso ficam fora do bloco acima). -->
-      <div v-if="clockEnabled || timerEnabled" class="rs-widgets">
-        <div v-if="clockEnabled" class="rs-widget rs-widget-clock">
-          <v-icon size="16" class="rs-widget-icon">mdi-clock-outline</v-icon>{{ wallClockText }}
+      <!-- Espelha o módulo Relógio de verdade (mesma fonte/cor/tamanho que
+           foi configurado nele) — só quando ele é o que está projetado no
+           momento (popup_module), nunca junto com uma música. -->
+      <transition name="rs-fade">
+        <div v-if="clockModuleActive" class="rs-module-mirror">
+          <ClockScreen />
         </div>
-        <div
-          v-if="timerEnabled"
-          class="rs-widget rs-widget-timer"
-          :class="{ 'rs-widget-timer--running': ccIsRunning, 'rs-widget-timer--overtime': ccOvertime }"
-        >
-          <v-icon size="16" class="rs-widget-icon">mdi-timer-outline</v-icon>{{ timerText }}
+      </transition>
+
+      <!-- Idem para o Cronômetro de Culto. -->
+      <transition name="rs-fade">
+        <div v-if="cronometroModuleActive" class="rs-module-mirror">
+          <CronometroScreen />
         </div>
-      </div>
+      </transition>
     </div>
   </transition>
 </template>
 
 <script>
+import ClockScreen from '@/modules/clock/components/Screen.vue';
+import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
+
 const isElectron = () =>
   typeof window !== 'undefined' &&
   typeof window.electron !== 'undefined' &&
@@ -69,6 +72,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
+  components: { ClockScreen, CronometroScreen },
 
   data: () => ({
     stateHandler: null,
@@ -80,50 +84,17 @@ export default {
   }),
 
   computed: {
-    // $userdata.get lê de $appdata (com prefixo "user_data.") — chave única,
-    // reativa via Vuex, e alimentada tanto pela carga inicial ($userdata.load()
-    // em initElectron/initBrowser) quanto pelo state-update ao vivo vindo de
-    // MonitorSelector.vue (ver comentário em setShowClock/setShowTimer lá).
-    clockEnabled() {
-      return !!this.$userdata.get('return_screen.show_clock', false);
+    // "popup_module" é a mesma chave que a janela de saída usa pra decidir
+    // qual módulo está projetado agora (ver views/Popup.vue) — o retorno usa
+    // ela pra espelhar exatamente o que está sendo exibido, um de cada vez.
+    popupModule() {
+      return this.$appdata.get('popup_module');
     },
-    timerEnabled() {
-      return !!this.$userdata.get('return_screen.show_timer', false);
+    clockModuleActive() {
+      return this.popupModule === 'clock';
     },
-    wallClockText() {
-      const d = this.now;
-      const pad = (v) => String(v).padStart(2, '0');
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    },
-
-    // Cronômetro individual — mostra o mesmo cronômetro de culto que já está
-    // rodando (estado compartilhado via $appdata), como um widget independente
-    // do slide, em vez de duplicar a lógica de contagem num cronômetro novo.
-    ccIsRunning() {
-      return !!this.$appdata.get('modules.cronometro_culto.is_running');
-    },
-    ccTargetEndAt() {
-      const v = this.$appdata.get('modules.cronometro_culto.target_end_at');
-      if (!v) return null;
-      return v instanceof Date ? v : new Date(v);
-    },
-    ccTimeFormat() {
-      return this.$userdata.get('modules.cronometro_culto.time_format', 'hh:mm:ss') || 'hh:mm:ss';
-    },
-    ccAutoStopAtZero() {
-      return !!this.$userdata.get('modules.cronometro_culto.auto_stop_at_zero', false);
-    },
-    ccRemainingMs() {
-      if (!this.ccTargetEndAt) return 0;
-      return this.ccTargetEndAt - this.now;
-    },
-    ccOvertime() {
-      return this.ccIsRunning && this.ccRemainingMs < 0 && !this.ccAutoStopAtZero;
-    },
-    timerText() {
-      if (!this.ccIsRunning || !this.ccTargetEndAt) return '--:--:--';
-      // Sem sinal de negativo — o vermelho (ccOvertime) já indica que passou de zero.
-      return this._formatDuration(this.ccRemainingMs, this.ccTimeFormat);
+    cronometroModuleActive() {
+      return this.popupModule === 'cronometro_culto';
     },
 
     mediaConfig() {
@@ -138,10 +109,12 @@ export default {
     mediaMinimized() {
       return !!this.$appdata.get('modules.media.minimized');
     },
-    // Mesmo critério de "ativo" usado pela janela de saída (Popup.vue) — o
-    // retorno só aparece quando há de fato uma música em apresentação.
+    // Mesmo critério de "ativo" usado pela janela de saída (Popup.vue) +
+    // popup_module==='media' pra garantir que não fica com o slide antigo
+    // ainda marcado como "show" enquanto outro módulo (relógio/cronômetro)
+    // passou a ser o que está realmente projetado.
     mediaActive() {
-      return this.mediaShow || this.mediaMinimized;
+      return this.popupModule === 'media' && (this.mediaShow || this.mediaMinimized);
     },
 
     computedSlides() {
@@ -225,16 +198,6 @@ export default {
       const m = Math.floor(secs / 60);
       const s = Math.floor(secs % 60);
       return `${m}:${s.toString().padStart(2, '0')}`;
-    },
-
-    _formatDuration(ms, format) {
-      const totalSeconds = Math.floor(Math.abs(ms) / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      const pad = (v) => String(v).padStart(2, '0');
-      const tokens = { hh: pad(hours), mm: pad(minutes), ss: pad(seconds) };
-      return format.replace(/hh|mm|ss/g, (m) => tokens[m]);
     },
 
     _applyStateEntry(data) {
@@ -396,42 +359,14 @@ export default {
   color: #efb400;
 }
 
-/* ── Relógio / cronômetro individual (canto superior esquerdo) ──── */
-.rs-widgets {
+/* ── Espelho dos módulos Relógio / Cronômetro de Culto ──────────── */
+/* Preenche a tela toda — cada módulo já desenha seu próprio fundo/fonte/cor
+   configurados (Screen.vue de cada um), então isso só posiciona e garante
+   que fique por cima caso o bloco do slide ainda esteja saindo do fade. */
+.rs-module-mirror {
   position: absolute;
-  top: 14px;
-  left: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 1;
-}
-.rs-widget {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: clamp(13px, 2vh, 22px);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.3;
-}
-.rs-widget-icon {
-  opacity: 0.7;
-}
-.rs-widget-timer--running {
-  color: #efb400;
-  border-color: rgba(239, 180, 0, 0.35);
-}
-/* "Desligar ao zerar tempo" desmarcado: passou de zero e continua contando —
-   vermelho em vez do sinal de negativo. */
-.rs-widget-timer--overtime {
-  color: #ff5252;
-  border-color: rgba(255, 82, 82, 0.4);
+  inset: 0;
+  z-index: 2;
 }
 
 /* Contador discreto */

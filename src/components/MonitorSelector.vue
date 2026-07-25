@@ -80,26 +80,6 @@
         </div>
       </div>
 
-      <!-- Widgets individuais do retorno (relógio / cronômetro) -->
-      <v-list-item density="compact">
-        <template v-slot:prepend>
-          <v-icon size="20">mdi-clock-outline</v-icon>
-        </template>
-        <v-list-item-title>Relógio no retorno</v-list-item-title>
-        <template v-slot:append>
-          <v-switch v-model="showClock" density="compact" hide-details color="success" @update:model-value="setShowClock" />
-        </template>
-      </v-list-item>
-      <v-list-item density="compact">
-        <template v-slot:prepend>
-          <v-icon size="20">mdi-timer-outline</v-icon>
-        </template>
-        <v-list-item-title>Cronômetro no retorno</v-list-item-title>
-        <template v-slot:append>
-          <v-switch v-model="showTimer" density="compact" hide-details color="success" @update:model-value="setShowTimer" />
-        </template>
-      </v-list-item>
-
     </v-list>
   </v-menu>
 </template>
@@ -114,8 +94,6 @@ export default {
     selectedId: null,
     returnOpen: false,
     returnSelectedId: null,
-    showClock: false,
-    showTimer: false,
     _returnOpenedHandler: null,
     _returnClosedHandler: null,
   }),
@@ -135,9 +113,6 @@ export default {
 
     const saved = await this.$electron.storeGet('output_display_id');
     if (saved) this.selectedId = saved;
-
-    this.showClock = !!this.$userdata.get('return_screen.show_clock', false);
-    this.showTimer = !!this.$userdata.get('return_screen.show_timer', false);
 
     this.returnOpen = await this.$electron.isReturnScreenOpen();
     const savedReturn = await this.$electron.storeGet('return_display_id');
@@ -211,20 +186,6 @@ export default {
       if (s.primary) return 0;
       const m = s.label.match(/\d+/);
       return m ? parseInt(m[0]) : '';
-    },
-
-    // $userdata.set já persiste (sobrevive a reinícios) E propaga ao vivo —
-    // por baixo dos panos ele chama $appdata.set("user_data.<param>", valor),
-    // que já é retransmitido via state-update pro relay do main.js entregar
-    // na janela de retorno aberta. NÃO chamar $appdata.set direto também com
-    // a chave sem prefixo aqui — isso criava uma segunda chave divergente
-    // ("return_screen.x" vs "user_data.return_screen.x") que ReturnScreen.vue
-    // não lia da mesma forma, e o relógio/cronômetro nunca aparecia.
-    setShowClock(value) {
-      this.$userdata.set('return_screen.show_clock', value);
-    },
-    setShowTimer(value) {
-      this.$userdata.set('return_screen.show_timer', value);
     },
   },
 };
