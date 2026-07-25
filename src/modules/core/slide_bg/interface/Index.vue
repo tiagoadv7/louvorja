@@ -307,6 +307,7 @@
 import { ref, computed, watch, onMounted, getCurrentInstance } from "vue";
 import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import LCustomizationTools from "@/components/CustomizationTools.vue";
 
 const mc           = ref(null);
 const pickingImage = ref(false);

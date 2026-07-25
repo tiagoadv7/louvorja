@@ -64,6 +64,16 @@ app.use(VueFullscreen);
 
 createI18nInstance().then(async (i18n) => {
   app.use(i18n);
+  // Carrega os dados persistidos ANTES do ModuleManager instalar os módulos —
+  // ModuleManager.init() usa $userdata.setIfNull() pra preencher o customization
+  // de cada módulo com o valor padrão só quando ainda não foi definido. Sem
+  // isso aqui, numa janela nova (saída, retorno, PIP) o $appdata dela começa
+  // vazio, setIfNull acha que não há valor definido e GRAVA o padrão — e como
+  // isso roda antes de qualquer mounted() marcar "is_popup" (que bloqueia o
+  // retransmite), esse padrão é retransmitido via IPC e sobrescreve a
+  // personalização real (ex.: cor) que já estava correta em outras janelas
+  // abertas (como a Tela de Retorno).
+  UserData.load();
   await ModuleManager.init(i18n);
   app.mount("#app");
   await nextTick();
