@@ -17,7 +17,12 @@
           },
           {
             name: t('customization.text'),
-            items: [['font', 'font_size', 'font_color'], 'panel_font_size'],
+            items: [
+              ['font', 'font_size', 'font_color'],
+              ['cover_font_size', 'cover_font_color'],
+              'repeat_font_color',
+              ['panel_font_size', 'panel_font_color'],
+            ],
           },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
@@ -163,58 +168,136 @@
         {{ t('text_section') }}
       </div>
 
-      <!-- Preview do texto -->
-      <div class="sbg-text-preview mb-4" :style="textPreviewStyle">
-        EXEMPLO DE LETRA
-      </div>
-
-      <!-- Fonte -->
-      <v-select
-        :model-value="font"
-        @update:modelValue="setFont"
-        :label="t('text_font')"
-        :items="fontOptions"
-        item-title="label"
-        item-value="value"
+      <!-- Ativar/desativar personalização de texto (independente do fundo) -->
+      <v-btn-toggle
+        :model-value="textEnabled"
+        @update:modelValue="setTextEnabled"
+        mandatory
         density="compact"
         variant="outlined"
-        hide-details
-        prepend-inner-icon="mdi-format-font"
-        class="mb-3"
-      />
+        color="primary"
+        class="mb-4 sbg-toggle"
+      >
+        <v-btn :value="false" size="small" class="flex-grow-1" prepend-icon="mdi-format-text-variant-outline">
+          {{ t('text_enabled_off') }}
+        </v-btn>
+        <v-btn :value="true" size="small" class="flex-grow-1" prepend-icon="mdi-format-text">
+          {{ t('text_enabled_on') }}
+        </v-btn>
+      </v-btn-toggle>
 
-      <!-- Tamanho + Cor na mesma linha -->
-      <div class="d-flex gap-3 mb-3">
-        <div style="flex:1">
-          <div class="text-caption text-medium-emphasis mb-1">{{ t('text_size') }}: {{ fontSize }}</div>
-          <v-slider
-            :model-value="fontSize"
-            @update:modelValue="setFontSize"
-            min="8" max="50" step="1"
-            color="primary" hide-details density="compact" :thumb-size="14"
-          />
-        </div>
-        <div class="d-flex flex-column align-center" style="min-width:72px">
-          <div class="text-caption text-medium-emphasis mb-1">{{ t('text_color') }}</div>
-          <input
-            type="color"
-            :value="fontColor || '#FFFFFF'"
-            @input="e => setFontColor(e.target.value)"
-            class="sbg-color-input"
-            :title="t('text_color')"
-          />
+      <!-- ── Texto desativado: usa fonte/tamanho padrão do slide ───────── -->
+      <div v-if="!textEnabled" class="sbg-empty">
+        <v-icon size="38" style="opacity:0.25">mdi-format-text-variant-outline</v-icon>
+        <div class="text-caption text-medium-emphasis mt-2 text-center">
+          {{ t('text_enabled_desc') }}
         </div>
       </div>
 
-      <!-- Tamanho lateral (aux text) -->
-      <div class="text-caption text-medium-emphasis mb-1">{{ t('text_aux_size') }}: {{ panelFontSize }}</div>
-      <v-slider
-        :model-value="panelFontSize"
-        @update:modelValue="setPanelFontSize"
-        min="6" max="30" step="1"
-        color="primary" hide-details density="compact" :thumb-size="14"
-        class="mb-1"
-      />
+      <!-- ── Texto ativado: controles de fonte, tamanho e cor ──────────── -->
+      <template v-else>
+        <!-- Preview do texto -->
+        <div class="sbg-text-preview mb-4" :style="textPreviewStyle">
+          EXEMPLO DE LETRA
+        </div>
+
+        <!-- Fonte -->
+        <v-select
+          :model-value="font"
+          @update:modelValue="setFont"
+          :label="t('text_font')"
+          :items="fontOptions"
+          item-title="label"
+          item-value="value"
+          density="compact"
+          variant="outlined"
+          hide-details
+          prepend-inner-icon="mdi-format-font"
+          class="mb-3"
+        />
+
+        <!-- Tamanho + Cor do título na mesma linha -->
+        <div class="d-flex gap-3 mb-3">
+          <div style="flex:1">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('text_title_size') }}: {{ coverFontSize }}</div>
+            <v-slider
+              :model-value="coverFontSize"
+              @update:modelValue="setCoverFontSize"
+              min="8" max="60" step="1"
+              color="primary" hide-details density="compact" :thumb-size="14"
+            />
+          </div>
+          <div class="d-flex flex-column align-center" style="min-width:72px">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('text_title_color') }}</div>
+            <input
+              type="color"
+              :value="coverFontColor || '#F6C32A'"
+              @input="e => setCoverFontColor(e.target.value)"
+              class="sbg-color-input"
+              :title="t('text_title_color')"
+            />
+          </div>
+        </div>
+
+        <!-- Tamanho (compartilhado com o texto de repetição — mesmo tamanho,
+             sem controle duplicado) + Cor do texto + Cor do texto de repetição -->
+        <div class="d-flex gap-3 mb-3">
+          <div style="flex:1">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('text_size') }}: {{ fontSize }}</div>
+            <v-slider
+              :model-value="fontSize"
+              @update:modelValue="setFontSize"
+              min="8" max="50" step="1"
+              color="primary" hide-details density="compact" :thumb-size="14"
+            />
+          </div>
+          <div class="d-flex gap-6">
+            <div class="d-flex flex-column align-center" style="width:78px">
+              <div class="text-caption text-medium-emphasis mb-1 sbg-color-label">{{ t('text_color') }}</div>
+              <input
+                type="color"
+                :value="fontColor || '#FFFFFF'"
+                @input="e => setFontColor(e.target.value)"
+                class="sbg-color-input"
+                :title="t('text_color')"
+              />
+            </div>
+            <div class="d-flex flex-column align-center" style="width:78px">
+              <div class="text-caption text-medium-emphasis mb-1 sbg-color-label">{{ t('text_repeat_color') }}</div>
+              <input
+                type="color"
+                :value="repeatFontColor || '#F6C32A'"
+                @input="e => setRepeatFontColor(e.target.value)"
+                class="sbg-color-input"
+                :title="t('text_repeat_color')"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Tamanho + Cor do texto auxiliar na mesma linha -->
+        <div class="d-flex gap-3 mb-1">
+          <div style="flex:1">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('text_aux_size') }}: {{ panelFontSize }}</div>
+            <v-slider
+              :model-value="panelFontSize"
+              @update:modelValue="setPanelFontSize"
+              min="6" max="30" step="1"
+              color="primary" hide-details density="compact" :thumb-size="14"
+            />
+          </div>
+          <div class="d-flex flex-column align-center" style="min-width:72px">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('text_aux_color') }}</div>
+            <input
+              type="color"
+              :value="panelFontColor || '#F6C32A'"
+              @input="e => setPanelFontColor(e.target.value)"
+              class="sbg-color-input"
+              :title="t('text_aux_color')"
+            />
+          </div>
+        </div>
+      </template>
 
     </div>
   </ModuleContainer>
@@ -255,10 +338,15 @@ const imageUrl     = ref('');
 const videoUrl     = ref('');
 const imageOpacity = ref(85);
 // Texto
+const textEnabled  = ref(true); // padrão true preserva o comportamento anterior (texto sempre acoplado ao fundo)
 const font         = ref('');
 const fontSize     = ref(20);
 const fontColor    = ref('#FFFFFF');
+const coverFontSize   = ref(25);
+const coverFontColor  = ref('#F6C32A');
+const repeatFontColor = ref('#F6C32A');
 const panelFontSize= ref(14);
+const panelFontColor = ref('#F6C32A');
 
 const imageFilename = computed(() =>
   decodeURIComponent((imageUrl.value || '').split('/').pop() || '')
@@ -300,10 +388,15 @@ function loadFromUserdata() {
   imageUrl.value      = ud.get(`modules.${ID}.image`,          '')    ?? '';
   videoUrl.value      = ud.get(`modules.${ID}.video`,          '')    ?? '';
   imageOpacity.value  = ud.get(`modules.${ID}.image_opacity`,  85)    ?? 85;
+  textEnabled.value   = ud.get(`modules.${ID}.text_enabled`,   true)  ?? true;
   font.value          = ud.get(`modules.${ID}.font`,           '')    ?? '';
   fontSize.value      = ud.get(`modules.${ID}.font_size`,      20)    ?? 20;
   fontColor.value     = ud.get(`modules.${ID}.font_color`,     '#FFFFFF') ?? '#FFFFFF';
+  coverFontSize.value   = ud.get(`modules.${ID}.cover_font_size`,   25) ?? 25;
+  coverFontColor.value  = ud.get(`modules.${ID}.cover_font_color`,  '#F6C32A') ?? '#F6C32A';
+  repeatFontColor.value = ud.get(`modules.${ID}.repeat_font_color`, '#F6C32A') ?? '#F6C32A';
   panelFontSize.value = ud.get(`modules.${ID}.panel_font_size`, 14)   ?? 14;
+  panelFontColor.value = ud.get(`modules.${ID}.panel_font_color`, '#F6C32A') ?? '#F6C32A';
 }
 
 // ── Sync para localStorage — Slide.vue lê desta chave ─────────────────────
@@ -311,13 +404,22 @@ function loadFromUserdata() {
 function syncToLocalStorage() {
   // Após um reset, o watcher dispara mas não deve re-escrever o localStorage
   if (_resetPending) { _resetPending = false; return; }
-  // Estado neutro (nenhum tipo selecionado): não altera o slide
-  if (!bgType.value) return;
+  // Estado neutro (nem fundo nem texto personalizados): remove qualquer
+  // personalização anterior — do contrário um "Desativado" no texto depois
+  // de um fundo já resetado deixaria font/font_color velhos presos no slide.
+  if (!bgType.value && !textEnabled.value) {
+    try { localStorage.removeItem('slide_global_bg'); } catch (_) {}
+    window.dispatchEvent(new CustomEvent('slide-bg-changed'));
+    if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
+      window.electron.sendStateUpdate({ param: 'slide_global_bg', value: null });
+    }
+    return;
+  }
   const ud = proxy?.$userdata;
   if (!ud) return;
-  const type = bgType.value;
+  const type = bgType.value; // null = mantém a imagem padrão de cada slide
   const url  = type === 'video' ? (videoUrl.value || '') : (imageUrl.value || '');
-  const effectiveType = (type !== 'none' && !url) ? 'none' : type;
+  const effectiveType = !type ? 'default' : ((type !== 'none' && !url) ? 'none' : type);
   try {
     const bgData = {
       // Fundo
@@ -326,12 +428,17 @@ function syncToLocalStorage() {
       url,
       opacity:          imageOpacity.value,
       fit:              ud.get(`modules.${ID}.image_fit`,        'cover')      || 'cover',
-      background_color: ud.get(`modules.${ID}.background_color`, '#000000')   || '#000000',
-      // Texto — lê direto dos refs para garantir valor mais recente (sem delay de Vuex)
-      font:             font.value            || '',
-      font_size:        fontSize.value,
-      font_color:       fontColor.value       || '',
-      panel_font_size:  panelFontSize.value,
+      background_color: ud.get(`modules.${ID}.background_color`, '') || '',
+      // Texto — independente do fundo; só aplica quando textEnabled (lê refs
+      // direto para garantir valor mais recente, sem delay de Vuex)
+      font:             textEnabled.value ? (font.value || '')  : '',
+      font_size:        textEnabled.value ? fontSize.value      : null,
+      font_color:       textEnabled.value ? (fontColor.value || '') : '',
+      cover_font_size:  textEnabled.value ? coverFontSize.value : null,
+      cover_font_color: textEnabled.value ? (coverFontColor.value || '') : '',
+      repeat_font_color: textEnabled.value ? (repeatFontColor.value || '') : '',
+      panel_font_size:  textEnabled.value ? panelFontSize.value : null,
+      panel_font_color: textEnabled.value ? (panelFontColor.value || '') : '',
       // Janela
       border_spacing:   ud.get(`modules.${ID}.border_spacing`,   5)            ?? 5,
     };
@@ -376,25 +483,51 @@ function setOpacity(v) {
   if (bgType.value) syncToLocalStorage();
 }
 
+function setTextEnabled(v) {
+  if (v === undefined || v === null) return; // ignora toggle-off (mandatory mantém sempre um valor)
+  textEnabled.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.text_enabled`, v);
+  syncToLocalStorage();
+}
 function setFont(v) {
   font.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font`, v);
-  if (bgType.value) syncToLocalStorage();
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
 }
 function setFontSize(v) {
   fontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_size`, v);
-  if (bgType.value) syncToLocalStorage();
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
 }
 function setFontColor(v) {
   fontColor.value = v;
   proxy?.$userdata?.set(`modules.${ID}.font_color`, v);
-  if (bgType.value) syncToLocalStorage();
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
+}
+function setCoverFontSize(v) {
+  coverFontSize.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.cover_font_size`, v);
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
+}
+function setCoverFontColor(v) {
+  coverFontColor.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.cover_font_color`, v);
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
+}
+function setRepeatFontColor(v) {
+  repeatFontColor.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.repeat_font_color`, v);
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
 }
 function setPanelFontSize(v) {
   panelFontSize.value = v;
   proxy?.$userdata?.set(`modules.${ID}.panel_font_size`, v);
-  if (bgType.value) syncToLocalStorage();
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
+}
+function setPanelFontColor(v) {
+  panelFontColor.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.panel_font_color`, v);
+  if (bgType.value || textEnabled.value) syncToLocalStorage();
 }
 
 // ── File picker via Electron ──────────────────────────────────────────────
@@ -449,24 +582,17 @@ function clearVideo() {
   if (bgType.value) syncToLocalStorage();
 }
 
-// Redefine para o padrão: remove o fundo personalizado do localStorage
-// → Slide.vue lê null → exibe a imagem padrão de cada slide do álbum
+// Redefine o fundo para o padrão do slide. Texto é independente — se estiver
+// ativado, syncToLocalStorage mantém a personalização (só o fundo é resetado);
+// se não, cai no ramo "neutro" e limpa o localStorage por completo.
 function resetToDefault() {
-  // Volta ao estado neutro: nenhum botão selecionado
   bgType.value = null;
+  syncToLocalStorage();
 
-  // Suprime o próximo sync automático do watcher (bgType mudou via ref, não userdata)
+  // Suprime um possível sync automático subsequente do watcher (bgType mudou
+  // via ref, não userdata — não deveria disparar o watcher, mas por segurança).
   _resetPending = true;
   setTimeout(() => { _resetPending = false; }, 0);
-
-  // Remove globalBg do localStorage → Slide.vue lê null → exibe imagem padrão do slide
-  try { localStorage.removeItem('slide_global_bg'); } catch (_) {}
-  window.dispatchEvent(new CustomEvent('slide-bg-changed'));
-
-  // Notifica a janela de saída via IPC (Electron)
-  if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
-    window.electron.sendStateUpdate({ param: 'slide_global_bg', value: null });
-  }
 }
 
 // ── Inicialização ─────────────────────────────────────────────────────────
@@ -481,8 +607,10 @@ onMounted(() => {
     const raw = localStorage.getItem('slide_global_bg');
     if (raw) {
       const stored = JSON.parse(raw);
-      // bgType = seleção real do usuário; type = effectiveType (pode ser 'none' mesmo em modo 'image')
-      bgType.value = stored?.bgType ?? stored?.type ?? null;
+      // bgType = seleção real do usuário; type = effectiveType (pode ser 'none'/'default'
+      // mesmo em modo 'image'). "bgType" pode ser explicitamente null (texto ativado sem
+      // fundo personalizado) — só cai para "type" quando a chave nem existe (dado antigo).
+      bgType.value = ('bgType' in stored) ? stored.bgType : (stored?.type ?? null);
     } else {
       bgType.value = null;
     }
@@ -493,7 +621,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sbg-root  { padding: 16px; }
+.sbg-root  { padding: 16px 8px; max-width: 560px; margin: 0 auto; }
 .sbg-toggle { width: 100%; }
 
 .sbg-preview {
@@ -534,6 +662,15 @@ onMounted(() => {
   letter-spacing: 0.04em;
   word-break: break-word;
   overflow: hidden;
+}
+
+/* ── Rótulo dos seletores de cor — quebra em 2 linhas em vez de vazar
+     para a coluna vizinha quando o texto é longo (ex.: "de repetição") ── */
+.sbg-color-label {
+  max-width: 78px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
 }
 
 /* ── Color picker nativo estilizado ────────────────────────────────── */

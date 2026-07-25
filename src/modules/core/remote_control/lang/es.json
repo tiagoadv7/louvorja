@@ -16,5 +16,21 @@
         "test_connection": "Probar Conexión",
         "disconnect": "Desconectar",
         "token": "Token"
+    },
+    "transmit": {
+        "title": "Transmitir",
+        "info": "Active para permitir que otros dispositivos en la misma red controlen este programa de forma remota, y para generar una página de transmisión (letras/fondo) para usar en OBS o vMix.",
+        "start": "Activar",
+        "stop": "Desactivar",
+        "running": "Activo",
+        "stopped": "Inactivo",
+        "token": "Token de acceso",
+        "regenerate_token": "Generar nuevo token",
+        "regenerate_confirm": "Generar un nuevo token desconecta los dispositivos ya conectados. ¿Continuar?",
+        "address": "Dirección",
+        "control_page": "Página de control remoto",
+        "mirror_page": "Página de transmisión (OBS/vMix)",
+        "copy": "Copiar",
+        "copied": "¡Copiado!"
     }
 }

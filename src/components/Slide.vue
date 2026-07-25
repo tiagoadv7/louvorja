@@ -5,7 +5,9 @@
   <div ref="container" class="w-100 h-100" style="position:relative;overflow:hidden;background:transparent">
     <!-- ── Camada de fundo (separada do texto) ─────────────────────────────
          Transição bg-crossfade: novo fundo aparece por cima (z-index:2) enquanto
-         o antigo permanece visível abaixo (z-index:1) — sem transparência. -->
+         o antigo se desfaz por baixo (z-index:1). Ambos animam opacidade de
+         verdade, então imagem/vídeo terminam com fade out suave e transparente
+         (ex.: ao voltar para "Sem Fundo") em vez de um corte abrupto. -->
     <transition name="bg-crossfade">
       <div
         :key="bgKey"
@@ -15,9 +17,10 @@
         <video
           v-if="globalBg && globalBg.type === 'video' && globalBg.url"
           :src="globalBg.url"
+          :poster="transparentPixel"
           autoplay loop muted playsinline
           class="position-absolute top-0 left-0 w-100 h-100"
-          :style="{ objectFit: globalBg.fit || 'cover', opacity: (globalBg.opacity ?? 100) / 100 }"
+          :style="{ objectFit: globalBg.fit || 'cover', opacity: (globalBg.opacity ?? 100) / 100, background: 'transparent' }"
         />
       </div>
     </transition>
@@ -51,6 +54,12 @@
 </template>
 
 <script>
+// PNG 1x1 transparente — usado como poster do <video> de fundo para que o
+// navegador exiba transparência (em vez do preto padrão de "sem frame ainda")
+// enquanto o vídeo carrega o primeiro quadro.
+const TRANSPARENT_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 export default {
   name: "SlideComponent",
   props: {
@@ -80,7 +89,11 @@ export default {
       repeat:         false,
       width:          0,
       height:         0,
-      globalBg:       null,
+      // Lido de forma síncrona aqui (não em mounted()) — do contrário o primeiro
+      // render usaria globalBg=null (mostrando a capa da música) e só corrigiria
+      // para o fundo transparente/personalizado depois, causando um flash visível
+      // toda vez que este componente remonta (ex.: troca de música).
+      globalBg:       this._readGlobalBg(),
       _bgListener:    null,
       _ipcBgListener: null,
     };
@@ -100,6 +113,10 @@ export default {
       return { width: this.width, height: this.height };
     },
 
+    transparentPixel() {
+      return TRANSPARENT_PIXEL;
+    },
+
     // Slide ativo corrente (para estilo do fundo estático)
     activeSlide() {
       return this.slides.find(s => s.active) || this.slides[1] || {};
@@ -109,7 +126,9 @@ export default {
     // evitando que a transição dispare ao trocar apenas o texto.
     bgKey() {
       const bg = this.globalBg;
-      if (bg) return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}`;
+      // type='default': texto personalizado sem fundo próprio — o fundo continua
+      // sendo a imagem de cada slide, então a key precisa acompanhá-la também.
+      if (bg && bg.type && bg.type !== 'default') return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}`;
       return `bg-default-${this.activeSlide.image || ''}-${this.image_position ?? 5}`;
     },
 
@@ -187,11 +206,14 @@ export default {
           return { overflow: "hidden", backgroundColor: "transparent" };
         }
 
-        // type='image': imagem personalizada escolhida pelo usuário
+        // type='image': imagem personalizada escolhida pelo usuário.
+        // backgroundColor cai para transparente (não preto) — sem isso a área
+        // aparecia preta antes da imagem carregar e "vazava" preto durante o
+        // fade de saída do bg-crossfade, mesmo com o crossfade correto.
         if (bg.type === 'image' && bg.url) {
           return {
             overflow:           "hidden",
-            backgroundColor:    bg.background_color || "rgb(0, 0, 0)",
+            backgroundColor:    bg.background_color || "transparent",
             backgroundImage:    `url(${bg.url})`,
             backgroundRepeat:   "no-repeat",
             backgroundPosition: "center center",
@@ -199,11 +221,17 @@ export default {
           };
         }
 
-        // type='video': fundo preto (vídeo renderizado como elemento filho)
-        return {
-          overflow:        "hidden",
-          backgroundColor: bg.background_color || "rgb(0, 0, 0)",
-        };
+        // type='video': idem — transparente até o primeiro frame do vídeo
+        // (elemento filho) renderizar, e sem preto residual ao sair.
+        if (bg.type === 'video') {
+          return {
+            overflow:        "hidden",
+            backgroundColor: bg.background_color || "transparent",
+          };
+        }
+
+        // type='default' (ou fundo sem url): texto personalizado sozinho —
+        // mantém a imagem padrão de cada slide.
       }
 
       // ── Sem fundo personalizado (globalBg=null): imagem padrão do slide ──
@@ -218,7 +246,7 @@ export default {
       return {
         backgroundColor: "rgba(0, 0, 0, 0.75)",
         fontSize:        `${this.fontSizePc(size)}px`,
-        color:           "rgb(246, 195, 42)",
+        color:           bg?.panel_font_color || "rgb(246, 195, 42)",
         padding:         `0px ${this.fontSizePc(border)}px`,
         fontFamily:      family,
         textTransform:   "uppercase",
@@ -243,14 +271,24 @@ export default {
       if (slide.cover) {
         return {
           ...base,
-          fontSize: `${this.fontSizePc(customSize ?? 25)}px`,
-          color:    customColor || "rgb(246, 195, 42)",
+          // Tamanho próprio do título — não cai para o tamanho do texto normal
+          // (customSize), senão o título fica preso ao mesmo valor do Texto.
+          fontSize: `${this.fontSizePc(bg?.cover_font_size ?? 25)}px`,
+          color:    bg?.cover_font_color || customColor || "rgb(246, 195, 42)",
+        };
+      }
+      if (this.repeat) {
+        return {
+          ...base,
+          // Tamanho igual ao do texto normal (customSize) — só a cor é própria.
+          fontSize: `${this.fontSizePc(customSize ?? 20)}px`,
+          color:    bg?.repeat_font_color || customColor || "rgb(246, 195, 42)",
         };
       }
       return {
         ...base,
         fontSize: `${this.fontSizePc(customSize ?? 20)}px`,
-        color:    customColor || (this.repeat ? "rgb(246, 195, 42)" : "rgb(255, 255, 255)"),
+        color:    customColor || "rgb(255, 255, 255)",
       };
     },
 
@@ -311,19 +349,16 @@ export default {
 }
 
 /* ── Transição de fundo (bg-crossfade) ──────────────────────────────
-   Novo fundo entra por cima (z-index:2) enquanto o antigo fica visível
-   abaixo (z-index:1) durante toda a animação — sem transparência.
-   O container tem background-color:black como rede de segurança. */
-.bg-crossfade-enter-active {
-  transition: opacity 0.5s ease;
-  z-index: 2;
-}
+   Novo fundo entra por cima (z-index:2) enquanto o antigo (z-index:1)
+   se desfaz por baixo — ambos animam opacidade de verdade, então trocar
+   para "sem fundo" (transparente) produz um fade out suave em vez de um
+   corte abrupto no final da transição. */
+.bg-crossfade-enter-active,
 .bg-crossfade-leave-active {
-  z-index: 1;
-  /* Mesmo delay+duração do enter para o element DOM não ser removido antes da hora.
-     opacity não muda (1→1), mas o browser mantém o element por 0.5s. */
-  transition: opacity 0.001s ease 0.499s;
+  transition: opacity 0.5s ease;
 }
+.bg-crossfade-enter-active { z-index: 2; }
+.bg-crossfade-leave-active { z-index: 1; }
 .bg-crossfade-enter-from { opacity: 0; }
-.bg-crossfade-leave-to   { opacity: 1; }
+.bg-crossfade-leave-to   { opacity: 0; }
 </style>

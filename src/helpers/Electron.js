@@ -272,6 +272,15 @@ export default {
   qrcodeGenerate:   (text, opts) =>
     isElectron() ? window.electron.qrcodeGenerate(text, opts) : Promise.resolve(null),
 
+  // ── Servidor de Controle Remoto (API com token + transmissão/mirror) ────
+  remoteServerStart:  () => isElectron() ? window.electron.remoteServerStart()  : Promise.resolve(null),
+  remoteServerStop:   () => isElectron() ? window.electron.remoteServerStop()   : Promise.resolve(false),
+  remoteServerStatus: () => isElectron() ? window.electron.remoteServerStatus() : Promise.resolve(null),
+  remoteServerRegenerateToken: () =>
+    isElectron() ? window.electron.remoteServerRegenerateToken() : Promise.resolve(null),
+  sendRemoteResponse: (payload) =>
+    isElectron() && window.electron.sendRemoteResponse(payload),
+
   // ── Pasta config/ ────────────────────────────────────────────────────────
   configGetDir: () =>
     isElectron() ? window.electron.configGetDir() : Promise.resolve(null),

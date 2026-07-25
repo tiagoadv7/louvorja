@@ -7,14 +7,15 @@
   "icon": "mdi-image-multiple-outline",
   "dependencies": [],
   "moduleOptions": {
-    "size": "small"
+    "width": 570,
+    "height": 900
   },
   "customization": {
     "bg_type":        { "default": "none" },
     "background_color": {
       "type": "color",
       "label": "customization.color",
-      "default": "#000000"
+      "default": ""
     },
     "image": {
       "type": "image",
@@ -47,10 +48,30 @@
       "label": "customization.font_color",
       "default": "#FFFFFF"
     },
+    "cover_font_size": {
+      "type": "font-size",
+      "label": "customization.cover_font_size",
+      "default": 25
+    },
+    "cover_font_color": {
+      "type": "color",
+      "label": "customization.cover_font_color",
+      "default": "#F6C32A"
+    },
+    "repeat_font_color": {
+      "type": "color",
+      "label": "customization.repeat_font_color",
+      "default": "#F6C32A"
+    },
     "panel_font_size": {
       "type": "font-size",
       "label": "customization.panel_size",
       "default": 14
+    },
+    "panel_font_color": {
+      "type": "color",
+      "label": "customization.panel_font_color",
+      "default": "#F6C32A"
     },
     "border_spacing": {
       "type": "border-spacing",

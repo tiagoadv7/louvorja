@@ -1969,6 +1969,18 @@ document.getElementById('f').onsubmit=async(e)=>{
 
   ipcMain.handle('regserver:clear', () => { registrations = []; return true; });
 
+  // ── Servidor de Controle Remoto (API com token + transmissão/mirror) ───────
+  const remoteServer = require('./remote_server');
+  remoteServer.setMainWindow(mainWindow);
+
+  ipcMain.handle('remote-server:start',  () => remoteServer.start());
+  ipcMain.handle('remote-server:stop',   () => remoteServer.stop());
+  ipcMain.handle('remote-server:status', () => remoteServer.status());
+  ipcMain.handle('remote-server:regenerate-token', () => remoteServer.regenerateToken());
+
+  // Resposta do renderer a um 'remote:request' (busca/abrir música/teclado)
+  ipcMain.on('remote:response', (_, payload) => remoteServer.resolveResponse(payload));
+
   // ── Geração de QR Code ────────────────────────────────────────────────────
   ipcMain.handle('qrcode:generate', async (_, text, opts = {}) => {
     try {

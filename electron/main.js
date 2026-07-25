@@ -12,6 +12,7 @@ const Store = require('./store');
 const { setupIpc } = require('./ipc');
 const { createMenu } = require('./menu');
 const { createTray } = require('./tray');
+const remoteServer = require('./remote_server');
 
 const isDev = process.env.ELECTRON_DEV === 'true';
 const DEV_URL = 'http://localhost:5002';
@@ -566,8 +567,14 @@ function registerIpcHandlers() {
     createReturnWindow(displayId);
     return true;
   });
-  ipcMain.handle('return:close', () => {
-    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
+  ipcMain.handle('return:close', async () => {
+    if (returnWindow && !returnWindow.isDestroyed()) {
+      // Mesmo sinal usado quando a saída fecha em cascata (ver output:close) —
+      // o handler em ReturnScreen.vue já faz o fade da tela toda para 0.
+      returnWindow.webContents.send('return-closing');
+      await sleep(FADE_DURATION_MS);
+      if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
+    }
     return true;
   });
   ipcMain.handle('return:is-open', () => {
@@ -615,6 +622,7 @@ function registerIpcHandlers() {
   // de volta (ex. currentTime do vídeo em reprodução), fazendo a projeção
   // saltar de volta pra um tempo antigo — visualmente "reiniciava" o vídeo.
   ipcMain.on('state-update', (_, data) => {
+    remoteServer.applyStateEntry(data);
     if (data && data.target === 'output') {
       if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update', data);
       return;
@@ -642,6 +650,7 @@ function registerIpcHandlers() {
   // Lote atômico (ver AppData.js setMultiple / preload.js) — sempre
   // broadcast (só usado para atualizações "ao vivo", nunca resync completo).
   ipcMain.on('state-update-batch', (_, entries) => {
+    (entries || []).forEach((entry) => remoteServer.applyStateEntry(entry));
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update-batch', entries);
     if (returnWindow && !returnWindow.isDestroyed()) returnWindow.webContents.send('state-update-batch', entries);
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update-batch', entries);
@@ -782,4 +791,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  remoteServer.stop();
 });

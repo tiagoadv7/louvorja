@@ -96,10 +96,6 @@
         </l-toolbar-item>
 
         <l-toolbar-item>
-          <v-divider vertical class="cc-sep" />
-        </l-toolbar-item>
-
-        <l-toolbar-item>
           <div class="text-caption text-medium-emphasis mb-2">{{ t("add_subtract_time") }}</div>
           <div class="d-flex cc-btn-row">
             <v-btn size="x-small" variant="tonal" @click="adjustTime(1)">+1</v-btn>

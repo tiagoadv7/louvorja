@@ -9,10 +9,17 @@
   "pick_video": "Carregar vídeo",
   "opacity_label": "Opacidade",
   "text_section":   "Personalização do Texto",
+  "text_enabled_off": "Desativado",
+  "text_enabled_on":  "Ativado",
+  "text_enabled_desc": "Usando fonte e tamanho padrão das letras. Ative para personalizar.",
   "text_font":      "Fonte",
   "text_size":      "Tamanho",
   "text_color":     "Cor do texto",
+  "text_title_size":  "Tamanho do título",
+  "text_title_color": "Cor do título",
+  "text_repeat_color": "Cor do texto de repetição",
   "text_aux_size":  "Tamanho texto auxiliar",
+  "text_aux_color": "Cor do texto auxiliar",
   "customization": {
     "background": "Fundo",
     "text": "Texto",
@@ -24,7 +31,11 @@
     "font": "Fonte",
     "size": "Tamanho",
     "font_color": "Cor",
+    "cover_font_size": "Tamanho do título",
+    "cover_font_color": "Cor do título",
+    "repeat_font_color": "Cor de repetição",
     "panel_size": "Tamanho lateral",
+    "panel_font_color": "Cor lateral",
     "border": "Borda"
   }
 }

@@ -1,39 +1,56 @@
 <template>
-  <div class="rs-root">
-    <!-- Barra de progresso da faixa (topo) -->
-    <div class="rs-track-bar">
-      <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
-    </div>
+  <transition name="rs-fade" appear>
+    <div v-if="visible" class="rs-root">
+      <!-- Barra de progresso da faixa (topo) -->
+      <div class="rs-track-bar">
+        <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
+      </div>
 
-    <!-- Área principal: letra / título atual -->
-    <div class="rs-main">
-      <div
-        v-if="displayText"
-        class="rs-main-text"
-        :class="{ 'rs-main-cover': isCover }"
-        v-html="displayText"
-      />
-      <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
+      <!-- Área principal: letra / título atual -->
+      <div class="rs-main">
+        <div
+          v-if="displayText"
+          class="rs-main-text"
+          :class="{ 'rs-main-cover': isCover }"
+          v-html="displayText"
+        />
+        <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
 
-      <!-- Contador discreto no canto inferior direito -->
-      <span v-if="slideCounter" class="rs-counter">{{ slideCounter }}</span>
-    </div>
+        <!-- Relógio / cronômetro individual — widgets independentes do slide,
+             ativados no Monitor de Retorno (MonitorSelector.vue) -->
+        <div v-if="clockEnabled || timerEnabled" class="rs-widgets">
+          <div v-if="clockEnabled" class="rs-widget rs-widget-clock">
+            <v-icon size="16" class="rs-widget-icon">mdi-clock-outline</v-icon>{{ wallClockText }}
+          </div>
+          <div
+            v-if="timerEnabled"
+            class="rs-widget rs-widget-timer"
+            :class="{ 'rs-widget-timer--running': ccIsRunning, 'rs-widget-timer--overtime': ccOvertime }"
+          >
+            <v-icon size="16" class="rs-widget-icon">mdi-timer-outline</v-icon>{{ timerText }}
+          </div>
+        </div>
 
-    <!-- Divisória: barra de progresso do slide -->
-    <div class="rs-slide-bar">
-      <div class="rs-slide-fill" :style="{ width: slideProgress + '%' }" />
-    </div>
+        <!-- Contador discreto no canto inferior direito -->
+        <span v-if="slideCounter" class="rs-counter">{{ slideCounter }}</span>
+      </div>
 
-    <!-- Próxima letra -->
-    <div class="rs-next">
-      <div
-        v-if="nextText"
-        class="rs-next-text"
-        v-html="nextText"
-      />
-      <span v-else class="rs-next-empty">–</span>
+      <!-- Divisória: barra de progresso do slide -->
+      <div class="rs-slide-bar">
+        <div class="rs-slide-fill" :style="{ width: slideProgress + '%' }" />
+      </div>
+
+      <!-- Próxima letra -->
+      <div class="rs-next">
+        <div
+          v-if="nextText"
+          class="rs-next-text"
+          v-html="nextText"
+        />
+        <span v-else class="rs-next-empty">–</span>
+      </div>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
@@ -49,9 +66,60 @@ export default {
     stateHandler: null,
     batchHandler: null,
     closingHandler: null,
+    visible: false,
+    now: new Date(),
+    _tickInterval: null,
+    // Preferência persistida (ver MonitorSelector.vue) — usada até a primeira
+    // atualização "ao vivo" chegar via state-update nesta sessão.
+    showClockPref: false,
+    showTimerPref: false,
   }),
 
   computed: {
+    clockEnabled() {
+      const live = this.$appdata.get('return_screen.show_clock');
+      return live === null || live === undefined ? this.showClockPref : !!live;
+    },
+    timerEnabled() {
+      const live = this.$appdata.get('return_screen.show_timer');
+      return live === null || live === undefined ? this.showTimerPref : !!live;
+    },
+    wallClockText() {
+      const d = this.now;
+      const pad = (v) => String(v).padStart(2, '0');
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    },
+
+    // Cronômetro individual — mostra o mesmo cronômetro de culto que já está
+    // rodando (estado compartilhado via $appdata), como um widget independente
+    // do slide, em vez de duplicar a lógica de contagem num cronômetro novo.
+    ccIsRunning() {
+      return !!this.$appdata.get('modules.cronometro_culto.is_running');
+    },
+    ccTargetEndAt() {
+      const v = this.$appdata.get('modules.cronometro_culto.target_end_at');
+      if (!v) return null;
+      return v instanceof Date ? v : new Date(v);
+    },
+    ccTimeFormat() {
+      return this.$userdata.get('modules.cronometro_culto.time_format', 'hh:mm:ss') || 'hh:mm:ss';
+    },
+    ccAutoStopAtZero() {
+      return !!this.$userdata.get('modules.cronometro_culto.auto_stop_at_zero', false);
+    },
+    ccRemainingMs() {
+      if (!this.ccTargetEndAt) return 0;
+      return this.ccTargetEndAt - this.now;
+    },
+    ccOvertime() {
+      return this.ccIsRunning && this.ccRemainingMs < 0 && !this.ccAutoStopAtZero;
+    },
+    timerText() {
+      if (!this.ccIsRunning || !this.ccTargetEndAt) return '--:--:--';
+      // Sem sinal de negativo — o vermelho (ccOvertime) já indica que passou de zero.
+      return this._formatDuration(this.ccRemainingMs, this.ccTimeFormat);
+    },
+
     mediaConfig() {
       return this.$appdata.get('modules.media.config') || {};
     },
@@ -145,6 +213,16 @@ export default {
       return `${m}:${s.toString().padStart(2, '0')}`;
     },
 
+    _formatDuration(ms, format) {
+      const totalSeconds = Math.floor(Math.abs(ms) / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      const pad = (v) => String(v).padStart(2, '0');
+      const tokens = { hh: pad(hours), mm: pad(minutes), ss: pad(seconds) };
+      return format.replace(/hh|mm|ss/g, (m) => tokens[m]);
+    },
+
     _applyStateEntry(data) {
       if (!data || !data.param) return;
       this.$appdata.set(data.param, data.value);
@@ -160,6 +238,8 @@ export default {
       if (savedTheme) {
         try { this.$vuetify.theme.global.name = savedTheme; } catch { /* */ }
       }
+      this.showClockPref = !!this.$userdata.get('return_screen.show_clock', false);
+      this.showTimerPref = !!this.$userdata.get('return_screen.show_timer', false);
 
       this.stateHandler = window.electron.on('state-update', (data) => {
         this._applyStateEntry(data);
@@ -170,12 +250,10 @@ export default {
         (entries || []).forEach((entry) => this._applyStateEntry(entry));
       });
 
+      // Mesmo sinal dos dois casos de fechamento (return:close direto, ou
+      // output:close em cascata) — aciona o fade de saída da transition.
       this.closingHandler = window.electron.on('return-closing', () => {
-        const el = this.$el;
-        if (el) {
-          el.style.transition = 'opacity 0.4s ease';
-          el.style.opacity = '0';
-        }
+        this.visible = false;
       });
 
       // Solicita sincronização do estado completo ao renderer principal
@@ -184,6 +262,8 @@ export default {
 
     initBrowser() {
       this.$appdata.set('is_popup', true);
+      this.showClockPref = !!this.$userdata.get('return_screen.show_clock', false);
+      this.showTimerPref = !!this.$userdata.get('return_screen.show_timer', false);
       window.addEventListener('message', (event) => {
         if (event.origin !== window.location.origin) return;
         if (Array.isArray(event.data?.batch)) {
@@ -201,8 +281,13 @@ export default {
     } else {
       this.initBrowser();
     }
+    this._tickInterval = setInterval(() => { this.now = new Date(); }, 1000);
+    // Início suave: o conteúdo entra com fade em vez de aparecer de repente
+    // assim que a janela é exibida (mesmo padrão do fade da janela de saída).
+    this.visible = true;
   },
   beforeUnmount() {
+    clearInterval(this._tickInterval);
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off('state-update',   this.stateHandler);
       if (this.batchHandler)  window.electron.off('state-update-batch', this.batchHandler);
@@ -213,6 +298,16 @@ export default {
 </script>
 
 <style scoped>
+/* ── Fade de entrada/saída da tela de retorno ─────────────────── */
+.rs-fade-enter-active,
+.rs-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.rs-fade-enter-from,
+.rs-fade-leave-to {
+  opacity: 0;
+}
+
 /* ── Raiz ────────────────────────────────────────────────────── */
 .rs-root {
   position: fixed;
@@ -260,6 +355,44 @@ export default {
 /* Slide de capa/título: amarelo */
 .rs-main-cover {
   color: #efb400;
+}
+
+/* ── Relógio / cronômetro individual (canto superior esquerdo) ──── */
+.rs-widgets {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1;
+}
+.rs-widget {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: clamp(13px, 2vh, 22px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.3;
+}
+.rs-widget-icon {
+  opacity: 0.7;
+}
+.rs-widget-timer--running {
+  color: #efb400;
+  border-color: rgba(239, 180, 0, 0.35);
+}
+/* "Desligar ao zerar tempo" desmarcado: passou de zero e continua contando —
+   vermelho em vez do sinal de negativo. */
+.rs-widget-timer--overtime {
+  color: #ff5252;
+  border-color: rgba(255, 82, 82, 0.4);
 }
 
 /* Contador discreto */

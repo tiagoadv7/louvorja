@@ -131,6 +131,11 @@ export default {
       this.$refs.updater?.checkNow();
     });
     if (onCheckUpdates) this._handlers.push(['menu:check-updates', onCheckUpdates]);
+
+    // 7. Ponte com o servidor de Controle Remoto (electron/remote_server.js) —
+    // navegação/busca/abrir música vindas de outro dispositivo na mesma rede.
+    const onRemoteRequest = this.$electron.on('remote:request', (req) => this.handleRemoteRequest(req));
+    if (onRemoteRequest) this._handlers.push(['remote:request', onRemoteRequest]);
   },
 
   beforeUnmount() {
@@ -192,6 +197,46 @@ export default {
       } finally {
         this._autoImportRunning = false;
       }
+    },
+
+    // Atende requisições do servidor de Controle Remoto (electron/remote_server.js),
+    // reaproveitando a mesma lógica já usada pelos atalhos de teclado/busca locais.
+    async handleRemoteRequest({ reqId, type, params } = {}) {
+      const payload = { reqId, ok: false };
+      try {
+        if (type === 'keyboard') {
+          const actions = {
+            ArrowUp:    () => this.$media.prevSlide(),
+            ArrowDown:  () => this.$media.nextSlide(),
+            ArrowLeft:  () => this.$media.firstSlide(),
+            ArrowRight: () => this.$media.lastSlide(),
+            Escape:     () => this.$media.close(),
+            Space:      () => this.$media.pause(!this.$appdata.get('modules.media.config.is_paused')),
+          };
+          (actions[params?.key] || (() => {}))();
+          payload.ok = true;
+        } else if (type === 'search-songs') {
+          const q = this.$string.clean((params?.q || '').trim());
+          const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+          const raw = (await this.$database.get(`${locale}_musics`)) || [];
+          payload.results = q
+            ? raw
+                .filter((item) => this.$string.clean(item.name).includes(q))
+                .slice(0, 20)
+                .map((item) => ({ id: item.id_music, name: item.name }))
+            : [];
+          payload.ok = true;
+        } else if (type === 'open-song') {
+          const mode = params?.tag == 1 ? 'audio' : params?.tag == 2 ? 'instrumental' : 'no_audio';
+          await this.$media.open({ id_music: params?.id, mode });
+          payload.ok = true;
+        } else {
+          payload.code = 'UNKNOWN_TYPE';
+        }
+      } catch (_) {
+        payload.code = 'ERROR';
+      }
+      this.$electron.sendRemoteResponse(payload);
     },
   },
 };

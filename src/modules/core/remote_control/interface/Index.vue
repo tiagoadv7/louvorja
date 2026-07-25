@@ -44,6 +44,69 @@
           @click="disonnect"
         />
       </v-card-actions>
+
+      <v-divider class="my-2" />
+
+      <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
+      <v-card-title class="px-0 text-subtitle-1 d-flex align-center gap-2">
+        <v-icon size="18">mdi-broadcast</v-icon>
+        {{ t('transmit.title') }}
+        <v-switch
+          :model-value="serverStatus.running"
+          :loading="serverLoading"
+          color="success"
+          hide-details
+          density="compact"
+          class="flex-grow-0 ml-1"
+          @update:modelValue="toggleServer"
+        />
+        <span class="text-body-2 text-medium-emphasis">
+          {{ serverStatus.running ? t('transmit.running') : t('transmit.stopped') }}
+        </span>
+      </v-card-title>
+      <v-card-text class="px-0">
+        <small>{{ t('transmit.info') }}</small>
+      </v-card-text>
+
+      <template v-if="serverStatus.running">
+        <v-card-text class="px-0">
+          <v-text-field
+            :model-value="serverStatus.token"
+            :label="t('transmit.token')"
+            readonly
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-key-outline"
+            hide-details
+          >
+            <template v-slot:append>
+              <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(serverStatus.token)" />
+              <v-btn size="small" variant="text" icon="mdi-refresh" :title="t('transmit.regenerate_token')" @click="confirmRegenerateToken" />
+            </template>
+          </v-text-field>
+
+          <v-text-field
+            v-for="url in serverUrls"
+            :key="url.label"
+            :model-value="url.value"
+            :label="url.label"
+            readonly
+            class="mt-3"
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-link-variant"
+            hide-details
+          >
+            <template v-slot:append>
+              <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(url.value)" />
+            </template>
+          </v-text-field>
+        </v-card-text>
+
+        <v-card-text v-if="qrDataUrl" class="px-0 d-flex justify-center">
+          <img :src="qrDataUrl" width="160" height="160" alt="QR" />
+        </v-card-text>
+      </template>
     </v-card>
   </ModuleContainer>
 </template>
@@ -199,11 +262,72 @@ function disonnect() {
 }
 
 /* ########################################################### */
+/* ############### TRANSMITIR (servidor local) ################ */
+/* ########################################################### */
+
+const serverStatus = ref({ running: false, port: 0, ip: "", ips: [], token: "" });
+const serverLoading = ref(false);
+const qrDataUrl = ref(null);
+
+const serverUrls = computed(() => {
+  if (!serverStatus.value.running) return [];
+  const base = `http://${serverStatus.value.ip}:${serverStatus.value.port}`;
+  const tk = serverStatus.value.token;
+  return [
+    { label: t('transmit.control_page'), value: `${base}/remote?token=${tk}` },
+    { label: t('transmit.mirror_page'),  value: `${base}/mirror?token=${tk}` },
+  ];
+});
+
+async function refreshServerStatus() {
+  const status = await proxy.$electron.remoteServerStatus();
+  if (status) serverStatus.value = status;
+  await refreshQrCode();
+}
+
+async function refreshQrCode() {
+  if (!serverStatus.value.running) { qrDataUrl.value = null; return; }
+  const base = `http://${serverStatus.value.ip}:${serverStatus.value.port}`;
+  qrDataUrl.value = await proxy.$electron.qrcodeGenerate(`${base}/remote?token=${serverStatus.value.token}`, { width: 200 });
+}
+
+async function toggleServer(value) {
+  serverLoading.value = true;
+  try {
+    if (value) {
+      const status = await proxy.$electron.remoteServerStart();
+      if (status) serverStatus.value = status;
+    } else {
+      await proxy.$electron.remoteServerStop();
+      serverStatus.value = { ...serverStatus.value, running: false };
+    }
+    await refreshQrCode();
+  } finally {
+    serverLoading.value = false;
+  }
+}
+
+function confirmRegenerateToken() {
+  proxy.$alert.yesno("modules.remote_control.transmit.regenerate_confirm", async (btn) => {
+    if (btn !== "yes") return;
+    const newToken = await proxy.$electron.remoteServerRegenerateToken();
+    if (newToken) serverStatus.value = { ...serverStatus.value, token: newToken };
+    await refreshQrCode();
+  });
+}
+
+function copyText(text) {
+  if (!text) return;
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+/* ########################################################### */
 /* ###################### MOUNTED ############################# */
 /* ########################################################### */
 
 onMounted(() => {
   url.value = proxy.$userdata.get("remote.url");
   token.value = proxy.$userdata.get("remote.token");
+  refreshServerStatus();
 });
 </script>

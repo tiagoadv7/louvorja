@@ -9,6 +9,8 @@
     :compact="compact"
     :index="index"
     :size="manifest?.moduleOptions?.size ?? null"
+    :width="manifest?.moduleOptions?.width ?? null"
+    :height="manifest?.moduleOptions?.height ?? null"
     @close="close()"
     @minimize="minimize()"
     @scroll="scroll()"

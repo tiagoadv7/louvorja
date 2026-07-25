@@ -140,6 +140,8 @@ export default {
     dark: Boolean,
     index: [Boolean, Number, String],
     size: String,
+    width: [String, Number],
+    height: [String, Number],
     imageSize: Number,
     color: String,
     slotLeftClass: String,
@@ -170,20 +172,20 @@ export default {
       return this.$vuetify.display.height <= 600;
     },
     w_width() {
-      return this.compact_screen
-        ? "100%"
-        : this.size == "small"
-          ? "500px"
-          : this.size == "large"
-            ? "95%"
-            : "90%";
+      if (this.compact_screen) return "100%";
+      if (this.width) return typeof this.width == "number" ? `${this.width}px` : this.width;
+      return this.size == "small"
+        ? "500px"
+        : this.size == "large"
+          ? "95%"
+          : "90%";
     },
     w_height() {
-      return this.compact_screen || this.compact_height
-        ? "100%"
-        : this.size == "small"
-          ? "550px"
-          : "90%";
+      if (this.compact_screen || this.compact_height) return "100%";
+      if (this.height) return typeof this.height == "number" ? `${this.height}px` : this.height;
+      return this.size == "small"
+        ? "550px"
+        : "90%";
     },
   },
   watch: {

@@ -26,6 +26,7 @@ const RECEIVE_CHANNELS = [
   'sqlite:auto-import',
   'sqlite:direct-ready',
   'regserver:registration',
+  'remote:request',
   'album:download-progress',
   'files:download-progress',
   'files:scan-progress',
@@ -109,6 +110,13 @@ contextBridge.exposeInMainWorld('electron', {
   regserverGetList: ()           => ipcRenderer.invoke('regserver:get-list'),
   regserverClear:   ()           => ipcRenderer.invoke('regserver:clear'),
   qrcodeGenerate:   (text, opts) => ipcRenderer.invoke('qrcode:generate', text, opts),
+
+  // ── Servidor de Controle Remoto (API com token + transmissão/mirror) ─────
+  remoteServerStart:  ()      => ipcRenderer.invoke('remote-server:start'),
+  remoteServerStop:   ()      => ipcRenderer.invoke('remote-server:stop'),
+  remoteServerStatus: ()      => ipcRenderer.invoke('remote-server:status'),
+  remoteServerRegenerateToken: () => ipcRenderer.invoke('remote-server:regenerate-token'),
+  sendRemoteResponse: (payload) => ipcRenderer.send('remote:response', payload),
 
   // ── Banco de dados local ─────────────────────────────────────────────────
   dbGetLocalFolder: () => ipcRenderer.invoke('db:get-local-folder'),

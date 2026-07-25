@@ -1,13 +1,15 @@
 <template>
-  <l-slide
-    v-if="slide"
-    :slide_number="config.slide_index"
-    :cover="slide.cover == true"
-    :text="slide.lyric"
-    :aux_text="slide.aux_lyric"
-    :image="slide.url_image ? $path.file(slide.url_image) : null"
-    :image_position="slide.image_position"
-  />
+  <transition name="media-fade">
+    <l-slide
+      v-if="slide"
+      :slide_number="config.slide_index"
+      :cover="slide.cover == true"
+      :text="slide.lyric"
+      :aux_text="slide.aux_lyric"
+      :image="slide.url_image ? $path.file(slide.url_image) : null"
+      :image_position="slide.image_position"
+    />
+  </transition>
 </template>
 
 <script>
@@ -48,3 +50,16 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+/* Ao encerrar a música (slide unmounta), o fundo (imagem/vídeo) e o texto
+   se desfazem com fade out suave e transparente, em vez de um corte abrupto. */
+.media-fade-enter-active,
+.media-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.media-fade-enter-from,
+.media-fade-leave-to {
+  opacity: 0;
+}
+</style>
