@@ -25,6 +25,58 @@ Var legacyBackupDir
 Var legacyOrigDir
 !endif
 
+; Recursiva: move de volta tudo que está em "$legacyBackupDir<subcaminho>" pra
+; dentro de "$legacyOrigDir<subcaminho>", mas só quando o destino ainda não
+; existe — assim os arquivos que o Electron acabou de extrair (exe, dlls,
+; locales/, resources/, capas padrão) nunca são sobrescritos por uma versão
+; antiga; qualquer coisa exclusiva do backup (LouvorJA Delphi, músicas/capas/
+; imagens baixadas pelo usuário, banco de dados antigo) volta pro lugar. Mesmo
+; estilo das funções un.atomicRMDir/un.restoreFiles do uninstaller.nsh do
+; electron-builder.
+;
+; Fica em nível de topo do arquivo (fora de qualquer macro) de propósito: uma
+; Function não pode ser declarada NO MEIO de um Section (customInstall é
+; inserida dentro da Section de instalação do próprio electron-builder) — só
+; funciona declarada fora, sendo CHAMADA de dentro da Section via Call. Como
+; só usa instruções nativas do NSIS (sem ${If}/LogicLib), processar isso já
+; aqui em cima — antes do "!include MUI2.nsh" no topo do script gerado — é seguro.
+!ifndef BUILD_UNINSTALLER
+Function RestoreLegacyMerge
+  Exch $R0
+  Push $R1
+  Push $R2
+
+  FindFirst $R1 $R2 "$legacyBackupDir$R0\*.*"
+  loop:
+    StrCmp $R2 "" break
+    StrCmp $R2 "." continue
+    StrCmp $R2 ".." continue
+
+    IfFileExists "$legacyBackupDir$R0\$R2\*.*" isDir isFile
+
+    isDir:
+      CreateDirectory "$legacyOrigDir$R0\$R2"
+      Push "$R0\$R2"
+      Call RestoreLegacyMerge
+      Goto continue
+
+    isFile:
+      IfFileExists "$legacyOrigDir$R0\$R2" continue 0
+      Rename "$legacyBackupDir$R0\$R2" "$legacyOrigDir$R0\$R2"
+
+    continue:
+      FindNext $R1 $R2
+      Goto loop
+
+  break:
+    FindClose $R1
+
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+!endif
+
 ; ── Imagem no topo das páginas (Diretório, Modo de instalação, Progresso) ───
 ; BUILD_RESOURCES_DIR aponta para a pasta "public" (directories.buildResources)
 !macro customHeader
@@ -387,49 +439,6 @@ Var legacyOrigDir
 
   DetailPrint "Instalação concluída com sucesso!"
   DetailPrint "LouvorJA está pronto para uso em $INSTDIR"
-
-  ; Recursiva: move de volta tudo que está em "$legacyBackupDir<subcaminho>"
-  ; pra dentro de "$legacyOrigDir<subcaminho>", mas só quando o destino ainda
-  ; não existe — assim os arquivos que o Electron acabou de extrair (exe,
-  ; dlls, locales/, resources/, capas padrão) nunca são sobrescritos por uma
-  ; versão antiga; qualquer coisa exclusiva do backup (LouvorJA Delphi,
-  ; músicas/capas/imagens baixadas pelo usuário, banco de dados antigo — já
-  ; afastado antes de chamar isso) volta pro lugar. Mesmo estilo das funções
-  ; un.atomicRMDir/un.restoreFiles do próprio uninstaller.nsh do electron-builder.
-  Function RestoreLegacyMerge
-    Exch $R0
-    Push $R1
-    Push $R2
-
-    FindFirst $R1 $R2 "$legacyBackupDir$R0\*.*"
-    loop:
-      StrCmp $R2 "" break
-      StrCmp $R2 "." continue
-      StrCmp $R2 ".." continue
-
-      IfFileExists "$legacyBackupDir$R0\$R2\*.*" isDir isFile
-
-      isDir:
-        CreateDirectory "$legacyOrigDir$R0\$R2"
-        Push "$R0\$R2"
-        Call RestoreLegacyMerge
-        Goto continue
-
-      isFile:
-        IfFileExists "$legacyOrigDir$R0\$R2" continue 0
-        Rename "$legacyBackupDir$R0\$R2" "$legacyOrigDir$R0\$R2"
-
-      continue:
-        FindNext $R1 $R2
-        Goto loop
-
-    break:
-      FindClose $R1
-
-    Pop $R2
-    Pop $R1
-    Pop $R0
-  FunctionEnd
 !macroend
 
 ; ── Macro executada durante a desinstalação ─────────────────────────────────
