@@ -36,6 +36,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="clock" />
+      <LReturnScreenBtn module="clock" />
     </template>
 
     <template v-slot:header>
@@ -77,6 +78,7 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -88,6 +90,7 @@ export default {
     LWindow,
     Screen,
     LScreenBtn,
+    LReturnScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,
@@ -170,10 +173,10 @@ export default {
     },
 
     close() {
-      // Só sai da projeção se o Relógio for de fato o módulo projetado agora —
-      // senão, fechar o painel (só uma ferramenta do operador) apagaria o que
-      // estiver sendo exibido (ex.: uma música), sem ele ter pedido isso.
-      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso. Sem essa separação,
+      // fechar essa ferramenta apagaria o que estiver projetado (ex.: o
+      // próprio Relógio) sem o operador ter pedido isso de verdade.
       this.$modules.close(this.module_id);
     },
   },

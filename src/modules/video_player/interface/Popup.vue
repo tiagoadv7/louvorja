@@ -10,7 +10,7 @@
     <video
       v-else
       ref="video"
-      :src="config.src"
+      :src="renderedSrc"
       :loop="config.loop"
       class="vp-video"
       :class="{ 'vp-video--fading': visualFading }"
@@ -37,18 +37,15 @@ export default {
     closingHold:   false, // mantém o <video> montado durante o fade de fechamento
     visualFading:  true,  // começa transparente — só fica visível ao dar play (fade-in)
     imageFading:   true,  // idem, para o modo imagem (sem áudio pra sincronizar)
-    // Versão "esticada"/debounced de isActive — usada no shouldRender do
-    // template. Minimizar grava "minimized" e "show" em duas mensagens IPC
-    // separadas (ver Modules.js); mesmo na ordem certa, ligar o v-if direto
-    // no isActive bruto arriscava desmontar e remontar o <video> inteiro por
-    // uma oscilação passageira entre as duas mensagens — o que recarrega o
-    // arquivo do zero (perde o áudio/posição), bem mais grave que só um fade.
-    // stickyActive só vira false depois de confirmar que isActive continua
-    // false por um instante; nunca causa remount por conta própria.
-    stickyActive:  true,
+    // Src de fato ligado no <video> (ver watch de "config.src" abaixo) — não é
+    // um alias direto de config.src porque, ao trocar de vídeo com áudio
+    // tocando, precisamos esmaecer o volume do vídeo ANTIGO antes de soltar o
+    // elemento pro vídeo novo; se o <video> estivesse ligado direto em
+    // config.src, a troca (e o load() logo em seguida) já teria cortado o
+    // áudio no mesmo instante, sem tempo de rodar fade nenhum.
+    renderedSrc:   '',
     _fadeInterval: null,
     _focusHandler: null,
-    _closeDebounce: null,
     _lastProgressSent: null,
   }),
 
@@ -57,15 +54,15 @@ export default {
     module_id() { return manifest.id; },
     module()    { return this.$modules.get(this.module_id); },
 
-    isActive() {
-      return !!this.$appdata.get('modules.video_player.show') ||
-             !!this.$appdata.get('modules.video_player.minimized');
-    },
     config() {
       return this.$appdata.get('modules.video_player.config', {}) || {};
     },
+    // Fechar/minimizar o painel do operador (Index.vue) nunca encerra a
+    // projeção — só o botão "Fechar" da tela de saída (Screen.vue) faz isso,
+    // ou os controles do próprio player (Parar/ESC). Por isso não depende de
+    // "modules.video_player.show"/"minimized" — só de haver algo pra mostrar.
     shouldRender() {
-      return (this.stickyActive || this.closingHold) && !!this.config.src;
+      return this.closingHold || !!this.config.src;
     },
     imageStyle() {
       const rotation = this.config.rotation || 0;
@@ -75,24 +72,6 @@ export default {
   },
 
   watch: {
-    isActive(active) {
-      clearTimeout(this._closeDebounce);
-      if (active) {
-        // Voltou a ficar ativo (ex.: minimizar termina de propagar) — garante
-        // que o <video> nunca foi desmontado (stickyActive true) e, se um
-        // fade de fechamento estava mesmo em andamento, cancela e restaura
-        // volume/reprodução em vez de deixar ele terminar (mudo/pausado).
-        this.stickyActive = true;
-        this._cancelClose();
-        return;
-      }
-      this._closeDebounce = setTimeout(() => {
-        if (this.isActive) return; // voltou a ficar ativo nesse meio-tempo — falso alarme
-        this.stickyActive = false;
-        if (this.config.mediaType === 'image') this._closeImageWithFade();
-        else this._closeWithFade();
-      }, 80);
-    },
     'config.isPlaying'(playing) {
       if (playing) this._play();
       else this._pauseWithFade();
@@ -118,7 +97,21 @@ export default {
         if (src) this._fadeImageIn();
         return;
       }
-      this.$nextTick(() => this.$refs.video?.load());
+      const el = this.$refs.video;
+      // Troca de vídeo com áudio tocando (ex.: próximo item da playlist) —
+      // esmaece o volume do vídeo atual antes de soltar o elemento pro
+      // próximo, em vez de cortar o áudio na hora. Sem áudio tocando (pausado,
+      // mudo, ou primeiro vídeo carregando) não tem o que esmaecer — troca na
+      // hora, igual antes.
+      if (el && this.renderedSrc && !el.paused && el.volume > 0) {
+        this._fadeVolume(el.volume, 0, false, () => {
+          this.renderedSrc = src;
+          this.$nextTick(() => this.$refs.video?.load());
+        });
+      } else {
+        this.renderedSrc = src;
+        this.$nextTick(() => this.$refs.video?.load());
+      }
     },
     'config.currentTime'(t) {
       // Seek vindo do controle remoto (Index.vue) — só aplica se a diferença for
@@ -229,11 +222,14 @@ export default {
         if (clearSrc) this.$appdata.set('modules.video_player.config.src', '');
       }, 1000);
     },
-    // Fechamento (ESC / fechar a tela de saída): o processo principal só
-    // espera ~450ms depois do evento 'output-closing' antes de destruir a
-    // janela de verdade (ver electron/main.js fadeOutAndClose), então aqui o
-    // fade tem que caber num tempo fixo (não em passos de 0.05 como
-    // pause/stop) para não ser cortado no meio.
+    // Fechamento real da janela de saída (botão "Fechar" em Screen.vue, ou
+    // qualquer outro caminho que chame closeOutput() direto): o processo
+    // principal manda 'output-closing' e já destrói a janela ~450ms depois
+    // (FADE_DURATION_MS, ver electron/main.js fadeOutAndClose) — sem espera
+    // extra antes disso, ao contrário do ESC (ver _escHandler, que agora só
+    // para o vídeo/imagem, igual o botão "Parar", sem fechar a janela). Por
+    // isso o fade aqui tem que caber num tempo fixo curto (não nos passos de
+    // 0.05 de _fadeVolume) pra não ser cortado no meio pela destruição real.
     _closeWithFade() {
       const el = this.$refs.video;
       if (!el || el.paused) { this.closingHold = false; this.visualFading = false; return; }
@@ -258,30 +254,6 @@ export default {
           setTimeout(() => { this.closingHold = false; this.visualFading = false; }, 1000);
         }
       }, INTERVAL);
-    },
-
-    // Cancela um fade de fechamento em andamento (isActive voltou a true —
-    // ex.: minimizar, não fechar de verdade) e restaura o estado normal:
-    // volume de volta ao configurado e retoma o play se ainda devia estar
-    // tocando. Sem isso, um fade que já tinha começado (por qualquer
-    // oscilação) terminava sozinho mudo/pausado mesmo com o módulo ativo.
-    _cancelClose() {
-      if (!this.closingHold && !this.imageFading && !this._fadeInterval) return;
-      clearInterval(this._fadeInterval);
-      this._fadeInterval = null;
-      this.closingHold = false;
-      this.visualFading = false;
-      this.imageFading = false;
-      this.$appdata.set('modules.video_player.config.isFading', false);
-
-      const el = this.$refs.video;
-      if (el && this.config.mediaType !== 'image') {
-        const target = this.config.talkover
-          ? (this.config.talkoverLevel ?? 20) / 100
-          : (this.config.volume ?? 100) / 100;
-        el.volume = target;
-        if (this.config.isPlaying && el.paused) el.play().catch(() => {});
-      }
     },
 
     // Talkover: reduz (ou restaura) o volume do vídeo gradualmente, sem
@@ -319,6 +291,8 @@ export default {
 
   mounted() {
     if (this.config.mediaType === 'image' && this.config.src) this._fadeImageIn();
+    // Primeira montagem: nada tocando ainda pra esmaecer — liga direto.
+    if (this.config.mediaType !== 'image' && this.config.src) this.renderedSrc = this.config.src;
 
     // Outro dono (ex: SoundMaster tocando uma música da coletânea, ou o Media)
     // pediu foco — para de verdade (não só pausa): o vídeo some da projeção
@@ -340,15 +314,15 @@ export default {
       if (this.config.mediaType === 'image') this._closeImageWithFade();
       else this._closeWithFade();
     });
-    // ESC tem uma corrida com o fade genérico de src/views/Popup.vue: aquele
-    // <transition> desmonta este componente quase na hora (v-if="visible"),
-    // bem antes do evento 'output-closing' chegar — então o listener acima
-    // nunca dispara nesse caso. Escutar o keydown direto aqui evita a corrida:
-    // o fade de áudio começa no exato instante do ESC, junto com o resto.
+    // ESC aqui tem o MESMO efeito do botão "Parar" (fade completo, sem prazo
+    // apertado) — só para o vídeo/imagem, sem fechar a janela de saída
+    // inteira. O handler genérico de src/views/Popup.vue já sabe ignorar o
+    // ESC quando o módulo ativo é "video_player" (ver handleKeyDown lá), pra
+    // não fechar a janela de verdade e cortar esse fade no meio.
     this._escHandler = (e) => {
       if (e.key !== 'Escape') return;
-      if (this.config.mediaType === 'image') this._closeImageWithFade();
-      else this._closeWithFade();
+      if (this.config.mediaType === 'image') this._closeImageWithFade(true);
+      else this._stopWithFade();
     };
     document.addEventListener('keydown', this._escHandler);
   },
@@ -360,7 +334,6 @@ export default {
     // aceitando mudanças de volume mesmo fora da árvore do Vue; limpar o
     // intervalo aqui cortaria o áudio na hora, sem fade nenhum.
     if (!this.closingHold) clearInterval(this._fadeInterval);
-    clearTimeout(this._closeDebounce);
     $audioBus.unlisten(this._focusHandler);
     this.$electron.off('output-closing', this._closingHandler);
     document.removeEventListener('keydown', this._escHandler);
@@ -372,7 +345,11 @@ export default {
 .vp-popup-root {
   position: fixed;
   inset: 0;
-  background: #000;
+  /* Transparente (igual ao resto da janela de saída, ver views/Popup.vue) —
+     antes era preto sólido, então a área fora do vídeo/imagem (barras do
+     object-fit: contain) e o fade do ESC ficavam pretos em vez de deixar
+     ver o que está atrás da projeção. */
+  background: transparent;
 }
 .vp-video {
   width: 100%;

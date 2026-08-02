@@ -193,7 +193,7 @@
           @click="fullscreen()"
         />
         <LScreenBtn
-          v-if="location !== 'fullscreen' && source !== 'soundmaster'"
+          v-if="location !== 'fullscreen' && source !== 'soundmaster' && source !== 'web_link'"
           :module="source === 'video' ? 'video_player' : 'media'"
         />
 
@@ -283,9 +283,9 @@ export default {
   name: "PlayerComponent",
   props: {
     location: String,
-    // 'media' (padrão, comportamento original) | 'video' | 'soundmaster' —
-    // mesma barra/layout, só troca de onde os dados/comandos vêm. Assim a
-    // Liturgia/módulo de Vídeo/SoundMaster não precisam de uma barra própria.
+    // 'media' (padrão, comportamento original) | 'video' | 'soundmaster' |
+    // 'web_link' — mesma barra/layout, só troca de onde os dados/comandos vêm.
+    // Assim a Liturgia/módulo de Vídeo/SoundMaster não precisam de uma barra própria.
     source: { type: String, default: "media" },
   },
   components: {
@@ -341,6 +341,32 @@ export default {
             is_paused: !np.playing,
             is_fading: false,
             volume: np.volume ?? 100,
+          },
+        };
+      }
+      if (this.source === "web_link") {
+        const cfg = this.$webLink.getConfig();
+        return {
+          minimized: this.$webLink.isMinimized(),
+          loading: false,
+          data: {},
+          config: {
+            title: "YouTube",
+            subtitle: "",
+            track: 0,
+            image: "",
+            // "audio" aqui é só o flag genérico de "tem mídia carregada" que o
+            // resto do componente usa pra mostrar play/pause/progresso (mesmo
+            // uso overloadado do source="video" acima) — não tem relação com
+            // áudio de fato.
+            audio: cfg.videoId ? "x" : "",
+            current_time: cfg.current_time || 0,
+            duration: cfg.duration || 0,
+            progress: cfg.duration > 0 ? (cfg.current_time / cfg.duration) * 100 : 0,
+            buffered: 100,
+            is_paused: !cfg.isPlaying,
+            is_fading: !!cfg.isFading,
+            volume: cfg.volume ?? 100,
           },
         };
       }
@@ -526,6 +552,7 @@ export default {
     play() {
       if (this.source === 'video') { this.$videoPlayer.togglePlay(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.togglePlay(); return; }
+      if (this.source === 'web_link') { this.$webLink.togglePlay(); return; }
       if (this.media.config.is_paused) {
         this.$media.play();
       } else {
@@ -535,6 +562,7 @@ export default {
     rewind: function () {
       if (this.source === 'video') { this.$videoPlayer.seekBy(-10); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekBy(-10); return; }
+      if (this.source === 'web_link') { this.$webLink.seekBy(-10); return; }
       this.$media.advanceTime(-10);
     },
     first() {
@@ -552,6 +580,7 @@ export default {
     forward: function () {
       if (this.source === 'video') { this.$videoPlayer.seekBy(10); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekBy(10); return; }
+      if (this.source === 'web_link') { this.$webLink.seekBy(10); return; }
       this.$media.advanceTime(+10);
     },
     open: function (data) {
@@ -563,11 +592,13 @@ export default {
     maximize: function () {
       if (this.source === 'video') { this.$videoPlayer.maximize(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.maximize(); return; }
+      if (this.source === 'web_link') { this.$webLink.maximize(); return; }
       this.$media.maximize();
     },
     close: function () {
       if (this.source === 'video') { this.$videoPlayer.stop(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.stop(); return; }
+      if (this.source === 'web_link') { this.$webLink.stop(); return; }
       this.$media.close();
     },
     changeProgress() {
@@ -575,6 +606,7 @@ export default {
         (this.media.config.duration * this.media.config.progress) / 100;
       if (this.source === 'video') { this.$videoPlayer.seekTo(time); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekTo(time); return; }
+      if (this.source === 'web_link') { this.$webLink.seekTo(time); return; }
       this.$media.goToTime(time);
     },
     fullscreen(value = true) {
@@ -597,6 +629,7 @@ export default {
         const vol = Math.round(Math.max(0, Math.min(100, v)));
         if (this.source === 'video') this.$videoPlayer.setVolume(vol);
         else if (this.source === 'soundmaster') this.$soundMaster.setVolume(vol);
+        else if (this.source === 'web_link') this.$webLink.setVolume(vol);
         else this.$media.setVolume(vol);
       };
       let n = 0;
@@ -612,6 +645,7 @@ export default {
     changeVolume() {
       if (this.source === 'video') { this.$videoPlayer.setVolume(this.media.config.volume); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.setVolume(this.media.config.volume); return; }
+      if (this.source === 'web_link') { this.$webLink.setVolume(this.media.config.volume); return; }
       this.$media.setVolume(this.media.config.volume);
     },
     async togglePip() {

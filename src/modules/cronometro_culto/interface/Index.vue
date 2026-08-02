@@ -35,6 +35,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="cronometro_culto" />
+      <LReturnScreenBtn module="cronometro_culto" />
     </template>
 
     <template v-slot:header>
@@ -132,9 +133,16 @@
             />
             <v-tooltip location="bottom">
               <template v-slot:activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-volume-high" size="small" variant="tonal" @click="ouvir" />
+                <v-btn
+                  v-bind="props"
+                  :icon="previewPlaying ? 'mdi-stop' : 'mdi-volume-high'"
+                  :color="previewPlaying ? 'red' : undefined"
+                  size="small"
+                  variant="tonal"
+                  @click="ouvir"
+                />
               </template>
-              {{ t("listen") }}
+              {{ previewPlaying ? t("stop_listening") : t("listen") }}
             </v-tooltip>
           </div>
         </l-toolbar-item>
@@ -146,7 +154,6 @@
         <l-toolbar-item>
           <div class="text-caption text-medium-emphasis mb-2">{{ t("options") }}</div>
           <div class="cc-checkbox-col">
-            <v-checkbox v-model="userdata.clock_always_on" :label="t('clock_always_on')" density="compact" hide-details />
             <v-checkbox v-model="userdata.auto_stop_at_zero" :label="t('auto_stop_at_zero')" density="compact" hide-details />
           </div>
           <v-btn size="small" variant="tonal" class="mt-2" @click="toggleClockVisibility">
@@ -194,6 +201,7 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -223,6 +231,7 @@ export default {
     LWindow,
     Screen,
     LScreenBtn,
+    LReturnScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,
@@ -236,6 +245,9 @@ export default {
     fired5min: false,
     fired1min: false,
     previewCue: "abertura",
+    previewPlaying: false,
+    previewAudio: null,
+    previewFadeInterval: null,
     cueOptions: [
       { title: "Abertura", value: "abertura" },
       { title: "5 minutos", value: "5min" },
@@ -339,13 +351,8 @@ export default {
 
     close() {
       this.stopTicker();
-      // "Relógio sempre ativo": mantém a projeção aberta mesmo depois de
-      // fechar o painel do operador — só sai da projeção se essa opção
-      // estiver desligada e o Cronômetro de Culto for de fato o módulo
-      // projetado agora (senão fechar o painel apagaria outra coisa exibida).
-      if (!this.userdata.clock_always_on && this.$appdata.get('popup_module') === this.module_id) {
-        this.$popup.exit();
-      }
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso.
       this.$modules.close(this.module_id);
     },
 
@@ -427,8 +434,64 @@ export default {
       }
     },
 
+    // Botão "Ouvir": alterna entre tocar e parar — parar corta com um fade
+    // suave (~400ms) em vez de cortar o áudio na hora.
     ouvir() {
-      this.playCueFile(this.previewCue);
+      if (this.previewPlaying) {
+        this.stopPreview();
+        return;
+      }
+      this.playPreview();
+    },
+
+    async resolveCueUrl(cue) {
+      const dir = await this.$electron.configGetDir();
+      if (!dir) return null;
+      const fileName = CUE_FILES[cue];
+      if (!fileName) return null;
+      const separator = dir.endsWith('/') || dir.endsWith('\\') ? '' : '/';
+      return toFileUrl(`${dir}${separator}${fileName}`);
+    },
+
+    async playPreview() {
+      this.stopPreview(true);
+      const url = await this.resolveCueUrl(this.previewCue);
+      if (!url) return;
+      const audio = new Audio(url);
+      this.previewAudio = audio;
+      this.previewPlaying = true;
+      audio.addEventListener('ended', () => {
+        if (this.previewAudio === audio) this.resetPreviewState();
+      });
+      audio.play().catch(() => this.resetPreviewState());
+    },
+
+    stopPreview(immediate = false) {
+      clearInterval(this.previewFadeInterval);
+      this.previewFadeInterval = null;
+      const audio = this.previewAudio;
+      if (!audio) return;
+      if (immediate) {
+        audio.pause();
+        this.resetPreviewState();
+        return;
+      }
+      const stepMs = 30;
+      const decrement = audio.volume / (400 / stepMs);
+      this.previewFadeInterval = setInterval(() => {
+        audio.volume = Math.max(0, audio.volume - decrement);
+        if (audio.volume <= 0) {
+          audio.pause();
+          this.resetPreviewState();
+        }
+      }, stepMs);
+    },
+
+    resetPreviewState() {
+      clearInterval(this.previewFadeInterval);
+      this.previewFadeInterval = null;
+      this.previewAudio = null;
+      this.previewPlaying = false;
     },
 
     toggleClockVisibility() {
@@ -436,12 +499,8 @@ export default {
     },
 
     async playCueFile(cue) {
-      const dir = await this.$electron.configGetDir();
-      if (!dir) return;
-      const fileName = CUE_FILES[cue];
-      if (!fileName) return;
-      const separator = dir.endsWith('/') || dir.endsWith('\\') ? '' : '/';
-      const url = toFileUrl(`${dir}${separator}${fileName}`);
+      const url = await this.resolveCueUrl(cue);
+      if (!url) return;
       new Audio(url).play().catch(() => {});
     },
   },
@@ -467,6 +526,7 @@ export default {
   },
   unmounted() {
     this.stopTicker();
+    this.stopPreview(true);
   },
 };
 </script>

@@ -164,6 +164,18 @@ function safeBasename(raw) {
   catch (_) { return ''; }
 }
 
+// Extrai a subpasta do álbum (ANO - ALBUM) de uma URL/caminho de música — tanto
+// da API (".../musics/pt/2017 - Eu Creio/Arquivo.mp3") quanto de um file://
+// local já reconhecido antes (".../config/musicas/2017 - Eu Creio/Arquivo.mp3").
+// Usada pra restringir a busca no índice a esse álbum específico — ver comentário
+// em findAudio() sobre por que a busca cega por nome pega o arquivo errado.
+function extractAlbumFolder(raw) {
+  if (!raw) return null;
+  const norm = raw.replace(/\\/g, '/');
+  const m = norm.match(/\/(?:musics?(?:\/[a-z]{2})?|musicas)\/([^/?#]+)\//i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 // ── Índice de arquivos locais ─────────────────────────────────────────────────
 // Mapeia: lowerCaseFileName → fullAbsPath  (para busca rápida O(1))
 
@@ -186,7 +198,32 @@ function buildIndex(dir) {
   return idx;
 }
 
-let indexMusicas, indexCapas, indexImagens;
+// Índice de áudio ESCOPADO por álbum: Map<albumFolderLower, {fileNameLower: fullPath}>
+// — cada subpasta direta de MUSICAS_DIR vira um índice próprio, isolado dos
+// demais. Sem isso, dois álbuns com uma música de mesmo título (ex.:
+// "Maranata.mp3" em várias coletâneas do catálogo) fariam o índice flat global
+// devolver sempre o primeiro arquivo encontrado — de QUALQUER álbum — gravando
+// a URL local errada no music_<id>.json de um deles.
+function buildScopedAudioIndex(dir) {
+  const scoped = new Map();
+  const dupes  = new Map(); // fileNameLower → Set<albumFolder>, só pra log informativo
+  if (!fs.existsSync(dir)) return { scoped, dupes };
+  let albumDirs;
+  try { albumDirs = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory()); }
+  catch (_) { return { scoped, dupes }; }
+  for (const albumDir of albumDirs) {
+    const albumIdx = buildIndex(path.join(dir, albumDir.name));
+    scoped.set(albumDir.name.toLowerCase(), albumIdx);
+    for (const fileNameLower of Object.keys(albumIdx)) {
+      if (!dupes.has(fileNameLower)) dupes.set(fileNameLower, new Set());
+      dupes.get(fileNameLower).add(albumDir.name);
+    }
+  }
+  for (const [name, albums] of dupes) if (albums.size < 2) dupes.delete(name);
+  return { scoped, dupes };
+}
+
+let indexMusicas, indexCapas, indexImagens, scopedAudioIndex, duplicateAudioNames;
 
 function ensureIndexes() {
   if (!indexMusicas) {
@@ -194,10 +231,19 @@ function ensureIndexes() {
     indexMusicas = buildIndex(MUSICAS_DIR);
     indexCapas   = buildIndex(CAPAS_DIR);
     indexImagens = buildIndex(IMAGENS_DIR);
+    const scopedResult = buildScopedAudioIndex(MUSICAS_DIR);
+    scopedAudioIndex = scopedResult.scoped;
+    duplicateAudioNames = scopedResult.dupes;
     const tm = Object.keys(indexMusicas).length;
     const tc = Object.keys(indexCapas).length;
     const ti = Object.keys(indexImagens).length;
     console.log(info(`  musicas: ${tm}, capas: ${tc}, imagens: ${ti}`));
+    if (duplicateAudioNames.size > 0) {
+      console.log(warn(`  ${duplicateAudioNames.size} nome(s) de áudio duplicado(s) entre álbuns diferentes — só resolvidos corretamente quando o álbum de origem é conhecido:`));
+      for (const [name, albums] of duplicateAudioNames) {
+        console.log(warn(`    "${name}" em: ${[...albums].join(', ')}`));
+      }
+    }
     console.log('');
   }
 }
@@ -219,7 +265,20 @@ function lookupInIndex(idx, fileName) {
   return null;
 }
 
-function findAudio(fileName)  { return lookupInIndex(indexMusicas, fileName); }
+// Busca áudio: primeiro restrito à subpasta do álbum (se conhecida) — só cai
+// pro índice global (que pode pegar o arquivo de OUTRO álbum quando o nome é
+// duplicado, ver buildScopedAudioIndex) quando o álbum não pôde ser
+// identificado ou o arquivo não está lá dentro.
+function findAudio(fileName, albumFolder) {
+  if (albumFolder) {
+    const scoped = scopedAudioIndex.get(albumFolder.toLowerCase());
+    if (scoped) {
+      const found = lookupInIndex(scoped, fileName);
+      if (found) return found;
+    }
+  }
+  return lookupInIndex(indexMusicas, fileName);
+}
 function findCover(fileName)  { return lookupInIndex(indexCapas,   fileName); }
 function findImage(fileName)  { return lookupInIndex(indexImagens, fileName); }
 
@@ -233,6 +292,7 @@ function findFromUrl(raw, findFn) {
     const p = raw.slice(8).replace(/\//g, path.sep);
     if (fs.existsSync(p)) return p;
   }
+  if (findFn === findAudio) return findFn(name, extractAlbumFolder(raw));
   return findFn(name);
 }
 
@@ -313,12 +373,17 @@ async function processFromSqlite(dbPath) {
   const hasLLang    = lCols.includes('id_language');
 
   // ── Helper: busca arquivo pelo caminho exato do SQLite primeiro, depois pelo índice ──
+  // Pra áudio, "dir" (ex: "config\musicas\Hinário Adventista") também informa o
+  // álbum ao índice de fallback — evita findAudio() cair na busca cega global
+  // quando o caminho exato não bate mais (arquivo movido/reorganizado no disco).
   const findByDir = (dir, fileName, fallbackFn) => {
     if (dir && fileName) {
       const exactPath = path.join(INSTALL_DIR, dir, fileName);
       if (fs.existsSync(exactPath)) return exactPath;
     }
-    return fileName ? fallbackFn(fileName) : null;
+    if (!fileName) return null;
+    if (fallbackFn === findAudio) return fallbackFn(fileName, dir ? path.basename(dir) : null);
+    return fallbackFn(fileName);
   };
 
   // ── Categorias + Álbuns ────────────────────────────────────────────────────
@@ -491,17 +556,19 @@ function processFromLocalJson() {
 
       let changed = false;
 
-      // url_music
+      // url_music — extrai a pasta do álbum da própria URL atual (API ou file://
+      // já reconhecido antes) pra restringir a busca e não pegar a música de
+      // mesmo nome de OUTRO álbum.
       const audName = safeBasename(md.url_music);
       if (audName) {
-        const local = findAudio(audName);
+        const local = findAudio(audName, extractAlbumFolder(md.url_music));
         if (local && md.url_music !== toFileUrl(local)) { md.url_music = toFileUrl(local); changed = true; }
       }
 
       // url_instrumental_music
       const instrName = safeBasename(md.url_instrumental_music);
       if (instrName) {
-        const local = findAudio(instrName);
+        const local = findAudio(instrName, extractAlbumFolder(md.url_instrumental_music));
         if (local && md.url_instrumental_music !== toFileUrl(local)) { md.url_instrumental_music = toFileUrl(local); changed = true; }
       }
 
@@ -575,11 +642,13 @@ async function processFromApi() {
         continue;
       }
 
-      // Resolve áudio
+      // Resolve áudio — a URL da API já traz a subpasta do álbum
+      // (".../musics/pt/2017 - Eu Creio/Arquivo.mp3"), usada pra restringir a
+      // busca e não pegar a música de mesmo nome de OUTRO álbum.
       const audName   = safeBasename(md.url_music);
       const instrName = safeBasename(md.url_instrumental_music);
-      const localAud   = audName   ? findAudio(audName)   : null;
-      const localInstr = instrName ? findAudio(instrName) : null;
+      const localAud   = audName   ? findAudio(audName, extractAlbumFolder(md.url_music)) : null;
+      const localInstr = instrName ? findAudio(instrName, extractAlbumFolder(md.url_instrumental_music)) : null;
       if (localAud)   md.url_music               = toFileUrl(localAud);
       if (localInstr) md.url_instrumental_music   = toFileUrl(localInstr);
 

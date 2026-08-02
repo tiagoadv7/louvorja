@@ -765,9 +765,8 @@ export default {
 
     close() {
       this._stopAnimation();
-      // Só sai da projeção se o Sorteio for de fato o módulo projetado agora —
-      // senão, fechar o painel apagaria o que estiver sendo exibido.
-      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso.
       this.$modules.close(this.module_id);
     },
 

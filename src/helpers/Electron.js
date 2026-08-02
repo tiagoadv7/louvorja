@@ -235,6 +235,8 @@ export default {
     isElectron() ? window.electron.closeReturnScreen() : Promise.resolve(false),
   isReturnScreenOpen: () =>
     isElectron() ? window.electron.isReturnScreenOpen() : Promise.resolve(false),
+  invalidateOutput: () =>
+    isElectron() ? window.electron.invalidateOutput() : Promise.resolve(false),
 
   // ── Janela flutuante (PIP) do player de vídeo ─────────────────────────
   pipOpen: () =>

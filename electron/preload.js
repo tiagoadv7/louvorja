@@ -7,6 +7,7 @@ const RECEIVE_CHANNELS = [
   'set-module',
   'output-window-closed',
   'output-window-opened',
+  'restore-output-state',
   'output-ready',
   'output-closing',
   'audio-focus-request',
@@ -142,6 +143,12 @@ contextBridge.exposeInMainWorld('electron', {
   openReturnScreen:  (displayId) => ipcRenderer.invoke('return:open', displayId),
   closeReturnScreen: ()          => ipcRenderer.invoke('return:close'),
   isReturnScreenOpen: ()         => ipcRenderer.invoke('return:is-open'),
+  // Força repaint da janela de saída principal — usado ao alternar o que está
+  // fixado no retorno (ver ButtonReturnScreenComponent), pra corrigir um bug
+  // conhecido do Chromium/Electron no Windows onde janelas transparentes já
+  // abertas podem renderizar preto quando outra janela transparente muda de
+  // conteúdo, mesmo sem recriar nenhuma janela.
+  invalidateOutput: () => ipcRenderer.invoke('output:invalidate'),
 
   // ── Janela flutuante (PIP) do player de vídeo ────────────────────────────
   pipOpen: () => ipcRenderer.invoke('video-pip:open'),

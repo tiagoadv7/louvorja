@@ -15,7 +15,13 @@ export default {
   name: "ModulesLayout",
   computed: {
     modules() {
-      return this.$modules.get();
+      // Filtra entradas como "modules.web_link" (usada pelo WebLink.js só
+      // como storage de config, sem passar pelo ModuleManager) — essas não
+      // têm "id" e não correspondem a um diretório real em @/modules/*,
+      // então tentar importá-las quebra o import dinâmico.
+      return Object.fromEntries(
+        Object.entries(this.$modules.get() || {}).filter(([, module]) => module?.id)
+      );
     },
     import_modules() {
       return this.$appdata.get("import_modules");

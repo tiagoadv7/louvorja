@@ -41,13 +41,24 @@ export default {
     error: null,
     last_filter: {},
     loading: true,
+    // WeakMap item -> { [field]: cleanedValue } — evita rodar $string.clean()
+    // (normalize + regex, caro pra campos grandes como "lyric") de novo a cada
+    // tecla digitada pra TODO item da lista; calculado uma vez por item/campo
+    // e reaproveitado enquanto o item continuar o mesmo objeto (recarregar os
+    // dados troca os objetos e o cache antigo vira lixo sozinho).
+    clean_cache: new WeakMap(),
   }),
   watch: {
     async file() {
       await this.loadData();
     },
     search() {
-      this.filterData();
+      // Debounce: sem isso, cada tecla digitada refiltra a lista inteira na
+      // hora — com listas grandes (milhares de músicas) e "lyric" habilitado
+      // na busca, digitar rápido travava a UI por rodar o filtro várias vezes
+      // em sequência antes mesmo do usuário terminar de digitar a palavra.
+      clearTimeout(this._searchDebounce);
+      this._searchDebounce = setTimeout(() => this.filterData(), 200);
     },
     searchable_fields() {
       this.compareFilterData();
@@ -81,6 +92,7 @@ export default {
       this.filter_data = [];
       this.data = [];
       this.loading = true;
+      this.clean_cache = new WeakMap();
 
       this.all_data = await this.$database.get(this.file);
 
@@ -127,7 +139,7 @@ export default {
               if (!isNaN(item[key]) && !isNaN(value)) {
                 return Number(item[key]) === Number(value);
               } else if (isNaN(item[key])) {
-                return this.$string.clean(item[key]).includes(value);
+                return this.getClean(item, key).includes(value);
               } else {
                 return false;
               }
@@ -154,6 +166,22 @@ export default {
 
       this.paginateData();
     },
+
+    // Cacheia $string.clean(item[key]) por item+campo — item/campo nunca mudam
+    // entre buscas (só o texto digitado muda), então só vale a pena limpar uma
+    // vez por item, na primeira vez que aquele campo é efetivamente buscado.
+    getClean(item, key) {
+      let entry = this.clean_cache.get(item);
+      if (!entry) {
+        entry = {};
+        this.clean_cache.set(item, entry);
+      }
+      if (!(key in entry)) {
+        entry[key] = this.$string.clean(item[key]);
+      }
+      return entry[key];
+    },
+
     paginateData() {
       this.limit += 10;
       this.data = this.filter_data.slice(0, this.limit);

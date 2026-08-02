@@ -19,26 +19,57 @@ h1{font-size:18px;text-align:center;margin-bottom:4px}
 .dot.ok{background:#2ecc71}.dot.err{background:#e74c3c}
 .card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:18px;
   padding:18px;margin-bottom:16px}
-.dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:320px;margin:0 auto}
-.dpad button{aspect-ratio:1;border:none;border-radius:14px;background:rgba(255,255,255,.09);
-  color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+/* Botões lado a lado (mesmo padrão das ações de item da Liturgia), em vez do
+   D-pad em grade 3x3 anterior. */
+.dpad{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.dpad button{flex:0 0 auto;width:52px;height:52px;border:none;border-radius:50%;background:rgba(255,255,255,.09);
+  color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .dpad button:active{background:rgba(255,255,255,.22);transform:scale(.96)}
-.dpad .ghost{background:transparent;pointer-events:none}
+.dpad button#closeBtn{background:rgba(231,76,60,.25)}
 input{width:100%;padding:12px 14px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.18);
   border-radius:10px;color:#fff;font-size:15px;outline:none}
 input::placeholder{color:rgba(255,255,255,.35)}
 .results{margin-top:10px;max-height:40vh;overflow:auto}
 .result{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;
   align-items:center;gap:8px}
-.result .name{flex:1;font-size:14px}
+.result .name{flex:1;font-size:14px;min-width:0}
+.result .albums{display:block;font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .result button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;padding:8px 12px;
-  font-size:12px;cursor:pointer}
+  font-size:12px;cursor:pointer;flex-shrink:0}
+.volume-label{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.volume-row{display:flex;align-items:center;gap:12px}
+.volume-icon{font-size:18px;flex-shrink:0}
+.volume-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.volume-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:#3498db;cursor:pointer;border:none}
+.volume-row input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#3498db;
+  cursor:pointer;border:none}
+.volume-val{font-size:13px;min-width:40px;text-align:right;flex-shrink:0;color:rgba(255,255,255,.7)}
+/* ── Layout de duas colunas: controle de um lado, liturgia do outro ── */
+.layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.col{flex:1 1 320px;min-width:280px}
+.lit-item{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;
+  align-items:center;gap:8px}
+.lit-item .name{flex:1;font-size:14px}
+.lit-item.lit-cat{font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.03em;
+  border-radius:8px;border-bottom:none;margin-top:8px;padding:8px 10px}
+.lit-item.lit-cat:first-child{margin-top:0}
+.lit-empty{padding:12px 10px;font-size:13px;color:rgba(255,255,255,.5)}
+.lit-list{max-height:60vh;overflow:auto}
+.lit-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.lit-title{font-weight:700;font-size:14px}
+.lit-header button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;padding:8px 12px;
+  font-size:12px;cursor:pointer;flex-shrink:0}
 .token-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;
   justify-content:center;padding:20px;z-index:10}
 .token-modal .box{background:#152238;border-radius:16px;padding:24px;max-width:360px;width:100%}
 .token-modal p{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:14px}
 .token-modal button{width:100%;margin-top:12px;padding:12px;background:linear-gradient(90deg,#3498db,#2980b9);
   border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer}
+.token-modal button:disabled{opacity:.6;cursor:default}
+.token-modal .msg{font-size:12px;color:#e74c3c;margin-top:10px;min-height:14px}
 .hidden{display:none !important}
 </style>
 </head>
@@ -46,23 +77,43 @@ input::placeholder{color:rgba(255,255,255,.35)}
 <h1>🎵 LouvorJA — Controle Remoto</h1>
 <div class="status"><span id="dot" class="dot"></span><span id="statusText">Conectando...</span></div>
 
-<div class="card">
-  <div class="dpad">
-    <div class="ghost"></div>
-    <button data-key="ArrowUp" title="Anterior">▲</button>
-    <div class="ghost"></div>
-    <button data-key="ArrowLeft" title="Primeiro">⏮</button>
-    <button data-key="Space" title="Play/Pause">⏯</button>
-    <button data-key="ArrowRight" title="Último">⏭</button>
-    <div class="ghost"></div>
-    <button data-key="ArrowDown" title="Próxima">▼</button>
-    <button data-key="Escape" title="Fechar">✕</button>
-  </div>
-</div>
+<div class="layout">
+  <div class="col col-control">
+    <div class="card">
+      <div class="dpad">
+        <button data-key="ArrowLeft" title="Primeiro">⏮</button>
+        <button data-key="ArrowUp" title="Linha anterior">◀</button>
+        <button data-key="Space" title="Play/Pause">⏯</button>
+        <button data-key="ArrowDown" title="Próxima linha">▶</button>
+        <button data-key="ArrowRight" title="Último">⏭</button>
+        <button id="closeBtn" title="Fechar projeção">✕</button>
+      </div>
+    </div>
 
-<div class="card">
-  <input id="search" type="text" placeholder="Buscar música..." autocomplete="off" />
-  <div class="results" id="results"></div>
+    <div class="card">
+      <div class="volume-label" id="volumeLabel">Volume</div>
+      <div class="volume-row">
+        <span class="volume-icon">🔊</span>
+        <input id="volume" type="range" min="0" max="100" value="100" />
+        <span class="volume-val" id="volumeVal">100%</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <input id="search" type="text" placeholder="Buscar música..." autocomplete="off" />
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+
+  <div class="col col-liturgia">
+    <div class="card">
+      <div class="lit-header">
+        <span class="lit-title">Liturgia</span>
+        <button id="openLiturgiaBtn" title="Abrir a janela da Liturgia no LouvorJA">Abrir no LouvorJA</button>
+      </div>
+      <div class="lit-list" id="liturgiaList"></div>
+    </div>
+  </div>
 </div>
 
 <div class="token-modal hidden" id="tokenModal">
@@ -71,6 +122,7 @@ input::placeholder{color:rgba(255,255,255,.35)}
     <p>Informe o token exibido no LouvorJA (módulo Controle Remoto) para conectar.</p>
     <input id="tokenInput" type="text" placeholder="Token" autocomplete="off" />
     <button id="tokenSave">Conectar</button>
+    <div class="msg" id="tokenMsg"></div>
   </div>
 </div>
 
@@ -95,11 +147,29 @@ function setStatus(cls, text) {
   document.getElementById('statusText').textContent = text;
 }
 
-function testarApi() {
+function setTokenMsg(text) {
+  document.getElementById('tokenMsg').textContent = text || '';
+}
+
+// Feedback sempre visível dentro da própria caixa do modal (o texto de status
+// no topo da página fica coberto pelo overlay enquanto o modal está aberto,
+// então erro de conexão/token passava batido sem nenhuma mensagem aparecer).
+function testarApi(cb) {
   chamarApi('ping', {}, (ok, data) => {
-    if (ok) { setStatus('ok', 'Conectado'); document.getElementById('tokenModal').classList.add('hidden'); }
-    else if (data.code === 'INVALID_TOKEN') { setStatus('err', 'Token inválido'); document.getElementById('tokenModal').classList.remove('hidden'); }
-    else setStatus('err', 'Sem conexão');
+    if (ok) {
+      setStatus('ok', 'Conectado');
+      setTokenMsg('');
+      document.getElementById('tokenModal').classList.add('hidden');
+    } else if (data.code === 'INVALID_TOKEN') {
+      setStatus('err', 'Token inválido');
+      setTokenMsg('Token inválido. Confira o token exibido no LouvorJA (módulo Controle Remoto).');
+      document.getElementById('tokenModal').classList.remove('hidden');
+    } else {
+      setStatus('err', 'Sem conexão');
+      setTokenMsg('Não foi possível conectar. Verifique se o celular está na mesma rede Wi-Fi do computador.');
+      document.getElementById('tokenModal').classList.remove('hidden');
+    }
+    if (cb) cb(ok);
   });
 }
 
@@ -108,6 +178,43 @@ document.querySelectorAll('.dpad button[data-key]').forEach((btn) => {
     chamarApi('keyboard', { key: btn.dataset.key }, (ok) => { if (!ok) testarApi(); });
   });
 });
+
+// Fechar projeção: rota própria (força fechamento sem diálogo de confirmação —
+// diferente de mandar a tecla Escape, cujo $media.close() padrão abre um "tem
+// certeza?" na tela do computador, que ninguém vai clicar remotamente).
+document.getElementById('closeBtn').addEventListener('click', () => {
+  chamarApi('close-media', {}, (ok) => { if (!ok) testarApi(); });
+});
+
+// ── Volume ──────────────────────────────────────────────────────────────
+const volumeInput = document.getElementById('volume');
+const volumeVal    = document.getElementById('volumeVal');
+const volumeLabel  = document.getElementById('volumeLabel');
+const MODULE_LABEL = { media: 'Volume — Música', video_player: 'Volume — Vídeo', web_link: 'Volume — YouTube' };
+let volumeDebounce  = null;
+let volumeDragging  = false;
+
+function carregarVolume() {
+  if (volumeDragging) return; // não sobrescreve enquanto o usuário está arrastando
+  chamarApi('get-volume', {}, (ok, data) => {
+    if (!ok) return;
+    volumeInput.value  = data.volume;
+    volumeVal.textContent = data.volume + '%';
+    volumeLabel.textContent = MODULE_LABEL[data.module] || 'Volume';
+  });
+}
+
+volumeInput.addEventListener('pointerdown', () => { volumeDragging = true; });
+volumeInput.addEventListener('input', (e) => {
+  const v = e.target.value;
+  volumeVal.textContent = v + '%';
+  clearTimeout(volumeDebounce);
+  volumeDebounce = setTimeout(() => chamarApi('set-volume', { value: v }, () => {}), 120);
+});
+volumeInput.addEventListener('change', () => { volumeDragging = false; });
+
+carregarVolume();
+setInterval(carregarVolume, 5000);
 
 let searchDebounce = null;
 document.getElementById('search').addEventListener('input', (e) => {
@@ -119,8 +226,11 @@ document.getElementById('search').addEventListener('input', (e) => {
     chamarApi('search-songs', { q }, (ok, data) => {
       if (!ok) { results.innerHTML = ''; return; }
       results.innerHTML = (data.results || []).map((item) =>
-        '<div class="result"><span class="name">' + escapeHtml(item.name || '') + '</span>' +
-        '<button data-id="' + item.id + '">Abrir</button></div>'
+        '<div class="result"><span class="name">' + escapeHtml(item.name || '') +
+        (item.albums && item.albums.length
+          ? '<span class="albums">' + escapeHtml(item.albums.join(' • ')) + '</span>'
+          : '') +
+        '</span><button data-id="' + item.id + '">Abrir</button></div>'
       ).join('') || '<div class="result"><span class="name">Nenhum resultado</span></div>';
     });
   }, 400);
@@ -130,19 +240,93 @@ document.getElementById('results').addEventListener('click', (e) => {
   const id = e.target?.dataset?.id;
   if (!id) return;
   e.target.textContent = '...';
-  chamarApi('open-song', { id, tag: 3 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Erro'; });
+  chamarApi('open-song', { id, tag: 1 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Erro'; });
 });
+
+// ── Liturgia (só leitura + abrir música, ao lado do controle) ──────────────
+document.getElementById('openLiturgiaBtn').addEventListener('click', (e) => {
+  const original = e.target.textContent;
+  e.target.textContent = '...';
+  chamarApi('open-liturgia', {}, (ok) => {
+    e.target.textContent = ok ? 'Aberto!' : 'Erro';
+    setTimeout(() => { e.target.textContent = original; }, 1500);
+  });
+});
+
+function carregarLiturgia() {
+  chamarApi('liturgia', {}, (ok, data) => {
+    const el = document.getElementById('liturgiaList');
+    if (!ok) return; // mantém o que já estava exibido em caso de falha pontual
+    const items = data.items || [];
+    if (!items.length) { el.innerHTML = '<div class="lit-empty">Nenhum item na liturgia.</div>'; return; }
+    el.innerHTML = items.map((item) => {
+      if (item.type === 'categoria') {
+        return '<div class="lit-item lit-cat" style="background:' + escapeHtml(item.color || '#1a237e') + '">' +
+          escapeHtml(item.name || '') + '</div>';
+      }
+      // Já tem música definida → abre direto. "Escolha na hora" (sem id_music)
+      // → também mostra o botão, mas ele só leva o operador até a busca já
+      // preenchida com o nome do item (não dá pra abrir sem saber qual música
+      // exatamente o nome do item da liturgia corresponde).
+      const button = item.type === 'musica' && item.id_music
+        ? '<button data-id="' + item.id_music + '">Abrir</button>'
+        : item.type === 'musica'
+          ? '<button data-select="' + escapeHtml(item.name || '') + '">Selecionar</button>'
+          : '';
+      return '<div class="lit-item">' +
+        '<span class="name">' + escapeHtml(item.name || '') + '</span>' +
+        button +
+        '</div>';
+    }).join('');
+  });
+}
+
+document.getElementById('liturgiaList').addEventListener('click', (e) => {
+  const id = e.target?.dataset?.id;
+  if (id) {
+    e.target.textContent = '...';
+    chamarApi('open-song', { id, tag: 1 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Abrir'; });
+    return;
+  }
+  const nome = e.target?.dataset?.select;
+  if (nome === undefined) return;
+  const search = document.getElementById('search');
+  search.value = nome;
+  search.dispatchEvent(new Event('input'));
+  search.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  search.focus();
+});
+
+carregarLiturgia();
+setInterval(carregarLiturgia, 5000);
 
 document.getElementById('tokenSave').addEventListener('click', () => {
   const v = document.getElementById('tokenInput').value.trim();
-  if (!v) return;
+  if (!v) { setTokenMsg('Digite o token.'); return; }
+  const btn = document.getElementById('tokenSave');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Conectando...';
+  setTokenMsg('');
   salvarToken(v);
-  testarApi();
+  testarApi(() => {
+    btn.disabled = false;
+    btn.textContent = original;
+  });
 });
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// QR code: o link codificado já vem com "?token=" (ver refreshQrCode() no
+// módulo Controle Remoto) — ler direto da URL e salvar aqui evita pedir o
+// token de novo (o celular nunca visitou esse IP:porta antes, então o
+// localStorage estaria vazio mesmo com o token certo na própria URL). O link
+// pra COPIAR/colar de propósito não inclui o token (ver serverUrls no mesmo
+// módulo), então continua caindo no modal normalmente.
+const urlToken = new URLSearchParams(location.search).get('token');
+if (urlToken) salvarToken(urlToken);
 
 if (!obterToken()) document.getElementById('tokenModal').classList.remove('hidden');
 testarApi();
@@ -222,7 +406,9 @@ function applyBg(state) {
   if (bg && bg.type === 'image' && bg.url) {
     layer.style.backgroundColor = bg.background_color || 'transparent';
     layer.style.backgroundImage = 'url(' + bg.url + ')';
-    layer.style.backgroundSize = bg.fit || 'cover';
+    // "fill" (opção "Ampliar") não é uma palavra-chave válida de background-size
+    // (só cover/contain/auto/valores explícitos) — mesmo ajuste de src/components/Slide.vue.
+    layer.style.backgroundSize = bg.fit === 'fill' ? '100% 100%' : (bg.fit || 'cover');
   } else if (bg && bg.type === 'video' && bg.url) {
     layer.style.backgroundColor = bg.background_color || 'transparent';
     video.src = bg.url;

@@ -1131,6 +1131,11 @@ export default {
         const raw = await this.$electron.scanMissingFiles();
         // Store as plain object so Vue reactivity doesn't wrap nested items in Proxy
         this.scanResult = raw ? JSON.parse(JSON.stringify(raw)) : null;
+        // Reconcilia "Meus Downloads" com o que o verificador encontrou de fato no
+        // disco — sem isso, um álbum que o verificador confirma como OK podia
+        // continuar marcado como "faltando" na outra aba, por ter sido calculado
+        // separadamente (e antes) por checkAlbumsComplete.
+        await this.loadDownloadedAlbumsStatus();
       } catch (e) {
         this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
@@ -1157,6 +1162,7 @@ export default {
         if (result.success) {
           this.scanResult = null;
           await this.loadLocalFiles();
+          await this.loadDownloadedAlbumsStatus();
         } else {
           this.$alert?.error?.({ text: result.error || 'Erro ao baixar arquivos.', translate: false });
         }

@@ -20,82 +20,12 @@
     dark
   >
     <template v-slot:system_buttons>
-      <!-- Tela de Retorno: menu com seleção de monitor -->
-      <v-menu
-        v-if="$appdata.get('is_desktop')"
-        v-model="returnMenu"
-        location="bottom"
-        :close-on-content-click="false"
-        @update:model-value="onReturnMenuToggle"
-      >
-        <template v-slot:activator="{ props: menuProps }">
-          <v-tooltip location="bottom">
-            <template v-slot:activator="{ props: tipProps }">
-              <v-btn
-                v-bind="{ ...menuProps, ...tipProps }"
-                icon
-                variant="text"
-                size="small"
-                :color="returnScreenOpen ? 'warning' : 'white'"
-                class="me-1"
-              >
-                <v-icon size="20">mdi-monitor-account</v-icon>
-              </v-btn>
-            </template>
-            {{ returnScreenOpen ? 'Tela de Retorno aberta' : 'Tela de Retorno' }}
-          </v-tooltip>
-        </template>
+      <!-- Enviar para o retorno: mesmo botão simples usado nos utilitários
+           (Relógio/Cronômetro/Cronômetro avulso) — abre o retorno (se ainda
+           não estiver aberto, usando o monitor já configurado em
+           MonitorSelector) e força a música a aparecer lá. -->
+      <LReturnScreenBtn module="media" />
 
-        <v-list density="compact" min-width="280">
-          <v-list-subheader>Tela de Retorno</v-list-subheader>
-
-          <v-progress-linear v-if="returnMenuLoading" indeterminate height="2" class="mb-1" />
-
-          <!-- Cards visuais de monitor (estilo identificar monitores) -->
-          <div
-            v-if="!returnMenuLoading && returnScreens.length"
-            class="d-flex flex-wrap justify-center gap-2 px-2 pt-1 pb-2"
-          >
-            <div
-              v-for="s in returnScreens"
-              :key="s.id"
-              class="monitor-card"
-              :class="{ 'monitor-card--active': returnDisplayId === s.id }"
-              @click="lockReturnDisplay(s.id)"
-            >
-              <span class="monitor-card__num">{{ monitorNum(s) }}</span>
-              <span class="monitor-card__label">{{ s.label }}</span>
-              <span class="monitor-card__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
-              <span v-if="outputDisplayId && s.id === outputDisplayId" class="monitor-card__out">Saída</span>
-            </div>
-          </div>
-
-          <v-list-item
-            v-if="!returnMenuLoading && returnScreens.length === 0"
-            prepend-icon="mdi-monitor-off"
-            title="Nenhum monitor encontrado"
-            disabled
-          />
-
-          <v-divider class="my-1" />
-
-          <v-list-item
-            :prepend-icon="returnScreenOpen ? 'mdi-monitor-off' : 'mdi-monitor-account'"
-            :title="returnScreenOpen ? 'Fechar Tela de Retorno' : 'Abrir Tela de Retorno'"
-            :base-color="returnScreenOpen ? 'error' : 'warning'"
-            rounded="lg"
-            @click="toggleReturnScreen"
-          />
-
-          <v-list-item
-            prepend-icon="mdi-monitor-multiple"
-            rounded="lg"
-            @click="identifyReturnScreens"
-          >
-            <v-list-item-title>Identificar monitores</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
       <v-menu v-if="is_online">
         <template v-slot:activator="{ props }">
           <v-btn
@@ -212,6 +142,7 @@ import Window from "@/components/Window.vue";
 import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 
 export default {
   name: "MediaComponent",
@@ -220,18 +151,11 @@ export default {
     LSlide,
     LPlayer,
     LFullscreenPlayer,
+    LReturnScreenBtn,
   },
   data: () => ({
     preview_height: 0,
     scrollPos: 0,
-    returnScreenOpen: false,
-    returnOpenHandler: null,
-    returnCloseHandler: null,
-    returnMenu: false,
-    returnMenuLoading: false,
-    returnScreens: [],
-    returnDisplayId: null,
-    outputDisplayId: null,
   }),
   computed: {
     /* COMPUTEDS OBRIGATÓRIAS - INÍCIO */
@@ -337,128 +261,6 @@ export default {
     resize(data) {
       this.preview_height = data.container_height;
     },
-
-    async toggleReturnScreen() {
-      if (this.returnScreenOpen) {
-        await this.$electron.closeReturnScreen();
-      } else {
-        await this.$electron.openReturnScreen(this.returnDisplayId || undefined);
-      }
-      this.returnMenu = false;
-    },
-
-    async onReturnMenuToggle(open) {
-      if (!open) return;
-      this.returnMenuLoading = true;
-      try {
-        const [screens, outId] = await Promise.all([
-          this.$electron.getScreens(),
-          this.$electron.storeGet('output_display_id').catch(() => null),
-        ]);
-        this.returnScreens = screens || [];
-        this.outputDisplayId = outId || null;
-        if (!this.returnDisplayId && this.returnScreens.length) {
-          const ext = this.returnScreens.find(s => !s.primary);
-          this.returnDisplayId = (ext ?? this.returnScreens[0]).id;
-        }
-      } finally {
-        this.returnMenuLoading = false;
-      }
-    },
-
-    async lockReturnDisplay(id) {
-      if (this.returnDisplayId === id) return;
-      this.returnDisplayId = id;
-      await this.$electron.storeSet('return_display_id', id);
-      if (this.returnScreenOpen) {
-        await this.$electron.closeReturnScreen();
-        await this.$electron.openReturnScreen(id);
-      }
-    },
-
-    async identifyReturnScreens() {
-      this.returnMenu = false;
-      await this.$electron.identifyScreens();
-    },
-
-    monitorNum(s) {
-      if (s.primary) return 0;
-      const m = s.label.match(/\d+/);
-      return m ? parseInt(m[0]) : '';
-    },
-  },
-
-  mounted() {
-    this.returnOpenHandler = this.$electron.on('return-window-opened', () => { this.returnScreenOpen = true; });
-    this.returnCloseHandler = this.$electron.on('return-window-closed', () => { this.returnScreenOpen = false; });
-    if (this.$electron.isElectron()) {
-      this.$electron.storeGet('return_display_id')
-        .then(id => { if (id) this.returnDisplayId = id; })
-        .catch(() => {});
-      this.$electron.isReturnScreenOpen()
-        .then(v => { this.returnScreenOpen = !!v; })
-        .catch(() => {});
-    }
-  },
-
-  beforeUnmount() {
-    if (this.returnOpenHandler) this.$electron.off('return-window-opened', this.returnOpenHandler);
-    if (this.returnCloseHandler) this.$electron.off('return-window-closed', this.returnCloseHandler);
   },
 };
 </script>
-
-<style scoped>
-.monitor-card {
-  min-width: 108px;
-  height: 74px;
-  background: rgba(12, 12, 15, 0.9);
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  user-select: none;
-  padding: 6px 14px;
-  gap: 2px;
-}
-.monitor-card:hover {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(30, 30, 38, 0.95);
-}
-.monitor-card--active {
-  border-color: #FFC107;
-  background: rgba(255, 193, 7, 0.1);
-}
-.monitor-card__num {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -1px;
-}
-.monitor-card__label {
-  font-size: 11px;
-  opacity: 0.85;
-  font-weight: 500;
-}
-.monitor-card__res {
-  font-size: 10px;
-  opacity: 0.45;
-  letter-spacing: 0.3px;
-}
-.monitor-card__out {
-  margin-top: 4px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  background: rgba(33, 150, 243, 0.85);
-  border-radius: 3px;
-  padding: 1px 5px;
-  line-height: 1.4;
-}
-</style>

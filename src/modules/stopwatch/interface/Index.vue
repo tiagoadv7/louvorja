@@ -36,6 +36,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="stopwatch" />
+      <LReturnScreenBtn module="stopwatch" />
     </template>
 
     <template v-slot:header>
@@ -169,6 +170,7 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -180,6 +182,7 @@ export default {
     LWindow,
     Screen,
     LScreenBtn,
+    LReturnScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,
@@ -283,9 +286,8 @@ export default {
     close() {
       this.pauseStopwatch();
       this.resetStopwatch();
-      // Só sai da projeção se o Cronômetro for de fato o módulo projetado
-      // agora — senão, fechar o painel apagaria o que estiver sendo exibido.
-      if (this.$appdata.get('popup_module') === this.module_id) this.$popup.exit();
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso.
       this.$modules.close(this.module_id);
     },
 

@@ -15,6 +15,31 @@ function resolveSqlWasm() {
   return path.join(appPath, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
 }
 
+// Lê um arquivo de texto detectando a codificação real em vez de assumir uma
+// fixa — usado pela importação de liturgia .ja (formato legado do LouvorJA
+// Delphi). O app antigo salva normalmente em Windows-1252 (sem BOM), mas
+// alguns arquivos aparecem em UTF-8 (às vezes com BOM, às vezes sem) — forçar
+// sempre 'latin1' nesses casos duplica a decodificação dos acentos
+// (ex.: "ã" vira "Ã£"). Ordem de detecção:
+//   1. BOM UTF-8 (EF BB BF) ou UTF-16 LE (FF FE) explícito no arquivo.
+//   2. Sem BOM: tenta decodificar como UTF-8 e reconverte pra bytes — se bater
+//      exatamente com o original, era UTF-8 válido de fato (uma sequência
+//      Windows-1252 com acentos praticamente nunca forma UTF-8 válido por
+//      coincidência, então esse teste é confiável na prática).
+//   3. Nenhum dos dois: assume Windows-1252/latin1 (formato legado padrão).
+function readFileAutoDetect(filePath) {
+  const buf = fs.readFileSync(filePath);
+  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    return buf.subarray(3).toString('utf8');
+  }
+  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+    return buf.subarray(2).toString('utf16le');
+  }
+  const asUtf8 = buf.toString('utf8');
+  if (Buffer.from(asUtf8, 'utf8').equals(buf)) return asUtf8;
+  return buf.toString('latin1');
+}
+
 function setupIpc(mainWindow) {
   // ── Armazenamento persistente ──────────────────────────────────────────────
   ipcMain.handle('store:get', (_, key, defaultValue = null) => {
@@ -108,6 +133,7 @@ function setupIpc(mainWindow) {
 
   ipcMain.handle('fs:read-file', (_, filePath, encoding = 'utf8') => {
     try {
+      if (encoding === 'auto') return readFileAutoDetect(filePath);
       return fs.readFileSync(filePath, encoding);
     } catch (e) {
       console.error('[IPC] read-file error:', e.message);
@@ -753,7 +779,8 @@ function setupIpc(mainWindow) {
         const slash = rel.indexOf('/');
         if (slash < 0) return false;
         const folder = rel.slice(0, slash);
-        const name = path.basename(decodeURIComponent(rel.slice(slash + 1)));
+        const restPath = decodeURIComponent(rel.slice(slash + 1)); // ex: "2017 - Eu Creio/Arquivo.mp3"
+        const name = path.basename(restPath);
         if (!name) return false;
         const userDataConfigDir2 = path.join(app.getPath('userData'), 'config');
         const delphiConfigDir2   = getSqliteConfigDir();
@@ -766,12 +793,22 @@ function setupIpc(mainWindow) {
           return false;
         }
         if (folder === 'musicas') {
+          // Subpasta do álbum (ex: "2017 - Eu Creio") — restringe a busca a ela,
+          // nunca varre a raiz de "musicas" inteira por nome de arquivo (mesmo
+          // motivo do media:resolve-file/syncLocalFileUrls: títulos genéricos se
+          // repetem em dezenas de álbuns diferentes no catálogo).
+          const albumFolder = path.dirname(restPath);
+          const scopedExists = (root) => {
+            if (albumFolder && albumFolder !== '.') {
+              return !!findFileInTree(path.join(root, albumFolder), name);
+            }
+            return !!findFileInTree(root, name);
+          };
           // Pasta customizada do usuário (mesma prioridade do media:resolve-file)
           const userMediaFolder = Store.get('media_base_folder');
-          if (userMediaFolder && findFileInTree(userMediaFolder, name)) return true;
-          // Para áudio: busca recursiva em todas as raízes de musicas
+          if (userMediaFolder && scopedExists(userMediaFolder)) return true;
           for (const base of baseDirs2) {
-            if (findFileInTree(path.join(base, 'musicas'), name)) return true;
+            if (scopedExists(path.join(base, 'musicas'))) return true;
           }
           return false;
         }
@@ -853,12 +890,18 @@ function setupIpc(mainWindow) {
             if (fs.existsSync(scopedR)) return toLocalFileUrl(scopedR);
           }
 
-          // 2. Fallback: busca recursiva ampla — só quando a subpasta esperada não
-          //    bateu (pode ter sido reorganizada no disco). Ainda arrisca pegar o
-          //    arquivo errado nesse caso raro, mas é estritamente melhor que nunca
-          //    tentar o caminho certo primeiro.
-          const found = findFileInTree(musicasW, name) || findFileInTree(musicasR, name);
-          if (found) return toLocalFileUrl(found);
+          // 2. Fallback: busca recursiva, mas RESTRITA à própria subpasta do álbum
+          //    esperada (pode ter sido reorganizada no disco) — nunca varre a raiz
+          //    de "musicas" inteira por nome de arquivo. Títulos genéricos
+          //    ("Maranata.mp3", "Prefixo de Louvor.mp3" etc.) se repetem em dezenas
+          //    de álbuns diferentes; uma busca ampla gravaria permanentemente no JSON
+          //    o file:// de OUTRO álbum, e como o topo desta função (fileUrlExists)
+          //    passaria a considerar isso "já local", o erro nunca se corrigiria sozinho.
+          if (folder) {
+            const found = findFileInTree(path.join(musicasW, folder), name)
+                       || findFileInTree(path.join(musicasR, folder), name);
+            if (found) return toLocalFileUrl(found);
+          }
 
           // 3. Não encontrado localmente — app-local:// com a subpasta conhecida
           if (folder) return `app-local://musicas/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`;
@@ -1027,9 +1070,14 @@ function setupIpc(mainWindow) {
         const type = detectFileType(destDir);
         let foundLocal = false;
         if (type === 'audio') {
-          // Busca recursiva em musicas/ gravável e somente-leitura
-          foundLocal = !!findFileInTree(getAutoMediaDir(null, true), name)
-                    || !!findFileInTree(getAutoMediaDir(), name);
+          // Busca recursiva em musicas/ gravável e somente-leitura, mas restrita à
+          // subpasta do PRÓPRIO álbum (mesma lógica de files:scan-missing, ver
+          // comentário em fileExists logo abaixo em ipc.js): títulos genéricos
+          // ("Maranata.mp3" etc.) se repetem em dezenas de álbuns diferentes — buscar
+          // no musicas/ inteiro fazia o download pular a música do álbum atual só
+          // porque uma faixa de MESMO NOME já existia baixada de outro álbum.
+          foundLocal = !!findFileInTree(getAutoMediaDir(folderName, true), name)
+                    || !!findFileInTree(getAutoMediaDir(folderName), name);
         } else if (type === 'cover') {
           foundLocal = fs.existsSync(path.join(getAutoCapasDir(), name))
                     || fs.existsSync(path.join(getAutoCapasDir(true), name));
@@ -1253,15 +1301,20 @@ function setupIpc(mainWindow) {
       return null;
     };
 
-    // Busca com prioridade: primeiro na subpasta do álbum esperada (se conhecida)
-    // — evita pegar o arquivo de mesmo nome de OUTRO álbum (títulos genéricos como
-    // "Maranata.mp3"/"Prefixo de Louvor.mp3" se repetem em dezenas de álbuns
-    // diferentes no catálogo). Só cai pra busca ampla se não achar na subpasta certa.
+    // Busca restrita à subpasta do álbum esperada, quando conhecida — NUNCA cai
+    // pra busca ampla em "baseDir" inteiro nesse caso. Títulos genéricos
+    // ("Maranata.mp3"/"Prefixo de Louvor.mp3") se repetem em dezenas de álbuns
+    // diferentes no catálogo; uma busca ampla pegaria a primeira ocorrência de
+    // QUALQUER álbum, tocando a gravação errada (era exatamente isso que fazia o
+    // álbum "2024 - Maranata" tocar a "Maranata" de outro álbum). Só faz a busca
+    // ampla como último recurso quando a URL não permite identificar o álbum.
     const searchScoped = (baseDir) => {
       if (!baseDir) return null;
       if (folder) {
-        const scoped = path.join(baseDir, folder, name);
-        if (fs.existsSync(scoped)) return scoped;
+        const scopedDir = path.join(baseDir, folder);
+        const exact = path.join(scopedDir, name);
+        if (fs.existsSync(exact)) return exact;
+        return search(scopedDir, 0);
       }
       return search(baseDir, 0);
     };
@@ -1973,6 +2026,14 @@ document.getElementById('f').onsubmit=async(e)=>{
   const remoteServer = require('./remote_server');
   remoteServer.setMainWindow(mainWindow);
 
+  // Reabre sozinho se "Transmitir" estava ligado quando o app fechou da
+  // última vez — sem isso, o servidor sempre voltava desligado a cada
+  // abertura, mesmo tendo sido deixado ativado de propósito (ver stop()/
+  // stopServer() em remote_server.js sobre como essa preferência é mantida).
+  if (Store.get('remote_server.enabled', false)) {
+    remoteServer.start().catch((e) => console.error('[IPC] Falha ao reabrir servidor de transmissão:', e.message));
+  }
+
   ipcMain.handle('remote-server:start',  () => remoteServer.start());
   ipcMain.handle('remote-server:stop',   () => remoteServer.stop());
   ipcMain.handle('remote-server:status', () => remoteServer.status());
@@ -2024,34 +2085,37 @@ document.getElementById('f').onsubmit=async(e)=>{
       const missing = [];
       const seen    = new Set();
 
-      // Pastas raiz para busca de áudio — recursiva na instalação Delphi
-      const musicasW = getAutoMediaDir(null, true);   // gravável (userData/config/musicas/)
-      const musicasR = getAutoMediaDir();              // instalação (config/musicas/ com subpastas)
       const capasW   = getAutoCapasDir(true);          const capasR  = getAutoCapasDir();
       const imgsW    = getAutoImagesDir(true);         const imgsR   = getAutoImagesDir();
 
-      // Verifica existência: já tem URL válida, ou está em alguma pasta (recursiva p/ áudio)
-      const fileExists = (rawUrl, destWritable, type) => {
+      // Verifica existência: já tem URL válida, ou está em alguma pasta (recursiva p/ áudio,
+      // mas restrita à subpasta do PRÓPRIO álbum — nunca varre "musicas" inteira por nome:
+      // títulos genéricos ("Maranata.mp3" etc.) se repetem em dezenas de álbuns diferentes,
+      // e um falso-positivo aqui faz o app achar que já tem o arquivo certo baixado quando na
+      // verdade é o de OUTRO álbum, deixando o correto sem baixar).
+      const fileExists = (rawUrl, destWritable, type, folderName) => {
         if (fileUrlExists(rawUrl)) return true;
         const name = safeBasename(rawUrl);
         if (!name) return false;
         if (fs.existsSync(path.join(destWritable, name))) return true;
-        // Áudio: busca recursiva nas subpastas do Delphi (config/musicas/1992 - Brilha Jesus/ etc.)
-        if (type === 'audio') return !!findFileInTree(musicasR, name);
+        // Áudio: busca recursiva só dentro da subpasta do álbum (config/musicas/1992 - Brilha Jesus/ etc.)
+        // getAutoMediaDir aplica o mesmo sanitizeDir() usado para calcular "destWritable"/audioW,
+        // então a subpasta lida aqui é exatamente a mesma que o restante do código espera.
+        if (type === 'audio') return !!(folderName && findFileInTree(getAutoMediaDir(folderName), name));
         // Capas e imagens: flat na instalação original
         if (type === 'cover') return fs.existsSync(path.join(capasR, name));
         if (type === 'image') return fs.existsSync(path.join(imgsR, name));
         return false;
       };
 
-      const addMissing = (rawUrl, destWritable, type) => {
+      const addMissing = (rawUrl, destWritable, type, folderName) => {
         if (!rawUrl) return;
         const name = safeBasename(rawUrl);
         if (!name) return;
         const dest = path.join(destWritable, name);
         if (seen.has(dest)) return;
         seen.add(dest);
-        if (!fileExists(rawUrl, destWritable, type)) missing.push({ url: rawUrl, dest, type, name });
+        if (!fileExists(rawUrl, destWritable, type, folderName)) missing.push({ url: rawUrl, dest, type, name });
       };
 
       const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
@@ -2064,7 +2128,8 @@ document.getElementById('f').onsubmit=async(e)=>{
         const albumName = albumData.name || albumFile.replace('.json', '');
         // Usa folder_name (ex: "2010 - Geração Esperança") quando disponível,
         // pois é o nome real da subpasta em config/musicas/
-        const audioW = getAutoMediaDir(albumData.folder_name || albumName, true);
+        const folderName = albumData.folder_name || albumName;
+        const audioW = getAutoMediaDir(folderName, true);
 
         addMissing(albumData.url_image, capasW, 'cover');
 
@@ -2072,8 +2137,8 @@ document.getElementById('f').onsubmit=async(e)=>{
           const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
           if (!md) continue;
 
-          addMissing(md.url_music, audioW, 'audio');
-          addMissing(md.url_instrumental_music, audioW, 'audio');
+          addMissing(md.url_music, audioW, 'audio', folderName);
+          addMissing(md.url_instrumental_music, audioW, 'audio', folderName);
           addMissing(md.url_image, imgsW, 'image');
 
           const slideList = Array.isArray(md.slides)
@@ -2484,7 +2549,12 @@ document.getElementById('f').onsubmit=async(e)=>{
 
       for (const music of (albumData.musics || [])) {
         const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
-        if (!md) { missing++; totalFiles++; continue; }
+        // Sem o JSON da música (comum em álbum instalado do LouvorJA Delphi legado,
+        // ou offline sem conexão pra buscar) não dá pra saber o nome esperado do
+        // arquivo — contar como "faltando" aqui inflava o aviso em "Meus Downloads"
+        // mesmo quando o áudio de fato existe em disco. Mesmo critério tolerante já
+        // usado em files:scan-missing (ver ensureMusicJsonCached acima).
+        if (!md) continue;
         check(md.url_music, audioW, audioR, 'audio');
         check(md.url_instrumental_music, audioW, audioR, 'audio');
         check(md.url_image, imgsW, imgsR, 'image');

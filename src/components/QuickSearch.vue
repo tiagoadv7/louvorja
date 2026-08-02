@@ -102,7 +102,7 @@
         <v-divider />
         <div class="px-3 py-1 d-flex align-center justify-space-between">
           <span class="text-caption text-disabled">
-            {{ results.length }} de {{ allData.length }} músicas
+            {{ results.length }} de {{ matchedResults.length }} resultados
           </span>
           <span class="text-caption text-disabled">
             ↑↓ navegar &nbsp;·&nbsp; Enter abrir &nbsp;·&nbsp; Esc fechar
@@ -137,12 +137,18 @@ export default {
       get() { return this.modelValue; },
       set(v) { this.$emit('update:modelValue', v); },
     },
-    results() {
+    // Todos os resultados que batem com a busca (sem limite) — usado pra
+    // saber o total real de correspondências, não só quantos são exibidos.
+    matchedResults() {
       const q = this.$string.clean(this.search.trim());
       if (!q) return [];
-      return this.allData
-        .filter(item => item._nc.includes(q) || item._ac.includes(q))
-        .slice(0, 10);
+      return this.allData.filter(item => item._nc.includes(q) || item._ac.includes(q));
+    },
+    // Recorte exibido na lista (a lista já rola — ver max-height do v-list —
+    // então não precisa ficar tão curto quanto antes; 10 escondia buscas com
+    // muitas correspondências, ex. nomes comuns repetidos em vários álbuns).
+    results() {
+      return this.matchedResults.slice(0, 50);
     },
   },
 

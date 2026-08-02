@@ -22,8 +22,8 @@
         "info": "Active para permitir que otros dispositivos en la misma red controlen este programa de forma remota, y para generar una página de transmisión (letras/fondo) para usar en OBS o vMix.",
         "start": "Activar",
         "stop": "Desactivar",
-        "running": "Activo",
-        "stopped": "Inactivo",
+        "running": "Activado",
+        "stopped": "Desactivado",
         "token": "Token de acceso",
         "regenerate_token": "Generar nuevo token",
         "regenerate_confirm": "Generar un nuevo token desconecta los dispositivos ya conectados. ¿Continuar?",
@@ -31,6 +31,8 @@
         "control_page": "Página de control remoto",
         "mirror_page": "Página de transmisión (OBS/vMix)",
         "copy": "Copiar",
-        "copied": "¡Copiado!"
+        "copied": "¡Copiado!",
+        "firewall_warning": "No fue posible liberar el puerto automáticamente en el Firewall de Windows. Si el código QR no abre en el celular, intente ejecutar LouvorJA como administrador o libere el puerto manualmente en el Firewall de Windows.",
+        "other_ips": "Si el código QR no abre, su computadora puede tener más de una red — pruebe una de estas direcciones manualmente:"
     }
 }

@@ -49,6 +49,15 @@ let returnWindow  = null;
 let loadingWindow = null;
 let pipWindow     = null;
 
+// Espelha "popup_module" (ver relay de 'state-update' abaixo) — só pra saber,
+// aqui no processo main, qual módulo está projetado agora. Necessário porque
+// o ESC em módulos com iframe (ex. web_link, ver 'before-input-event' em
+// createOutputWindow) não chega no listener de keydown do renderer quando o
+// foco do teclado está dentro do iframe (conteúdo de outra origem não
+// propaga eventos de teclado pro documento pai) — o processo main consegue
+// interceptar antes disso, mas só deve agir para o módulo certo.
+let currentPopupModule = null;
+
 // Previne múltiplas instâncias
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -220,6 +229,25 @@ function createMainWindow() {
   });
 }
 
+// Repinta uma janela transparente algumas vezes ao longo de ~300ms. Motivo:
+// criar uma janela em camadas (transparent+alwaysOnTop) nova pode fazer OUTRA
+// janela transparente já aberta perder a composição de alpha no Windows e
+// renderizar em preto sólido até o próximo repaint (ver comentários em
+// createOutputWindow/createReturnWindow) — mas esse "furo" do DWM acontece de
+// forma assíncrona, um pouco DEPOIS que a nova janela é de fato apresentada,
+// não no instante do show()/ready-to-show. Uma única chamada de invalidate()
+// imediata corre o risco de rodar ANTES do glitch acontecer e não ter efeito
+// nenhum — foi o que deixava a saída principal "preta" (parecendo encerrada)
+// ao abrir o retorno. Repetir cobre essa janela de tempo sem depender do
+// usuário mexer na janela pra forçar um repaint real.
+function nudgeRepaint(win) {
+  for (const delay of [0, 60, 150, 300]) {
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.webContents.invalidate();
+    }, delay);
+  }
+}
+
 // ── Janela de saída (apresentação) ────────────────────────────────────────────
 function createOutputWindow(moduleId, displayId) {
   if (outputWindow && !outputWindow.isDestroyed()) {
@@ -245,6 +273,12 @@ function createOutputWindow(moduleId, displayId) {
     x, y, width, height,
     frame: false,
     fullscreen: isExternal,
+    // Sem isso, mesmo sem frame visível o Windows ainda deixa arrastar as
+    // bordas invisíveis pra redimensionar e a janela inteira pra mover — a
+    // saída tem que ficar travada exatamente no tamanho/posição do monitor
+    // escolhido, nunca ajustável pelo usuário.
+    resizable: false,
+    movable: false,
     alwaysOnTop: !isDev,
     transparent: true,
     backgroundColor: '#00000000',
@@ -260,14 +294,40 @@ function createOutputWindow(moduleId, displayId) {
     show: false,
   });
 
+  // ESC com o link (web_link) projetado: se o foco do teclado estiver dentro
+  // do iframe (ex.: cliques nos controles do player do YouTube), o keydown
+  // não propaga pro documento pai — o listener de ESC do renderer nunca
+  // dispara nesse caso. 'before-input-event' intercepta a tecla antes da
+  // Chromium decidir pra qual frame entregar, então funciona independente
+  // de qual frame está com o foco. Só age pro web_link — outros módulos já
+  // têm seu próprio tratamento de ESC no renderer (ver views/Popup.vue e
+  // video_player/interface/Popup.vue) e não precisam dessa via alternativa.
+  outputWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape' && currentPopupModule === 'web_link') {
+      fadeOutAndClose(outputWindow);
+    }
+  });
+
   const hash = moduleId ? `#/popup?module=${moduleId}` : '#/popup';
   outputWindow.loadURL(getAppUrl(hash));
 
   outputWindow.once('ready-to-show', () => {
+    // Reforça bounds (+ fullscreen quando externo) antes de exibir — mesmo
+    // motivo do createReturnWindow logo abaixo: em alguns casos no Windows a
+    // opção do construtor não é suficiente sozinha e sobra uma faixa do
+    // monitor descoberta, ou o usuário consegue "descolar" a janela do
+    // tamanho certo antes desse reforço rodar.
+    outputWindow.setBounds({ x, y, width, height });
+    if (isExternal) outputWindow.setFullScreen(true);
+    outputWindow.setResizable(false);
+    outputWindow.setMovable(false);
     outputWindow.show();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('output-window-opened');
     }
+    // Mesmo nudge de repaint do lado do retorno (ver createReturnWindow) —
+    // cobre o caso inverso: abrir a saída principal com o retorno já aberto.
+    nudgeRepaint(returnWindow);
   });
 
   outputWindow.on('closed', () => {
@@ -303,6 +363,11 @@ function createReturnWindow(displayId) {
     x, y, width, height,
     frame: false,
     closable: false,
+    // Sempre fullscreen (não só em monitor externo) — a janela precisa
+    // preencher o monitor por completo em qualquer configuração; sem isso,
+    // no Windows a borda de resize invisível do frame frameless deixava uma
+    // faixa sem cobrir a tela (o usuário conseguia até arrastar pra redimensionar).
+    fullscreen: true,
     alwaysOnTop: !isDev,
     // Transparente (igual à janela de saída) — sem isso, antes de qualquer
     // música tocar (visible=false em ReturnScreen.vue) a janela mostrava o
@@ -324,10 +389,25 @@ function createReturnWindow(displayId) {
   returnWindow.loadURL(getAppUrl('#/return-screen'));
 
   returnWindow.once('ready-to-show', () => {
+    // Reforça bounds + fullscreen antes de exibir — em alguns casos no Windows
+    // a opção "fullscreen" do construtor não é suficiente por si só (a janela
+    // fica só com o tamanho x/y/width/height inicial, deixando uma faixa do
+    // monitor descoberta). Chamar de novo aqui garante a cobertura total.
+    returnWindow.setBounds({ x, y, width, height });
+    returnWindow.setFullScreen(true);
+    returnWindow.setResizable(false);
     returnWindow.show();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('return-window-opened');
     }
+    // Bug conhecido do Chromium/Electron no Windows: criar uma NOVA janela
+    // transparente pode fazer janelas transparentes JÁ abertas (aqui, a saída
+    // principal) perderem a composição de alpha e renderizarem com fundo
+    // sólido preto até o próximo repaint — mesmo em monitores diferentes, sem
+    // nenhuma sobreposição visual real. nudgeRepaint() força esse repaint
+    // (repetidas vezes — ver comentário na função) sem esperar o usuário
+    // mexer na janela pra "descongelar".
+    nudgeRepaint(outputWindow);
   });
 
   returnWindow.on('closed', () => {
@@ -550,12 +630,17 @@ function registerIpcHandlers() {
     createOutputWindow(moduleId, displayId);
     return true;
   });
+  // Fecha só a projeção principal — a tela de retorno é independente (pode
+  // estar espelhando outra coisa, ou ter um módulo fixado nela via "Enviar
+  // para o retorno") e não deve ser derrubada só porque a saída principal
+  // fechou. Antes, esse handler sempre destruía returnWindow junto, então
+  // projetar/fechar algo na saída principal também tirava o que estava sendo
+  // exibido independentemente no retorno. A própria reatividade de
+  // ReturnScreen.vue (popup_module/return_popup_module) já cuida de deixar o
+  // retorno transparente quando não há mais nada ativo pra mostrar — sem
+  // precisar fechar a janela.
   ipcMain.handle('output:close', async () => {
-    if (returnWindow && !returnWindow.isDestroyed()) {
-      returnWindow.webContents.send('return-closing');
-    }
     await fadeOutAndClose(outputWindow);
-    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
     return true;
   });
   ipcMain.handle('output:is-open', () => {
@@ -565,6 +650,12 @@ function registerIpcHandlers() {
     if (outputWindow && !outputWindow.isDestroyed()) {
       outputWindow.webContents.send('set-module', moduleId);
     }
+    return true;
+  });
+  // Ver comentário em preload.js (invalidateOutput) — nudge de repaint pro
+  // bug de janela transparente renderizando preto.
+  ipcMain.handle('output:invalidate', () => {
+    if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.invalidate();
     return true;
   });
 
@@ -628,6 +719,22 @@ function registerIpcHandlers() {
   // saltar de volta pra um tempo antigo — visualmente "reiniciava" o vídeo.
   ipcMain.on('state-update', (_, data) => {
     remoteServer.applyStateEntry(data);
+
+    // Lembra se a projeção deve reabrir sozinha na próxima vez que o app for
+    // aberto (ver restauração em ipcMain.once('app:loaded') abaixo) — "" (só
+    // acontece quando o operador fecha a projeção de propósito, ver
+    // Popup.js#exit) marca que NÃO deve reabrir; qualquer módulo real marca
+    // que deve, com esse módulo.
+    if (data && data.param === 'popup_module') {
+      currentPopupModule = data.value || null;
+      if (data.value) {
+        Store.set('output_window_was_open', true);
+        Store.set('output_window_last_module', data.value);
+      } else {
+        Store.set('output_window_was_open', false);
+      }
+    }
+
     if (data && data.target === 'output') {
       if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update', data);
       return;
@@ -686,6 +793,21 @@ function registerIpcHandlers() {
   // Vue sinaliza que está pronto: fade-in da janela principal + fecha loading
   ipcMain.once('app:loaded', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    // Restaura a projeção que estava aberta quando o app foi fechado da
+    // última vez — sem isso, o operador precisa reabrir manualmente o mesmo
+    // módulo toda vez que reinicia o app, mesmo tendo deixado a projeção
+    // ativa antes de fechar. O module_id é o único dado que falta pra
+    // createOutputWindow reabrir igual estava (o monitor já é resolvido via
+    // "output_display_id", que createOutputWindow já lê sozinho).
+    if (Store.get('output_window_was_open')) {
+      const lastModule = Store.get('output_window_last_module');
+      if (lastModule) {
+        createOutputWindow(lastModule);
+        mainWindow.webContents.send('restore-output-state', lastModule);
+      }
+    }
+
     let opacity = 0;
     const step = () => {
       opacity = Math.min(1, opacity + 0.06);
@@ -799,5 +921,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  remoteServer.stop();
+  // stopServer() (não stop()): libera porta/firewall sem marcar a preferência
+  // "enabled" como desligada — isso roda em TODO fechamento do app, então
+  // usar stop() aqui faria "Transmitir" nunca reabrir sozinho na próxima vez.
+  remoteServer.stopServer();
 });

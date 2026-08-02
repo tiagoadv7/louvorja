@@ -3,6 +3,7 @@
     <l-player v-if="$media.isMinimized()" location="footer" />
     <l-player v-else-if="videoActive" location="footer" source="video" />
     <l-player v-else-if="soundmasterActive" location="footer" source="soundmaster" />
+    <l-player v-else-if="webLinkActive" location="footer" source="web_link" />
     <v-row v-else class="ma-0 pa-0 align-center">
       <span class="text-caption pa-1">Versão {{ version }}</span>
       <v-spacer />
@@ -47,6 +48,13 @@ export default {
     // SoundMaster (coletânea) minimizado e tocando/pausado algo
     soundmasterActive() {
       return this.$soundMaster.isMinimized() && !!this.$soundMaster.nowPlaying().name;
+    },
+    // Link do YouTube (aberto pela Liturgia) com o painel dela escondido —
+    // mesmo critério de "isMinimized" do vídeo/coletânea acima (ver
+    // WebLink.js#isMinimized), só que baseado na visibilidade do painel da
+    // Liturgia (quem abriu o link), já que "web_link" não é um módulo próprio.
+    webLinkActive() {
+      return this.$webLink.isMinimized();
     },
   },
   methods: {

@@ -17,7 +17,15 @@
         <button
           v-for="day in DAYS"
           :key="day.key"
-          :class="['lt-day', { 'lt-day--active': currentDay === day.key, 'lt-day--sabado': day.key === 'sabado' }]"
+          :class="[
+            'lt-day',
+            {
+              'lt-day--active':  currentDay === day.key,
+              'lt-day--sabado':  day.key === 'sabado',
+              'lt-day--domingo': day.key === 'domingo',
+              'lt-day--quarta':  day.key === 'quarta',
+            },
+          ]"
           @click="currentDay = day.key"
         >
           <v-icon size="14">{{ day.key === 'sabado' ? 'mdi-calendar-star' : 'mdi-calendar-outline' }}</v-icon>
@@ -141,11 +149,31 @@
                 <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
                 <div class="lt-item-actions" @click.stop>
+                  <!-- Link do YouTube: controles de reprodução (play/pause/parar,
+                       com fade — ver $webLink/WebLinkFrame.vue) iguais aos do
+                       video_player, em vez do botão de play genérico abaixo. -->
+                  <template v-if="item.type === 'link' && item.url && $webLink.isYoutube(item.url)">
+                    <button
+                      class="lt-row-btn lt-row-btn--play"
+                      :title="isYoutubeItemPlaying(item) ? 'Pausar' : 'Reproduzir'"
+                      @click="toggleYoutubeItem(item, idx)"
+                    >
+                      <v-icon size="17">{{ isYoutubeItemPlaying(item) ? 'mdi-pause-circle-outline' : 'mdi-play-circle-outline' }}</v-icon>
+                    </button>
+                    <button
+                      v-if="isYoutubeItemActive(item)"
+                      class="lt-row-btn"
+                      title="Encerrar"
+                      @click="$webLink.stop()"
+                    >
+                      <v-icon size="15">mdi-stop-circle-outline</v-icon>
+                    </button>
+                  </template>
                   <!-- Música (coletânea/hinário) já tem seus próprios controles no
                        MusicMenuTable (cantado/instrumental/letra) — o botão de play
                        genérico aqui seria redundante. -->
                   <button
-                    v-if="isPlayable(item) && item.type !== 'musica'"
+                    v-else-if="isPlayable(item) && item.type !== 'musica'"
                     class="lt-row-btn lt-row-btn--play"
                     @click="playItem(item, idx)"
                   >
@@ -611,6 +639,18 @@ const DAYS = [
   { key: 'sabado',  label: 'Sábado'  },
 ];
 
+// Date.prototype.getDay() já retorna 0=domingo...6=sábado — mesma ordem do
+// array DAYS acima, então o índice bate direto, sem precisar de mapa.
+const todayDayKey = () => DAYS[new Date().getDay()].key;
+
+// Data local (não UTC, pra não pular de dia perto da meia-noite) no formato
+// AAAA-MM-DD — usada só pra saber se hoje já foi sincronizado, não pra exibir.
+const todayDateStr = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const FONTS = ['Tahoma', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana'];
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 
@@ -619,7 +659,7 @@ const TYPES = [
   { value: 'categoria', title: 'Categoria', desc: 'Separador visual de seção',                      icon: 'mdi-tag-outline',                    color: '#fb8c00' },
   { value: 'musica',    title: 'Música',    desc: 'Selecione uma música do Hinário ou Coletânea',   icon: 'mdi-music-note',                     color: '#43a047' },
   { value: 'midia',     title: 'Mídia',     desc: 'Selecione qualquer arquivo (vídeo, imagem, áudio ou outro)', icon: 'mdi-file-video-outline', color: '#fb8c00' },
-  { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para abrir no navegador',       icon: 'mdi-link-variant',                   color: '#26a69a' },
+  { value: 'link',      title: 'Link',      desc: 'Adicione uma URL para projetar em tela cheia (Canva, YouTube, etc.)', icon: 'mdi-link-variant', color: '#26a69a' },
 ];
 
 const TYPE_LABEL = {
@@ -1028,6 +1068,14 @@ export default {
   },
 
   watch: {
+    // Ao abrir o painel, pula pra aba do dia da semana correspondente a hoje
+    // — mas só na PRIMEIRA vez no dia (ver _syncDayIfNewDay): depois disso,
+    // clicar manualmente em outra aba tem que "pegar" e continuar valendo em
+    // reaberturas seguintes (minimizar/restaurar, etc.), sem ser puxado de
+    // volta pra hoje toda vez que o painel reabre.
+    'module.show'(show) {
+      if (show) this._syncDayIfNewDay();
+    },
     addDialog(v) {
       if (v && !this.allMusics.length) this.loadMusics();
     },
@@ -1056,7 +1104,30 @@ export default {
       }
       return result;
     },
-    close() { this.$modules.close(this.module_id); },
+    // Limpa a seleção (checkbox) de itens em TODOS os dias — usada ao fechar
+    // de vez a janela (não ao minimizar, ver comentário em close() abaixo) e
+    // também ao encerrar o app (ver App.vue). "selected" é só uma marcação
+    // transitória pras ações em lote da toolbar (Concluir/Bloquear/Apagar/
+    // Copiar), não faz sentido continuar marcado na próxima vez que a
+    // liturgia for aberta.
+    clearAllSelections() {
+      const days = this.$userdata.get('modules.liturgia.days') || {};
+      for (const key of Object.keys(days)) {
+        const items = days[key]?.items;
+        if (!Array.isArray(items) || !items.some(i => i.selected)) continue;
+        this.$userdata.set(
+          `modules.liturgia.days.${key}.items`,
+          items.map(i => (i.selected ? { ...i, selected: false } : i)),
+        );
+      }
+    },
+    // Só a janela fechando de vez (botão fechar) — minimizar não passa por
+    // aqui (ver @minimize="$modules.minimize(...)" no template), então a
+    // seleção sobrevive normalmente a um minimizar/restaurar.
+    close() {
+      this.clearAllSelections();
+      this.$modules.close(this.module_id);
+    },
 
     typeLabel(t) { return TYPE_LABEL[t] || t; },
     typeIcon(t)  { return TYPE_ICON[t]  || 'mdi-circle-outline'; },
@@ -1121,13 +1192,12 @@ export default {
     resolvePendingMusic(m) {
       const l = [...this.dayItems];
       const item = l[this.pickMusicIndex];
+      // Não grava id_music/duração no item: "escolhida na hora" é um slot
+      // reaproveitado (ex.: liturgia semanal), não uma música fixa — assim que
+      // executada, o item volta a ficar pendente (item.id_music == null) e os
+      // botões de escolher música reaparecem, prontos pra próxima vez.
       l[this.pickMusicIndex] = {
         ...item,
-        // Mantém o nome do item (ex.: "Música 1") — só marca como concluído
-        // em vez de substituir pelo nome da música escolhida.
-        id_music: m.id_music,
-        has_instrumental_music: !!m.has_instrumental_music,
-        duration: m.duration ? Math.ceil(Number(m.duration) / 60) : item.duration,
         done: true,
       };
       this.dayItems = l;
@@ -1355,11 +1425,17 @@ export default {
       l[idx] = { ...l[idx], done: true };
       this.dayItems = l;
     },
+    // "arquivo" (tipo legado "Arquivo/Diretório", vindo de liturgias .ja
+    // importadas) não fica restrito a extensões de áudio reconhecidas: sem
+    // isso, um item cujo caminho não existe mais nesta máquina (ex.: liturgia
+    // exportada de outro computador) nem chega a acionar a checagem de
+    // "arquivo não encontrado" em playItem() — a linha simplesmente não tinha
+    // botão de play nem reagia ao clique.
     isPlayable(item) {
       return (item.type === 'musica' && !!item.id_music)
         || (item.type === 'midia' && !!item.url)
         || (item.type === 'link' && !!item.url)
-        || (item.type === 'arquivo' && !!item.url && isAudioFile(item.url));
+        || (item.type === 'arquivo' && !!item.url);
     },
     // O tipo "midia" só faz sentido para vídeo/imagem (toca no video_player);
     // qualquer outro arquivo (áudio, ou qualquer outro tipo) vira "arquivo" —
@@ -1370,11 +1446,86 @@ export default {
       if (type === 'midia' && !isImageFile(url) && !isVideoFile(url)) return 'arquivo';
       return type;
     },
-    playItem(item, idx) {
+    // "midia"/"arquivo" guardam um caminho absoluto do disco — ao importar uma
+    // liturgia (.ja) exportada de outro computador, esse caminho quase sempre
+    // não existe na máquina atual. Confere antes de tentar tocar e, se não
+    // achar, oferece atualizar o local do arquivo em vez de falhar em silêncio.
+    async playItem(item, idx) {
+      if ((item.type === 'midia' || item.type === 'arquivo') && item.url && this.$electron.isElectron()) {
+        const exists = await this.$electron.fileExists(item.url);
+        if (!exists) {
+          this.promptRelinkFile(item, idx);
+          return;
+        }
+      }
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
       else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name, { addToPlaylist: false });
-      else if (item.type === 'link' && item.url) this.$electron.openExternal(item.url);
+      // Projeta em tela cheia na janela de saída (Canva, YouTube, qualquer
+      // link) em vez de abrir no navegador externo do Windows.
+      else if (item.type === 'link' && item.url) this.$webLink.open(item.url);
       else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
+      if (idx != null) this.markItemDone(idx);
+    },
+
+    // Mesmo padrão de modal usado em Media.js (alerts.not_loaded_offline) pra
+    // arquivo de música não encontrado no dispositivo — aqui pro arquivo/mídia
+    // local da Liturgia, com a ação de atualizar o caminho em vez de baixar.
+    promptRelinkFile(item, idx) {
+      this.$alert.show(
+        {
+          title: 'Arquivo não encontrado',
+          text: `"${item.name}" não foi encontrado neste computador. Isso costuma acontecer ao importar uma liturgia exportada de outro computador. Deseja atualizar o local do arquivo?`,
+          color: 'warning',
+          translate: false,
+          buttons: [
+            { text: 'Cancelar', color: 'grey', value: 'cancel' },
+            { text: 'Atualizar arquivo', color: 'primary', value: 'update' },
+          ],
+        },
+        (val) => {
+          if (val === 'update') this.relinkItemFile(idx);
+        },
+      );
+    },
+
+    // Reabre o seletor de arquivo pra apontar o item pro caminho correto nesta
+    // máquina — só substitui o caminho, sem tocar em seguida (evita executar
+    // um arquivo sem o operador ter escolhido isso; pra tocar, ele clica no
+    // item normalmente depois).
+    async relinkItemFile(idx) {
+      const item = this.dayItems[idx];
+      if (!item) return;
+      const fp = await this.$electron.selectFile({
+        title: 'Selecionar arquivo',
+        filters: [
+          {
+            name: 'Vídeo, Imagem ou Áudio',
+            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
+          },
+          { name: 'Todos os arquivos', extensions: ['*'] },
+        ],
+      });
+      if (!fp) return;
+      const l = [...this.dayItems];
+      l[idx] = { ...l[idx], url: fp, type: this.resolvedType('midia', fp) };
+      this.dayItems = l;
+    },
+
+    // Este item do YouTube é o que está ativo agora na projeção (mesmo vídeo
+    // já aberto, tocando ou pausado) — controla se o botão "Encerrar"
+    // aparece e se o ícone de play mostra o estado de pausa.
+    isYoutubeItemActive(item) {
+      const id = this.$webLink.extractVideoId(item.url);
+      return !!id && id === (this.$appdata.get('modules.web_link.config.videoId') || null);
+    },
+    isYoutubeItemPlaying(item) {
+      return this.isYoutubeItemActive(item) && !!this.$appdata.get('modules.web_link.config.isPlaying');
+    },
+    // Clique único: abre o vídeo (se ainda não for o ativo) ou alterna
+    // play/pause do mesmo vídeo já projetado — igual ao video_player.
+    toggleYoutubeItem(item, idx) {
+      if (this.isYoutubeItemActive(item)) this.$webLink.togglePlay();
+      else this.$webLink.open(item.url);
       if (idx != null) this.markItemDone(idx);
     },
 
@@ -1413,9 +1564,11 @@ export default {
 
       let raw = null;
       try {
-        // O arquivo .ja é salvo pelo app antigo em Windows-1252; 'latin1'
-        // decodifica corretamente os acentos nesse intervalo de bytes.
-        raw = await this.$electron.readFile(fp, 'latin1');
+        // O arquivo .ja é salvo pelo app antigo normalmente em Windows-1252,
+        // mas alguns aparecem em UTF-8 (com ou sem BOM) — 'auto' detecta a
+        // codificação real em vez de assumir sempre latin1 (que duplicava a
+        // decodificação dos acentos nesses arquivos UTF-8, ex.: "ã" → "Ã£").
+        raw = await this.$electron.readFile(fp, 'auto');
       } catch (_) {
         raw = null;
       }
@@ -1546,6 +1699,24 @@ export default {
       });
       this.copyDaysDialog = false;
     },
+
+    // Sincroniza a aba com o dia da semana de hoje só na primeira vez que o
+    // painel abre em cada dia (compara com a última data sincronizada,
+    // salva em $userdata) — reaberturas seguintes no MESMO dia preservam
+    // qualquer aba escolhida manualmente pelo operador.
+    _syncDayIfNewDay() {
+      const today = todayDateStr();
+      if (this.$userdata.get('modules.liturgia.lastSyncDate', '') === today) return;
+      this.$userdata.set('modules.liturgia.lastSyncDate', today);
+      this.currentDay = todayDayKey();
+    },
+  },
+
+  mounted() {
+    // Cobre o caso do painel já estar aberto quando o componente monta (ex.:
+    // estado restaurado do início do app) — o watch de "module.show" só
+    // reage a mudanças depois de montado, não ao valor já vigente.
+    if (this.module.show) this._syncDayIfNewDay();
   },
 };
 </script>
@@ -1604,6 +1775,17 @@ export default {
 .v-theme--dark .lt-day--sabado:not(.lt-day--active) { color: #ffd54f; }
 .lt-day--sabado.lt-day--active { background: #d4af37; color: #3a2c00; }
 .v-theme--dark .lt-day--sabado.lt-day--active { background: #ffd54f; color: #1a1a2e; }
+
+/* Domingo e Quarta — dias de culto principal, cada um com sua cor própria */
+.lt-day--domingo:not(.lt-day--active) { color: #1565c0; }
+.v-theme--dark .lt-day--domingo:not(.lt-day--active) { color: #64b5f6; }
+.lt-day--domingo.lt-day--active { background: #1565c0; color: #fff; }
+.v-theme--dark .lt-day--domingo.lt-day--active { background: #64b5f6; color: #0d1b2a; }
+
+.lt-day--quarta:not(.lt-day--active) { color: #00695c; }
+.v-theme--dark .lt-day--quarta:not(.lt-day--active) { color: #4db6ac; }
+.lt-day--quarta.lt-day--active { background: #00695c; color: #fff; }
+.v-theme--dark .lt-day--quarta.lt-day--active { background: #4db6ac; color: #0a2420; }
 
 .lt-days-sep {
   width: 1px;

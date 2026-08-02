@@ -12,6 +12,7 @@ const { controlPageHtml, mirrorPageHtml } = require('./remote_pages');
 let server       = null;
 let port         = 0;
 let fwRule       = null;
+let fwStatus     = null;
 let mainWindowRef = null;
 const sseClients = new Set();
 const pendingReqs = new Map();
@@ -204,7 +205,12 @@ function sendJson(res, status, obj) {
 }
 
 function sendHtml(res, html) {
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  // Sem no-store, o navegador do celular pode servir uma versão em cache da
+  // página de controle depois de uma atualização do app (HTML/JS gerado aqui
+  // é sempre montado na hora, nunca muda de conteúdo por si só pra precisar
+  // de cache) — o celular ficaria preso numa versão antiga (ex.: sem o botão
+  // de fechar sem confirmação ou o controle de volume) até uma recarga manual.
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(html);
 }
 
@@ -257,6 +263,14 @@ async function handleRequest(req, res) {
     return sendJson(res, 200, r.ok ? { status: 'ok', results: r.results || [] } : { status: 'error', code: r.code || 'ERROR' });
   }
 
+  if (p === '/api/liturgia') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const r = await requestRenderer('get-liturgia', {});
+    return sendJson(res, 200, r.ok
+      ? { status: 'ok', day: r.day || '', items: r.items || [] }
+      : { status: 'error', code: r.code || 'ERROR' });
+  }
+
   if (p === '/api/open-song') {
     if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
     const id  = url.searchParams.get('id');
@@ -265,11 +279,41 @@ async function handleRequest(req, res) {
     return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
   }
 
+  if (p === '/api/open-liturgia') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const r = await requestRenderer('open-liturgia', {});
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  if (p === '/api/close-media') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const r = await requestRenderer('close-media', {});
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  if (p === '/api/get-volume') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const r = await requestRenderer('get-volume', {});
+    return sendJson(res, 200, r.ok ? { status: 'ok', volume: r.volume ?? 100 } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  if (p === '/api/set-volume') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const value = Number(url.searchParams.get('value'));
+    const r = await requestRenderer('set-volume', { value });
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found');
 }
 
 async function start() {
+  // Lembra que o usuário quer o servidor ligado — permite reabrir sozinho na
+  // próxima inicialização do app (ver chamada em electron/ipc.js), já que sem
+  // isso "Transmitir" sempre voltava desligado a cada abertura, mesmo tendo
+  // sido deixado ativado de propósito.
+  Store.set('remote_server.enabled', true);
   if (server) return status();
   getToken();
 
@@ -286,20 +330,36 @@ async function start() {
 
   if (process.platform === 'win32') {
     fwRule = `LouvorJA-Remote-${port}`;
-    require('child_process').exec(
-      `netsh advfirewall firewall add rule name="${fwRule}" dir=in action=allow protocol=TCP localport=${port} profile=any`,
-      { windowsHide: true },
-      () => {},
-    );
+    // "netsh advfirewall" exige elevação — sem admin ele falha em silêncio
+    // (Access is denied), a porta fica bloqueada pro celular e nada acusa o
+    // motivo. Guarda o resultado pra status() poder avisar a UI.
+    await new Promise((resolve) => {
+      require('child_process').exec(
+        `netsh advfirewall firewall add rule name="${fwRule}" dir=in action=allow protocol=TCP localport=${port} profile=any`,
+        { windowsHide: true },
+        (err, stdout, stderr) => {
+          fwStatus = err ? { ok: false, message: (stderr || err.message || '').trim() } : { ok: true };
+          resolve();
+        },
+      );
+    });
+  } else {
+    fwStatus = null;
   }
 
   return status();
 }
 
-function stop() {
+// Libera a porta/regra de firewall sem mexer na preferência "enabled" — usada
+// tanto pelo stop() (usuário desligando de propósito) quanto pelo encerramento
+// do app (electron/main.js#before-quit), que precisa liberar os recursos do SO
+// mas NÃO deve marcar a preferência como desligada (senão "Transmitir" nunca
+// reabriria sozinho, já que o app SEMPRE chama isso ao fechar).
+function stopServer() {
   if (server) { server.close(); server = null; port = 0; }
   for (const res of sseClients) { try { res.end(); } catch (_) { /* já fechado */ } }
   sseClients.clear();
+  fwStatus = null;
   if (process.platform === 'win32' && fwRule) {
     const rule = fwRule;
     fwRule = null;
@@ -308,15 +368,21 @@ function stop() {
   return true;
 }
 
+function stop() {
+  Store.set('remote_server.enabled', false);
+  return stopServer();
+}
+
 function status() {
   const ips = getLocalIps();
-  return { running: !!server, port, ip: ips[0] || '127.0.0.1', ips, token: getToken() };
+  return { running: !!server, port, ip: ips[0] || '127.0.0.1', ips, token: getToken(), firewall: fwStatus };
 }
 
 module.exports = {
   setMainWindow,
   start,
   stop,
+  stopServer,
   status,
   getToken,
   regenerateToken,

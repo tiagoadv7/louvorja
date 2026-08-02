@@ -73,6 +73,12 @@
       </v-card-text>
 
       <template v-if="serverStatus.running">
+        <v-card-text v-if="serverStatus.firewall && serverStatus.firewall.ok === false" class="px-0 pt-0">
+          <v-alert type="warning" density="compact" variant="tonal">
+            {{ t('transmit.firewall_warning') }}
+          </v-alert>
+        </v-card-text>
+
         <v-card-text class="px-0 d-flex gap-4 flex-wrap">
           <div style="flex:1; min-width:280px">
             <v-text-field
@@ -106,6 +112,22 @@
                 <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(link.value)" />
               </template>
             </v-text-field>
+
+            <div v-if="otherIps.length" class="mt-3">
+              <small class="text-medium-emphasis">{{ t('transmit.other_ips') }}</small>
+              <div class="d-flex flex-wrap gap-2 mt-1">
+                <v-chip
+                  v-for="ip in otherIps"
+                  :key="ip"
+                  size="small"
+                  variant="tonal"
+                  :title="controlUrlFor(ip)"
+                  @click="copyText(controlUrlFor(ip))"
+                >
+                  {{ ip }}
+                </v-chip>
+              </div>
+            </div>
           </div>
 
           <div v-if="qrDataUrl" class="d-flex flex-column align-center justify-center">
@@ -281,10 +303,29 @@ const serverUrls = computed(() => {
   const base = `http://${serverStatus.value.ip}:${serverStatus.value.port}`;
   const tk = serverStatus.value.token;
   return [
-    { label: t('transmit.control_page'), value: `${base}/remote?token=${tk}` },
+    // Sem "?token=" de propósito — esse é o link pensado pra ser copiado/
+    // colado (WhatsApp, etc.); o QR code (refreshQrCode) é que carrega o
+    // token embutido pra conectar direto ao ler. Quem abrir este link à mão
+    // cai no modal de token normalmente (ver remote_pages.js).
+    { label: t('transmit.control_page'), value: `${base}/remote` },
     { label: t('transmit.mirror_page'),  value: `${base}/mirror?token=${tk}` },
   ];
 });
+
+// IPs alternativos detectados na máquina — o primeiro (serverStatus.ip) é o
+// escolhido automaticamente pra montar o QR code/links, mas se o PC tiver
+// mais de uma rede ativa (Ethernet + Wi-Fi, VPN, etc.) o escolhido pode não
+// ser o alcançável pelo celular; expõe os demais pra tentativa manual.
+const otherIps = computed(() => {
+  const ips = serverStatus.value.ips || [];
+  return ips.filter((ip) => ip !== serverStatus.value.ip);
+});
+
+function controlUrlFor(ip) {
+  // Sem token — mesmo motivo do link principal em serverUrls (link pra
+  // copiar/compartilhar; token só embutido no QR code).
+  return `http://${ip}:${serverStatus.value.port}/remote`;
+}
 
 async function refreshServerStatus() {
   const status = await proxy.$electron.remoteServerStatus();

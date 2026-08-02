@@ -1,6 +1,6 @@
 {
   "name": "louvorja",
-  "version": "1.29.0",
+  "version": "1.28.8",
   "description": "LouvorJA - Software de Louvor Adventista",
   "author": {
     "name": "Mayco Rolbuche",
@@ -113,7 +113,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LouvorJA",
+      "shortcutName": "Louvor JA",
       "include": "build/installer.nsh"
     },
     "asarUnpack": [

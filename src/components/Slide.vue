@@ -182,6 +182,18 @@ export default {
       }
     },
 
+    // "fill" (opção "Ampliar" do seletor de ajuste) não é uma palavra-chave
+    // válida de CSS para background-size (só existe "cover"/"contain"/"auto"/
+    // valores explícitos) — o navegador ignora silenciosamente esse valor
+    // inválido e cai no padrão "auto" (tamanho nativo da imagem), que some
+    // com o preenchimento e ainda corta o que passar do tamanho da tela
+    // (overflow:hidden). "100% 100%" é o equivalente real de "esticar pra
+    // preencher os dois eixos", que era a intenção dessa opção.
+    cssBackgroundSize(fit) {
+      if (fit === "fill") return "100% 100%";
+      return fit || "cover";
+    },
+
     style_bg(slide) {
       const bg = this.globalBg;
 
@@ -191,11 +203,15 @@ export default {
         backgroundColor:    "rgb(0, 0, 0)",
         backgroundImage:    `url(${slide.image})`,
         backgroundRepeat:   "no-repeat",
+        // ?? (não ||): 0 é "top left", um valor válido do grid — com ||, uma
+        // imagem configurada de propósito pra "top left" (índice 0) caía pro
+        // padrão (5, "center right") só por 0 ser falsy em JS. bgKey() logo
+        // abaixo já fazia esse cálculo certo com ?? — só faltava aqui.
         backgroundPosition: [
           "top left",    "top center",    "top right",
           "center left", "center center", "center right",
           "bottom left", "bottom center", "bottom right",
-        ][this.image_position || 5],
+        ][this.image_position ?? 5],
         backgroundSize: "cover",
       };
 
@@ -217,7 +233,7 @@ export default {
             backgroundImage:    `url(${bg.url})`,
             backgroundRepeat:   "no-repeat",
             backgroundPosition: "center center",
-            backgroundSize:     bg.fit || "cover",
+            backgroundSize:     this.cssBackgroundSize(bg.fit),
           };
         }
 

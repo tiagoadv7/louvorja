@@ -1,6 +1,6 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive }">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive || stopwatchModuleActive }">
       <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
            junto com uma música realmente ativa; some com fade quando ela
            termina. -->
@@ -57,6 +57,13 @@
           <CronometroScreen />
         </div>
       </transition>
+
+      <!-- Idem para o Cronômetro (avulso/manual). -->
+      <transition name="rs-fade">
+        <div v-if="stopwatchModuleActive" class="rs-module-mirror">
+          <StopwatchScreen />
+        </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -64,6 +71,7 @@
 <script>
 import ClockScreen from '@/modules/clock/components/Screen.vue';
 import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
+import StopwatchScreen from '@/modules/stopwatch/components/Screen.vue';
 
 const isElectron = () =>
   typeof window !== 'undefined' &&
@@ -72,7 +80,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen },
 
   data: () => ({
     stateHandler: null,
@@ -90,11 +98,25 @@ export default {
     popupModule() {
       return this.$appdata.get('popup_module');
     },
+    // "return_popup_module" é setado pelo botão "Enviar para o retorno" do
+    // próprio módulo (Relógio/Cronômetro) — manda ele pro retorno mesmo que
+    // não esteja projetado na saída principal. Quando presente, tem
+    // prioridade sobre o espelhamento automático do popup_module (senão os
+    // dois poderiam ficar ativos ao mesmo tempo e sobrepor o mirror).
+    returnPopupModule() {
+      return this.$appdata.get('return_popup_module');
+    },
     clockModuleActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'clock';
       return this.popupModule === 'clock';
     },
     cronometroModuleActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'cronometro_culto';
       return this.popupModule === 'cronometro_culto';
+    },
+    stopwatchModuleActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'stopwatch';
+      return this.popupModule === 'stopwatch';
     },
 
     mediaConfig() {
@@ -112,8 +134,14 @@ export default {
     // Mesmo critério de "ativo" usado pela janela de saída (Popup.vue) +
     // popup_module==='media' pra garantir que não fica com o slide antigo
     // ainda marcado como "show" enquanto outro módulo (relógio/cronômetro)
-    // passou a ser o que está realmente projetado.
+    // passou a ser o que está realmente projetado. Também aceita o mesmo
+    // "forçar para o retorno" (return_popup_module) que Relógio/Cronômetro
+    // já usam — permite manter a música no retorno mesmo se outro módulo
+    // virar o popup_module da saída principal.
     mediaActive() {
+      if (this.returnPopupModule) {
+        return this.returnPopupModule === 'media' && (this.mediaShow || this.mediaMinimized);
+      }
       return this.popupModule === 'media' && (this.mediaShow || this.mediaMinimized);
     },
 
@@ -225,8 +253,9 @@ export default {
         (entries || []).forEach((entry) => this._applyStateEntry(entry));
       });
 
-      // Mesmo sinal dos dois casos de fechamento (return:close direto, ou
-      // output:close em cascata) — aciona o fade de saída da transition.
+      // Só dispara quando o retorno é fechado explicitamente (return:close) —
+      // fechar a saída principal (output:close) NÃO derruba mais o retorno
+      // em cascata, já que os dois são independentes (ver electron/main.js).
       this.closingHandler = window.electron.on('return-closing', () => {
         this.visible = false;
       });
@@ -245,6 +274,16 @@ export default {
         }
         this._applyStateEntry(event.data);
       });
+    },
+
+    // Mesmo padrão de Popup.vue#handleKeyDown — fecha a janela quando ELA
+    // está com o foco (ex.: usuário clicou no monitor de palco e apertou ESC).
+    // O fade em si já é feito pelo próprio return:close (envia "return-closing"
+    // antes de destruir a janela — ver initElectron acima e electron/main.js).
+    handleKeyDown(e) {
+      if (e.key === 'Escape' && isElectron()) {
+        window.electron.closeReturnScreen();
+      }
     },
   },
 
@@ -273,9 +312,11 @@ export default {
     // da música (dentro dela) tem seu próprio fade, controlado por
     // "mediaActive", e o relógio/cronômetro aparecem independente disso.
     this.visible = true;
+    document.addEventListener('keydown', this.handleKeyDown);
   },
   beforeUnmount() {
     clearInterval(this._tickInterval);
+    document.removeEventListener('keydown', this.handleKeyDown);
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off('state-update',   this.stateHandler);
       if (this.batchHandler)  window.electron.off('state-update-batch', this.batchHandler);

@@ -12,6 +12,7 @@
 
 <script>
 import { defineAsyncComponent } from "vue";
+import WebLinkFrame from "@/components/WebLinkFrame.vue";
 
 const isElectron = () =>
   typeof window !== "undefined" &&
@@ -35,6 +36,11 @@ export default {
     moduleComponent() {
       const mod = this.module;
       if (!mod) return null;
+      // "web_link" não é um módulo registrado (sem operador/manifest próprio)
+      // — é só um link (Canva, YouTube, etc.) projetado pela Liturgia via
+      // $webLink.open(), então o componente é resolvido direto aqui, sem
+      // passar pelo import dinâmico de @/modules/*/interface/Popup.vue.
+      if (mod === "web_link") return WebLinkFrame;
       return defineAsyncComponent(() =>
         import(`@/modules/core/${mod}/interface/Popup.vue`).catch(() =>
           import(`@/modules/${mod}/interface/Popup.vue`).catch((e) => {
@@ -162,6 +168,15 @@ export default {
 
     handleKeyDown(e) {
       if (e.key === "Escape") {
+        // O player de vídeo trata o próprio ESC (mesmo efeito do botão
+        // "Parar": só esmaece e para o vídeo/imagem, sem fechar a janela de
+        // saída — ver video_player/interface/Popup.vue#_escHandler). Não dá
+        // pra confiar na ordem de registro dos listeners de keydown pra
+        // evitar que os dois ajam ao mesmo tempo (o componente do módulo
+        // monta de forma assíncrona via defineAsyncComponent, então esse
+        // handler aqui sempre registra primeiro) — por isso o corte
+        // explícito aqui, direto na origem.
+        if (this.module === "video_player") return;
         if (isElectron()) {
           // Inicia fade-out localmente; o main fecha a janela após o delay
           this.startFadeOut();

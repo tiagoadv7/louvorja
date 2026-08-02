@@ -57,6 +57,7 @@ export default {
     _handlers:              [],
     _syncFilesHandler:      null,
     _checkUpdatesHandler:   null,
+    _beforeUnloadHandler:   null,
   }),
 
   mounted() {
@@ -136,18 +137,56 @@ export default {
     // navegação/busca/abrir música vindas de outro dispositivo na mesma rede.
     const onRemoteRequest = this.$electron.on('remote:request', (req) => this.handleRemoteRequest(req));
     if (onRemoteRequest) this._handlers.push(['remote:request', onRemoteRequest]);
+
+    // 8. Restaura a projeção que estava aberta quando o app foi fechado da
+    // última vez — o processo main já recriou a janela de saída sozinho (ver
+    // ipcMain.once('app:loaded') em electron/main.js); aqui só espelhamos o
+    // mesmo estado que $popup.open() deixaria (ver helpers/Popup.js), pra UI
+    // do operador (ex. botão "is_selected" em buttons/Screen.vue) refletir
+    // que já existe um módulo projetado, sem reabrir a janela de novo.
+    const onRestoreOutput = this.$electron.on('restore-output-state', (moduleId) => {
+      if (!moduleId) return;
+      this.$appdata.set('popup', { closed: false, _electron: true });
+      this.$appdata.set('popup_module', moduleId);
+    });
+    if (onRestoreOutput) this._handlers.push(['restore-output-state', onRestoreOutput]);
+
+    // 9. Limpa a seleção (checkbox) de itens da Liturgia ao encerrar o sistema —
+    // mesma limpeza feita ao fechar a janela da Liturgia pelo botão (ver
+    // clearAllSelections() em modules/liturgia/interface/Index.vue), mas essa
+    // roda mesmo se a janela da Liturgia não estiver aberta/montada no
+    // momento (ex.: usuário fechou o app com a Liturgia minimizada) — atua
+    // direto no $userdata, sem depender da instância do componente.
+    this._beforeUnloadHandler = () => this.clearLiturgiaSelections();
+    window.addEventListener('beforeunload', this._beforeUnloadHandler);
   },
 
   beforeUnmount() {
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
     window.removeEventListener('check-updates', this._checkUpdatesHandler);
+    window.removeEventListener('beforeunload', this._beforeUnloadHandler);
   },
 
   methods: {
     handleKeydown() {
       console.log("click ");
       this.$dev.toogle();
+    },
+
+    // Mesma lógica de modules/liturgia/interface/Index.vue#clearAllSelections,
+    // duplicada aqui (sem depender da instância do componente, que pode nem
+    // estar montada nesse momento — ver comentário no mounted() acima).
+    clearLiturgiaSelections() {
+      const days = this.$userdata.get('modules.liturgia.days') || {};
+      for (const key of Object.keys(days)) {
+        const items = days[key]?.items;
+        if (!Array.isArray(items) || !items.some(i => i.selected)) continue;
+        this.$userdata.set(
+          `modules.liturgia.days.${key}.items`,
+          items.map(i => (i.selected ? { ...i, selected: false } : i)),
+        );
+      }
     },
 
     // Abre o verificador de arquivos no startup (dev e prod).
@@ -205,15 +244,45 @@ export default {
       const payload = { reqId, ok: false };
       try {
         if (type === 'keyboard') {
-          const actions = {
-            ArrowUp:    () => this.$media.prevSlide(),
-            ArrowDown:  () => this.$media.nextSlide(),
-            ArrowLeft:  () => this.$media.firstSlide(),
-            ArrowRight: () => this.$media.lastSlide(),
-            Escape:     () => this.$media.close(),
-            Space:      () => this.$media.pause(!this.$appdata.get('modules.media.config.is_paused')),
-          };
-          (actions[params?.key] || (() => {}))();
+          // Controla o que estiver de fato projetado no momento — slide de
+          // música (media), vídeo/imagem local (video_player) ou vídeo do
+          // YouTube aberto pela Liturgia (web_link) — em vez de sempre supor
+          // que é uma música. video_player/web_link não têm "slides", então
+          // ArrowLeft/Right/Up/Down viram avanço/retrocesso (seekBy) ao invés
+          // de navegação de linha/primeira-última.
+          const activeModule = this.$appdata.get('popup_module') || 'media';
+          const key = params?.key;
+          if (activeModule === 'video_player') {
+            const actions = {
+              ArrowUp:    () => this.$videoPlayer.seekBy(30),
+              ArrowDown:  () => this.$videoPlayer.seekBy(-30),
+              ArrowLeft:  () => this.$videoPlayer.seekBy(-10),
+              ArrowRight: () => this.$videoPlayer.seekBy(10),
+              Escape:     () => this.$videoPlayer.stop(),
+              Space:      () => this.$videoPlayer.togglePlay(),
+            };
+            (actions[key] || (() => {}))();
+          } else if (activeModule === 'web_link') {
+            const actions = {
+              ArrowUp:    () => this.$webLink.seekBy(30),
+              ArrowDown:  () => this.$webLink.seekBy(-30),
+              ArrowLeft:  () => this.$webLink.seekBy(-10),
+              ArrowRight: () => this.$webLink.seekBy(10),
+              Escape:     () => this.$webLink.stop(),
+              Space:      () => this.$webLink.togglePlay(),
+            };
+            (actions[key] || (() => {}))();
+          } else {
+            const actions = {
+              ArrowUp:    () => this.$media.prevSlide(),
+              ArrowDown:  () => this.$media.nextSlide(),
+              ArrowLeft:  () => this.$media.firstSlide(),
+              ArrowRight: () => this.$media.lastSlide(),
+              Escape:     () => this.$media.close(),
+              Space:      () => this.$media.pause(!this.$appdata.get('modules.media.config.is_paused')),
+            };
+            (actions[key] || (() => {}))();
+          }
           payload.ok = true;
         } else if (type === 'search-songs') {
           const q = this.$string.clean((params?.q || '').trim());
@@ -223,12 +292,65 @@ export default {
             ? raw
                 .filter((item) => this.$string.clean(item.name).includes(q))
                 .slice(0, 20)
-                .map((item) => ({ id: item.id_music, name: item.name }))
+                // Inclui os álbuns (mesmo campo já usado em QuickSearch.vue) — sem
+                // isso o controle remoto não tinha como distinguir músicas de
+                // mesmo nome pertencentes a álbuns diferentes.
+                .map((item) => ({
+                  id: item.id_music,
+                  name: item.name,
+                  albums: (item.albums || []).map((a) => a.name),
+                }))
             : [];
+          payload.ok = true;
+        } else if (type === 'get-liturgia') {
+          const day = this.$userdata.get('modules.liturgia.currentDay', 'segunda');
+          const items = this.$userdata.get(`modules.liturgia.days.${day}.items`) || [];
+          payload.day = day;
+          payload.items = items.map((i) => ({
+            type: i.type,
+            name: i.name,
+            color: i.color || '',
+            id_music: i.type === 'musica' ? (i.id_music || null) : null,
+          }));
+          payload.ok = true;
+        } else if (type === 'open-liturgia') {
+          // Abre a janela do módulo Liturgia no app (não é sobre projeção) —
+          // permite que o operador abra o painel da liturgia no computador
+          // sem precisar sair de perto do celular.
+          this.$modules.open('liturgia');
           payload.ok = true;
         } else if (type === 'open-song') {
           const mode = params?.tag == 1 ? 'audio' : params?.tag == 2 ? 'instrumental' : 'no_audio';
           await this.$media.open({ id_music: params?.id, mode });
+          payload.ok = true;
+        } else if (type === 'close-media') {
+          // Idem: age sobre o módulo realmente projetado no momento.
+          // force=true no media.close(): sem o diálogo "tem certeza?" padrão —
+          // esse diálogo aparece na tela do computador, não no celular, então o
+          // botão de fechar do controle remoto ficaria travado esperando um
+          // clique que ninguém vai dar ali. video_player/web_link não têm esse
+          // diálogo (stop() já fecha direto).
+          const activeModule = this.$appdata.get('popup_module') || 'media';
+          if (activeModule === 'video_player') this.$videoPlayer.stop();
+          else if (activeModule === 'web_link') this.$webLink.stop();
+          else this.$media.close(true);
+          payload.ok = true;
+        } else if (type === 'get-volume') {
+          const activeModule = this.$appdata.get('popup_module') || 'media';
+          payload.module = activeModule;
+          payload.volume = activeModule === 'video_player' ? this.$appdata.get('modules.video_player.config.volume', 100)
+                          : activeModule === 'web_link'     ? this.$appdata.get('modules.web_link.config.volume', 100)
+                          : this.$appdata.get('modules.media.config.volume', 100);
+          payload.ok = true;
+        } else if (type === 'set-volume') {
+          const activeModule = this.$appdata.get('popup_module') || 'media';
+          const val = Math.round(Number(params?.value));
+          if (Number.isFinite(val)) {
+            const v = Math.max(0, Math.min(100, val));
+            if (activeModule === 'video_player') this.$videoPlayer.setVolume(v);
+            else if (activeModule === 'web_link') this.$webLink.setVolume(v);
+            else this.$media.setVolume(v);
+          }
           payload.ok = true;
         } else {
           payload.code = 'UNKNOWN_TYPE';
