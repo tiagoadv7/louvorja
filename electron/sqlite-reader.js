@@ -589,7 +589,7 @@ class SQLiteReader {
       const showSlCol  = s.ly.show_slide        ? 'show_slide'       : '1 AS show_slide';
       const auxCol     = s.ly.aux_lyric         ? 'aux_lyric'        : 'NULL AS aux_lyric';
       const imgIdCol   = s.ly.id_file_image     ? 'id_file_image'    : 'NULL AS id_file_image';
-      const imgPosCol  = s.ly.image_position    ? 'image_position'   : '5 AS image_position';
+      const imgPosCol  = s.ly.image_position    ? 'image_position'   : '4 AS image_position';
       const timeCol    = s.ly.time              ? 'time'             : "'00:00' AS time";
       const instrTCol  = s.ly.instrumental_time ? 'instrumental_time': "'00:00' AS instrumental_time";
       // id_lyric: mesmo campo que a API expõe, usado pelo componente "Letra completa"
@@ -629,7 +629,7 @@ class SQLiteReader {
         instrumental_time: l.instrumental_time  || '00:00',
         show_slide:        l.show_slide !== 0,
         url_image:         slideImg,
-        image_position:    l.image_position ?? 5,
+        image_position:    l.image_position ?? 4,
       };
     });
 

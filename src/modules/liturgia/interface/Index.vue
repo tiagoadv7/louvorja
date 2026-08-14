@@ -200,6 +200,18 @@
                       <v-icon size="15">mdi-text-box-outline</v-icon>
                     </button>
                   </template>
+                  <!-- Trocar o arquivo de áudio/vídeo/imagem já anexado — antes só
+                       era possível indiretamente, quando o arquivo já não existia
+                       mais no disco (ver promptRelinkFile em playItem). Agora fica
+                       sempre disponível, mesmo em item já executado (done). -->
+                  <button
+                    v-if="(item.type === 'midia' || item.type === 'arquivo') && item.url"
+                    class="lt-row-btn"
+                    title="Trocar arquivo"
+                    @click="relinkItemFile(idx)"
+                  >
+                    <v-icon size="13">mdi-file-replace-outline</v-icon>
+                  </button>
                   <button class="lt-row-btn" title="Duplicar item" @click="duplicateItemBelow(idx)">
                     <v-icon size="13">mdi-content-duplicate</v-icon>
                   </button>
@@ -453,8 +465,11 @@
             </template>
           </template>
 
-          <!-- Mídia -->
-          <template v-else-if="form.type === 'midia'">
+          <!-- Mídia — inclui 'arquivo' (áudio local, tipo derivado de resolvedType()
+               ao salvar/trocar arquivo, nunca escolhido diretamente no step 1):
+               sem esse ramo cobrir 'arquivo' também, editar um item de áudio já
+               existente não mostrava nenhum campo de arquivo (área em branco). -->
+          <template v-else-if="form.type === 'midia' || form.type === 'arquivo'">
             <div class="lt-section-lbl">MÍDIA (QUALQUER ARQUIVO)</div>
             <label class="lt-label">Arquivo local:</label>
             <div class="lt-file-row">
@@ -1020,7 +1035,11 @@ export default {
     },
 
     currentTypeConfig() {
-      return this.TYPES.find(t => t.value === this.form.type);
+      // 'arquivo' é tipo derivado (nunca escolhido no step 1 — ver TYPES), então
+      // não tem entrada própria; usa o ícone/cor de 'midia' (mesmo formulário,
+      // ver template do form) em vez de deixar o cabeçalho do diálogo em branco.
+      const key = this.form.type === 'arquivo' ? 'midia' : this.form.type;
+      return this.TYPES.find(t => t.value === key);
     },
 
     canAdd() {
@@ -1442,9 +1461,15 @@ export default {
     // áudio toca no SoundMaster, os demais ficam como referência na lista
     // (sem botão de play). Mesma regra usada no drag-and-drop (onDropFiles),
     // aplicada também ao arquivo escolhido pelo botão "Selecionar".
+    // Bidirecional: além de rebaixar 'midia' pra 'arquivo' quando o arquivo
+    // escolhido não é imagem/vídeo (comportamento original), também promove
+    // 'arquivo' pra 'midia' quando o novo arquivo (trocado via relinkItemFile
+    // ou editando o item — ver template do form mais abaixo) É imagem/vídeo.
+    // Sem isso, trocar o arquivo de um item de áudio por um vídeo mantinha
+    // type:'arquivo' e playItem() tentava tocar o vídeo no SoundMaster.
     resolvedType(type, url) {
-      if (type === 'midia' && !isImageFile(url) && !isVideoFile(url)) return 'arquivo';
-      return type;
+      if (type !== 'midia' && type !== 'arquivo') return type;
+      return (isImageFile(url) || isVideoFile(url)) ? 'midia' : 'arquivo';
     },
     // "midia"/"arquivo" guardam um caminho absoluto do disco — ao importar uma
     // liturgia (.ja) exportada de outro computador, esse caminho quase sempre

@@ -352,6 +352,32 @@ function setupIpc(mainWindow) {
     }
   };
 
+  // Lê o JSON de um álbum do cache local, ou busca na API como fallback (SEM
+  // persistir em disco). Usado por files:check-albums-complete para avaliar
+  // álbuns que nunca passaram pelo fluxo de download do app — um álbum com
+  // todos os arquivos já presentes (ex: instalação legada do LouvorJA Delphi)
+  // precisa ser reconhecido como completo mesmo sem o album_<id>.json em cache.
+  // Não grava o JSON buscado em disco de propósito: isso faria o álbum
+  // aparecer em "Meus Downloads" só por ter sido exibido na aba Coletâneas.
+  const ensureAlbumJsonCached = async (dbDir, dbBaseUrl, token, albumId) => {
+    const aFile = path.join(dbDir, `album_${albumId}.json`);
+    if (fs.existsSync(aFile)) {
+      try { return JSON.parse(fs.readFileSync(aFile, 'utf8')); }
+      catch (_) { /* cai para busca na API abaixo */ }
+    }
+    if (!dbBaseUrl) return null;
+    try {
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const resp = await net.fetch(`${dbBaseUrl}/album_${albumId}?${date}`, {
+        headers: token ? { 'Api-Token': token } : {},
+      });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch (_) {
+      return null;
+    }
+  };
+
   ipcMain.handle('db:get-local-folder', () => Store.get('db_local_folder', null));
 
   ipcMain.handle('db:set-local-folder', (_, folderPath) => {
@@ -1041,6 +1067,7 @@ function setupIpc(mainWindow) {
     const dbDir   = getDbDir();
     const date    = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const stats   = { json: 0, audio: 0, images: 0, skipped: 0, errors: 0 };
+    let   folderName = null; // definido após ler o JSON do álbum; declarado aqui para ficar visível no closure `dl` abaixo
 
     const send = (current, total, message, step = 'progress') => {
       try { event.sender.send('album:download-progress', { albumId, step, total, current, message }); } catch (_) {}
@@ -1115,7 +1142,7 @@ function setupIpc(mainWindow) {
       };
 
       // Determina folderName: prioridade folder_name da API > extrai do URL > albumName
-      let folderName = albumData.folder_name || albumName;
+      folderName = albumData.folder_name || albumName;
       // Se folderName parece não ter ano (não começa com 4 dígitos), tenta extrair da URL
       if (!/^\d{4}\s*-/.test(folderName) && albumData.musics?.length) {
         // Verifica nos url_music das músicas (se já tiver no album JSON)
@@ -1679,7 +1706,7 @@ function setupIpc(mainWindow) {
                ${hasLTime      ? 'l.time'               : "'00:00' AS time"},
                ${hasLInstrTime ? 'l.instrumental_time'  : "'00:00' AS instrumental_time"}
                ${hasFilesT && hasLFileImg ? ', f.file_name AS img_name' : ", NULL AS img_name"}
-               ${hasLImgPos    ? ', l.image_position' : ", 'center' AS image_position"}
+               ${hasLImgPos    ? ', l.image_position' : ", 4 AS image_position"}
         FROM lyrics l
         ${hasFilesT && hasLFileImg ? 'LEFT JOIN files f ON f.id_file = l.id_file_image' : ''}
         ${hasLLang ? "WHERE l.id_language = 'pt'" : ''}
@@ -1699,7 +1726,10 @@ function setupIpc(mainWindow) {
           lyric:             r.lyric              || '',
           aux_lyric:         r.aux_lyric          || '',
           url_image:         imgUrl,
-          image_position:    r.image_position     || 'center',
+          // ?? (não ||): 0 é "topo-esquerda", posição válida — com ||, uma
+          // linha configurada de propósito pra 0 caía no fallback por 0 ser
+          // falsy em JS, perdendo a posição real definida para esse slide.
+          image_position:    r.image_position     ?? 4,
           time:              r.time               || '00:00',
           instrumental_time: r.instrumental_time  || '00:00',
         });
@@ -1857,6 +1887,7 @@ function setupIpc(mainWindow) {
   let regLocalIp   = '127.0.0.1';
   let registrations = [];
   let regFwRule    = null;
+  let regFwStatus  = null;
 
   function getLocalIps() {
     const os = require('os');
@@ -1883,11 +1914,12 @@ function setupIpc(mainWindow) {
   }
 
   ipcMain.handle('regserver:start', async (event) => {
-    if (regServer) return { port: regPort, ip: regLocalIp, ips: getLocalIps() };
+    if (regServer) return { port: regPort, ip: regLocalIp, ips: getLocalIps(), firewall: regFwStatus };
     const http = require('http');
     const allIps = getLocalIps();
     regLocalIp    = allIps[0] || '127.0.0.1';
     registrations = [];
+    regFwStatus   = null;
 
     const form = `<!DOCTYPE html>
 <html lang="pt">
@@ -1990,22 +2022,33 @@ document.getElementById('f').onsubmit=async(e)=>{
       regServer.on('error', reject);
     });
 
-    // Attempt to open the port in Windows Firewall (requires elevation; fails silently otherwise)
+    // Abre a porta no Firewall do Windows — exige elevação; sem admin falha em
+    // silêncio (Access is denied) e o celular não consegue conectar mesmo na
+    // mesma rede. Aguarda o resultado (como em remote_server.js#start) pra
+    // poder avisar a UI em vez de deixar o QR code parecer quebrado.
     if (process.platform === 'win32') {
       regFwRule = `LouvorJA-Sorteio-${regPort}`;
-      require('child_process').exec(
-        `netsh advfirewall firewall add rule name="${regFwRule}" dir=in action=allow protocol=TCP localport=${regPort} profile=any`,
-        { windowsHide: true },
-        () => {}
-      );
+      await new Promise((resolve) => {
+        require('child_process').exec(
+          `netsh advfirewall firewall add rule name="${regFwRule}" dir=in action=allow protocol=TCP localport=${regPort} profile=any`,
+          { windowsHide: true },
+          (err, stdout, stderr) => {
+            regFwStatus = err ? { ok: false, message: (stderr || err.message || '').trim() } : { ok: true };
+            resolve();
+          },
+        );
+      });
+    } else {
+      regFwStatus = null;
     }
 
-    return { port: regPort, ip: regLocalIp, ips: getLocalIps() };
+    return { port: regPort, ip: regLocalIp, ips: getLocalIps(), firewall: regFwStatus };
   });
 
   ipcMain.handle('regserver:stop', () => {
     if (regServer) { regServer.close(); regServer = null; regPort = 0; }
     registrations = [];
+    regFwStatus = null;
     if (process.platform === 'win32' && regFwRule) {
       const rule = regFwRule;
       regFwRule = null;
@@ -2502,17 +2545,18 @@ document.getElementById('f').onsubmit=async(e)=>{
     }
   });
 
-  // Verifica completude de álbuns específicos baixados via album_<id>.json (fluxo
-  // "Baixar álbum completo" do Centro de Downloads). Diferente de files:scan-albums,
-  // sempre lê os JSONs diretamente por id — não usa o ARQUIVOS_SISTEMA do SQLite
-  // Delphi, cujas entradas têm id_album nulo e não dá pra casar com os ids pedidos
-  // (era por isso que "Meus Downloads" nunca marcava nenhum álbum como completo).
+  // Verifica completude de álbuns específicos por id (usa ensureAlbumJsonCached,
+  // que busca o album_<id>.json na API quando ainda não está em cache — assim
+  // um álbum nunca baixado pelo app, mas com todos os arquivos já presentes
+  // (ex: instalação legada do LouvorJA Delphi), também é avaliado corretamente).
+  // Diferente de files:scan-albums, sempre lê os JSONs diretamente por id — não
+  // usa o ARQUIVOS_SISTEMA do SQLite Delphi, cujas entradas têm id_album nulo e
+  // não dá pra casar com os ids pedidos.
   ipcMain.handle('files:check-albums-complete', async (_event, albumIds, dbBaseUrl, token) => {
     const result = {};
     if (!Array.isArray(albumIds) || !albumIds.length) return result;
 
     const dbDir = getDbDir();
-    if (!fs.existsSync(dbDir)) return result;
 
     const capasR = getAutoCapasDir();
     const capasW = getAutoCapasDir(true);
@@ -2520,12 +2564,8 @@ document.getElementById('f').onsubmit=async(e)=>{
     const imgsW  = getAutoImagesDir(true);
 
     for (const id of albumIds) {
-      const albumFile = path.join(dbDir, `album_${id}.json`);
-      if (!fs.existsSync(albumFile)) continue;
-
-      let albumData;
-      try { albumData = JSON.parse(fs.readFileSync(albumFile, 'utf8')); }
-      catch (_) { continue; }
+      const albumData = await ensureAlbumJsonCached(dbDir, dbBaseUrl, token, id);
+      if (!albumData) continue;
 
       const albumName = albumData.name || `album_${id}`;
       const audioW = getAutoMediaDir(albumData.folder_name || albumName, true);

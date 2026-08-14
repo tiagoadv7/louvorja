@@ -92,10 +92,14 @@ export default {
     loading: false,
     screens: [],
     selectedId: null,
+    outputOpen: false,
     returnOpen: false,
     returnSelectedId: null,
+    _outputOpenedHandler: null,
+    _outputClosedHandler: null,
     _returnOpenedHandler: null,
     _returnClosedHandler: null,
+    _displaysChangedHandler: null,
   }),
   computed: {
     is_desktop() {
@@ -113,27 +117,58 @@ export default {
 
     const saved = await this.$electron.storeGet('output_display_id');
     if (saved) this.selectedId = saved;
+    this.outputOpen = await this.$electron.isOutputOpen();
 
     this.returnOpen = await this.$electron.isReturnScreenOpen();
     const savedReturn = await this.$electron.storeGet('return_display_id');
     if (savedReturn) this.returnSelectedId = savedReturn;
 
+    // Espelha o mesmo evento que SystemBar.vue já escuta — necessário aqui
+    // pra saber se um clique num monitor de saída deve abrir a projeção do
+    // zero ou fechar+reabrir no monitor novo (ver lock()).
+    this._outputOpenedHandler = this.$electron.on('output-window-opened', () => {
+      this.outputOpen = true;
+    });
+    this._outputClosedHandler = this.$electron.on('output-window-closed', () => {
+      this.outputOpen = false;
+    });
     this._returnOpenedHandler = this.$electron.on('return-window-opened', () => {
       this.returnOpen = true;
     });
     this._returnClosedHandler = this.$electron.on('return-window-closed', () => {
       this.returnOpen = false;
     });
+    // Monitor plugado/desplugado ou resolução alterada (ver electron/main.js,
+    // reconcileDisplays()) — a janela de saída/retorno já se reajusta sozinha
+    // do lado do processo main; aqui só precisamos atualizar a lista de cards
+    // exibida, que antes só era recarregada ao reabrir o menu (onToggle).
+    this._displaysChangedHandler = this.$electron.on('displays-changed', () => {
+      this.refreshScreens();
+    });
   },
   beforeUnmount() {
+    if (this._outputOpenedHandler)
+      this.$electron.off('output-window-opened', this._outputOpenedHandler);
+    if (this._outputClosedHandler)
+      this.$electron.off('output-window-closed', this._outputClosedHandler);
     if (this._returnOpenedHandler)
       this.$electron.off('return-window-opened', this._returnOpenedHandler);
     if (this._returnClosedHandler)
       this.$electron.off('return-window-closed', this._returnClosedHandler);
+    if (this._displaysChangedHandler)
+      this.$electron.off('displays-changed', this._displaysChangedHandler);
   },
   methods: {
     async onToggle(open) {
       if (!open) return;
+      await this.refreshScreens();
+    },
+
+    // Recarrega a lista de monitores (cards do menu). Usado tanto ao abrir o
+    // menu (onToggle) quanto reativamente quando o Electron avisa que a
+    // configuração de monitores mudou (plugou/desplugou/mudou resolução) —
+    // ver o listener 'displays-changed' registrado em mounted().
+    async refreshScreens() {
       this.loading = true;
       try {
         this.screens = (await this.$electron.getScreens()) || [];
@@ -150,11 +185,38 @@ export default {
       }
     },
 
+    // Clicar num card de monitor não só memoriza a escolha — já ativa a
+    // projeção nele na hora (o operador não deveria precisar de um segundo
+    // clique em outro lugar pra ver o resultado). Se já estiver projetando
+    // em OUTRO monitor, fecha e reabre no novo (createOutputWindow ignora um
+    // displayId novo enquanto já está aberta — ver electron/main.js).
     async lock(id) {
-      if (this.selectedId === id) return;
+      const movedScreen = this.selectedId !== id;
       this.selectedId = id;
       await this.$electron.storeSet('output_display_id', id);
       this.$userdata.set('modules.theme.output_display_id', id);
+
+      if (this.outputOpen && !movedScreen) return;
+      if (this.outputOpen) await this.$electron.closeOutput();
+
+      // Mesma resolução de módulo do botão de abrir saída (ver
+      // SystemBar.vue#openOutput) — sem um popup_module já definido, usa o
+      // módulo ativo no momento (media minimizado conta como ativo).
+      let moduleId = this.$appdata.get('popup_module');
+      if (!moduleId) {
+        const modules = this.$appdata.get('modules') || {};
+        if (modules?.media?.minimized) {
+          moduleId = 'media';
+        } else {
+          for (const [mid, mod] of Object.entries(modules)) {
+            if (mod && mod.show) { moduleId = mid; break; }
+          }
+        }
+        if (moduleId) this.$appdata.set('popup_module', moduleId);
+      }
+      await this.$electron.openOutput(moduleId, id);
+      this.outputOpen = true;
+      this.$appdata.set('popup', { closed: false, _electron: true });
     },
 
     async identify() {
@@ -172,14 +234,18 @@ export default {
       }
     },
 
+    // Mesma ideia do lock() acima, pro retorno: clicar num card ativa o
+    // monitor de palco na hora, não só memoriza a escolha pra uma próxima
+    // vez que o usuário apertar "Ativar retorno" manualmente.
     async lockReturn(id) {
-      if (this.returnSelectedId === id) return;
+      const movedScreen = this.returnSelectedId !== id;
       this.returnSelectedId = id;
       await this.$electron.storeSet('return_display_id', id);
-      if (this.returnOpen) {
-        await this.$electron.closeReturnScreen();
-        await this.$electron.openReturnScreen(id);
-      }
+
+      if (this.returnOpen && !movedScreen) return;
+      if (this.returnOpen) await this.$electron.closeReturnScreen();
+      await this.$electron.openReturnScreen(id);
+      this.returnOpen = true;
     },
 
     monitorNum(s) {

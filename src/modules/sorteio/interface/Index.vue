@@ -369,6 +369,16 @@
         </div>
         <!-- QR mini quando ativo -->
         <div v-if="regRunning" class="roulette-qr-mini">
+          <v-alert
+            v-if="regFirewall && regFirewall.ok === false"
+            type="warning"
+            density="compact"
+            variant="tonal"
+            class="mb-2"
+            style="font-size:11px"
+          >
+            {{ t('roulette_firewall_warning') }}
+          </v-alert>
           <img v-if="qrDataUrl" :src="qrDataUrl" class="roulette-qr-mini__img" @click="openRegUrl" style="cursor:pointer" />
           <div v-else class="d-flex justify-center py-2"><v-progress-circular size="20" indeterminate /></div>
           <div class="roulette-qr-mini__url">
@@ -624,6 +634,7 @@ export default {
     regPort:    0,
     regIps:     [],
     regCount:   0,
+    regFirewall: null,
     qrDataUrl:  null,
     _regHandler: null,
   }),
@@ -1078,6 +1089,7 @@ export default {
         this.regUrl     = "";
         this.regIps     = [];
         this.regPort    = 0;
+        this.regFirewall = null;
         return;
       }
       const info = await this.$electron.regserverStart();
@@ -1087,6 +1099,7 @@ export default {
       this.regUrl     = `http://${info.ip}:${info.port}`;
       this.regRunning = true;
       this.regCount   = 0;
+      this.regFirewall = info.firewall || null;
 
       // Gerar QR code
       const dataUrl = await this.$electron.qrcodeGenerate(this.regUrl, { width: 200 });

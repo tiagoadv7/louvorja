@@ -1,5 +1,5 @@
 <template>
-  <div class="wl-root" :class="{ 'wl-root--active': videoId || url }">
+  <div class="wl-root" :class="{ 'wl-root--active': videoId || url || loadError }">
     <!-- YouTube: precisa de um elemento próprio pro YT.Player assumir (ele
          substitui esse div por um <iframe> PRÓPRIO dele, sem herdar a classe
          "wl-iframe" nem o tamanho 100%/100% dela — por isso o vídeo aparecia
@@ -12,6 +12,14 @@
       :class="{ 'wl-iframe--fading': isFading }"
     >
       <div id="wl-yt-player" />
+    </div>
+    <!-- onError do YT.Player (vídeo removido/privado ou com incorporação
+         desativada pelo dono — comum em vídeos oficiais de louvor): sem isso
+         a projeção ficava com tela preta parada, sem nenhum aviso pro
+         operador nem pra quem está assistindo. -->
+    <div v-if="loadError" class="wl-error">
+      <v-icon icon="mdi-alert-circle-outline" size="40" class="mb-2" />
+      <div>{{ loadError }}</div>
     </div>
     <!-- Qualquer outro link (Canva, etc.) — sem controle de reprodução,
          só exibição. -->
@@ -58,6 +66,7 @@ export default {
     _fadeInterval: null,
     _playerReady: false,
     _progressInterval: null,
+    loadError: null,
   }),
 
   computed: {
@@ -166,8 +175,36 @@ export default {
             if (event.data === window.YT.PlayerState.ENDED) this._fadeOutAndStop();
             if (event.data === window.YT.PlayerState.PLAYING) this._disableCaptions();
           },
+          onError: (event) => this._handlePlayerError(event.data),
         },
       });
+    },
+
+    // Códigos oficiais da IFrame Player API (developers.google.com/youtube/
+    // iframe_api_reference#onError). 101/150 (dono desativou incorporação) e
+    // 100 (removido/privado) são os mais comuns na prática — vídeo oficial
+    // de louvor com "reprodução em outros sites" desligada, por exemplo. Sem
+    // tratar isso, a projeção ficava com tela preta indefinidamente (o
+    // player nem chega a disparar onReady em vários desses casos), sem
+    // nenhum aviso.
+    _handlePlayerError(code) {
+      const MESSAGES = {
+        2: "Link do vídeo inválido.",
+        5: "Não foi possível reproduzir este vídeo.",
+        100: "Vídeo não encontrado ou privado.",
+        101: "O dono do vídeo desativou a reprodução em outros sites.",
+        150: "O dono do vídeo desativou a reprodução em outros sites.",
+      };
+      this.loadError = MESSAGES[code] || "Não foi possível carregar o vídeo.";
+      // Mesma limpeza de estado do fim natural do vídeo (_fadeOutAndStop),
+      // sem fade — nesses erros normalmente não há áudio tocando ainda.
+      this.$appdata.set('modules.web_link.config.isPlaying', false);
+      this.$appdata.set('modules.web_link.config.url', '');
+      this.$appdata.set('modules.web_link.config.videoId', null);
+      this.$appdata.set('modules.web_link.config.current_time', 0);
+      this.$appdata.set('modules.web_link.config.duration', 0);
+      clearTimeout(this._errorClearTimer);
+      this._errorClearTimer = setTimeout(() => { this.loadError = null; }, 6000);
     },
 
     // cc_load_policy:0 (playerVars) nem sempre é suficiente — se o espectador
@@ -304,6 +341,7 @@ export default {
 
   beforeUnmount() {
     this._teardownPlayer();
+    clearTimeout(this._errorClearTimer);
     this.$electron.off('output-closing', this._closingHandler);
   },
 };
@@ -346,4 +384,16 @@ export default {
   display: block;
 }
 .wl-iframe--fading { opacity: 0; }
+.wl-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  padding: 0 24px;
+  font-size: 1.1rem;
+}
 </style>

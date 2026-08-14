@@ -57,6 +57,7 @@
   "roulette_open_browser": "Abrir no navegador para testar",
   "roulette_qr_hint": "Mesma rede Wi-Fi que o computador",
   "roulette_qr_ip_select": "Tente outro IP se não carregar",
+  "roulette_firewall_warning": "Não foi possível liberar a porta automaticamente no Firewall do Windows. Se o QR code não abrir no celular, tente executar o LouvorJA como administrador ou libere a porta manualmente no Firewall do Windows.",
   "customization": {
     "background": "Fundo",
     "color": "Cor",

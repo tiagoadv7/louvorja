@@ -307,12 +307,63 @@ export default {
           const items = this.$userdata.get(`modules.liturgia.days.${day}.items`) || [];
           payload.day = day;
           payload.items = items.map((i) => ({
+            id: i.id,
             type: i.type,
             name: i.name,
             color: i.color || '',
             id_music: i.type === 'musica' ? (i.id_music || null) : null,
+            // Só um indicador (tem áudio/vídeo/link anexado?) — nunca o caminho
+            // real do arquivo (i.url): o remoto não precisa dele, e abrir por
+            // "id" (ver 'open-liturgia-item' abaixo) evita expor caminhos locais
+            // do computador do operador na rede.
+            has_media: ['midia', 'arquivo', 'link'].includes(i.type) && !!i.url,
           }));
           payload.ok = true;
+        } else if (type === 'open-liturgia-item') {
+          // Abre o áudio/vídeo/link anexado a um item específico da liturgia —
+          // mesma lógica de playItem() em src/modules/liturgia/interface/Index.vue,
+          // reaproveitada aqui porque o remoto só tem o "id" do item (nunca o
+          // caminho do arquivo, ver comentário acima) e precisa resolver o item
+          // de novo a partir dos dados reais da liturgia antes de tocar.
+          const day = params?.day || this.$userdata.get('modules.liturgia.currentDay', 'segunda');
+          const items = this.$userdata.get(`modules.liturgia.days.${day}.items`) || [];
+          const item = items.find((i) => String(i.id) === String(params?.id));
+          if (!item) {
+            payload.code = 'ITEM_NOT_FOUND';
+          } else if (item.type === 'musica' && item.id_music) {
+            await this.$media.open({ id_music: item.id_music, mode: 'audio' });
+            payload.ok = true;
+          } else if (item.type === 'midia' && item.url) {
+            this.$videoPlayer.open(item.url, item.name, { addToPlaylist: false });
+            payload.ok = true;
+          } else if (item.type === 'arquivo' && item.url) {
+            this.$soundMaster.play(item.url, item.name);
+            payload.ok = true;
+          } else if (item.type === 'link' && item.url) {
+            this.$webLink.open(item.url);
+            payload.ok = true;
+          } else {
+            payload.code = 'NOT_PLAYABLE';
+          }
+        } else if (type === 'media-control') {
+          // Controle dedicado de vídeo/áudio, independente do que estiver
+          // "ativo" no momento (popup_module) — sem isso, video_player e
+          // soundmaster (que podem tocar ao mesmo tempo, são módulos
+          // independentes) não tinham como ser fechados/pausados
+          // separadamente pelo controle remoto.
+          const target = params?.target;
+          const action = params?.action;
+          if (target === 'video' && (action === 'toggle' || action === 'stop')) {
+            if (action === 'toggle') this.$videoPlayer.togglePlay();
+            else this.$videoPlayer.stop();
+            payload.ok = true;
+          } else if (target === 'audio' && (action === 'toggle' || action === 'stop')) {
+            if (action === 'toggle') this.$soundMaster.togglePlay();
+            else this.$soundMaster.stop();
+            payload.ok = true;
+          } else {
+            payload.code = 'INVALID_PARAMS';
+          }
         } else if (type === 'open-liturgia') {
           // Abre a janela do módulo Liturgia no app (não é sobre projeção) —
           // permite que o operador abra o painel da liturgia no computador

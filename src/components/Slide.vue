@@ -60,6 +60,28 @@
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+// Grade de posições do fundo (0-8), mesmo layout usado pelo LouvorJA Delphi.
+const BG_POSITIONS = [
+  "top left",    "top center",    "top right",
+  "center left", "center center", "center right",
+  "bottom left", "bottom center", "bottom right",
+];
+const BG_POSITION_CENTER = 4; // "center center"
+
+// Resolve o índice de posição do fundo com tolerância a dados legados: quando
+// a coluna image_position não existia no banco de origem, o importador (ver
+// gerar-banco-json.js e electron/ipc.js) grava a STRING 'center' em vez de um
+// número. Indexar o array de posições com essa string retorna undefined, o
+// que faz o Vue omitir background-position — o navegador cai no padrão
+// "0% 0%" (topo-esquerda) e, com background-size:cover, corta a imagem por
+// baixo (e pela direita) em vez de centralizar, diferente do Delphi original
+// (que sempre centralizava nos dois eixos quando a posição não era definida).
+function resolveBgPositionIndex(value) {
+  if (value === null || value === undefined || value === "") return BG_POSITION_CENTER;
+  const n = Number(value);
+  return (Number.isInteger(n) && n >= 0 && n <= 8) ? n : BG_POSITION_CENTER;
+}
+
 export default {
   name: "SlideComponent",
   props: {
@@ -96,6 +118,13 @@ export default {
       globalBg:       this._readGlobalBg(),
       _bgListener:    null,
       _ipcBgListener: null,
+      // "cover" (padrão) enquanto a imagem do slide atual não foi medida —
+      // ver recomputeDefaultFit(). Evita corte excessivo em imagens com
+      // proporção muito diferente da tela (comuns no catálogo legado do
+      // LouvorJA Delphi), sem abrir mão do preenchimento total da tela nas
+      // imagens cuja proporção já é parecida com a da tela.
+      defaultBgFit:   'cover',
+      _fitCache:      new Map(),
     };
   },
   computed: {
@@ -129,7 +158,7 @@ export default {
       // type='default': texto personalizado sem fundo próprio — o fundo continua
       // sendo a imagem de cada slide, então a key precisa acompanhá-la também.
       if (bg && bg.type && bg.type !== 'default') return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}`;
-      return `bg-default-${this.activeSlide.image || ''}-${this.image_position ?? 5}`;
+      return `bg-default-${this.activeSlide.image || ''}-${resolveBgPositionIndex(this.image_position)}`;
     },
 
     // Estilo do fundo calculado a partir do slide ativo (sem depender do slide em transição)
@@ -180,6 +209,51 @@ export default {
       if (this.slides.length > 3) {
         this.slides[3].destroy = true;
       }
+
+      this.recomputeDefaultFit();
+    },
+
+    // Mede a imagem do slide ativo e decide se "cover" (preenche a tela,
+    // cortando o excesso) cortaria demais — nesse caso usa "contain" (mostra
+    // a imagem inteira, sem cortar). Só se aplica ao fundo PADRÃO do slide
+    // (sem "Fundo Personalizado" ativo, que já tem seu próprio seletor de
+    // ajuste). Roda de novo a cada troca de imagem/slide e a cada resize.
+    recomputeDefaultFit() {
+      const url = this.activeSlide.image;
+      if (!url) { this.defaultBgFit = 'cover'; return; }
+      // Ainda sem o tamanho real do container (setSlide() do mounted() roda
+      // antes do primeiro windowResize()) — aguarda a próxima chamada em vez
+      // de medir e cachear uma decisão baseada em width/height=0.
+      if (!this.width || !this.height) return;
+      if (this._fitCache.has(url)) {
+        this.defaultBgFit = this._fitCache.get(url);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const fit = this._decideFit(img.naturalWidth, img.naturalHeight);
+        this._fitCache.set(url, fit);
+        // Só aplica se ainda for a imagem atual — evita corrida se o slide
+        // trocou de novo enquanto esta imagem carregava.
+        if (this.activeSlide.image === url) this.defaultBgFit = fit;
+      };
+      img.onerror = () => { this._fitCache.set(url, 'cover'); };
+      img.src = url;
+    },
+
+    // Fração da imagem que "cover" cortaria no eixo mais afetado, dada a
+    // proporção da imagem e a proporção do container atual. Acima do limiar,
+    // o corte perde conteúdo visível demais — usa "fill" (estica os dois
+    // eixos pra preencher exatamente a tela, sem cortar e sem barras) em vez
+    // de "contain" (que deixaria barras vazias nas laterais/topo-baixo).
+    _decideFit(imgW, imgH) {
+      if (!imgW || !imgH || !this.width || !this.height) return 'cover';
+      const imgRatio = imgW / imgH;
+      const boxRatio  = this.width / this.height;
+      const cropFraction = imgRatio > boxRatio
+        ? 1 - (boxRatio / imgRatio)
+        : 1 - (imgRatio / boxRatio);
+      return cropFraction > 0.2 ? 'fill' : 'cover';
     },
 
     // "fill" (opção "Ampliar" do seletor de ajuste) não é uma palavra-chave
@@ -203,16 +277,8 @@ export default {
         backgroundColor:    "rgb(0, 0, 0)",
         backgroundImage:    `url(${slide.image})`,
         backgroundRepeat:   "no-repeat",
-        // ?? (não ||): 0 é "top left", um valor válido do grid — com ||, uma
-        // imagem configurada de propósito pra "top left" (índice 0) caía pro
-        // padrão (5, "center right") só por 0 ser falsy em JS. bgKey() logo
-        // abaixo já fazia esse cálculo certo com ?? — só faltava aqui.
-        backgroundPosition: [
-          "top left",    "top center",    "top right",
-          "center left", "center center", "center right",
-          "bottom left", "bottom center", "bottom right",
-        ][this.image_position ?? 5],
-        backgroundSize: "cover",
+        backgroundPosition: BG_POSITIONS[resolveBgPositionIndex(this.image_position)],
+        backgroundSize:     this.cssBackgroundSize(this.defaultBgFit),
       };
 
       // ── Fundo personalizado configurado ──────────────────────────────
@@ -321,6 +387,11 @@ export default {
         if (this.width <= 0 || this.height <= 0) {
           const self = this;
           setTimeout(function () { self.windowResize(); }, 100);
+        } else {
+          // Proporção do container mudou (ex.: troca de monitor) — o corte
+          // de "cover" que era aceitável antes pode não ser mais.
+          this._fitCache.clear();
+          this.recomputeDefaultFit();
         }
       }
     },

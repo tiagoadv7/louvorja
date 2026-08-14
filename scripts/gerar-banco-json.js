@@ -209,7 +209,7 @@ async function main() {
            ${hasLOrder      ? 'l."order"'        : '0 AS "order"'},
            ${hasLShowSlide  ? 'l.show_slide'     : '1 AS show_slide'}
            ${hasFilesT && hasLFileImg ? ', f.file_name AS img_name' : ", NULL AS img_name"}
-           ${hasLImgPos     ? ', l.image_position' : ", 'center' AS image_position"}
+           ${hasLImgPos     ? ', l.image_position' : ", 4 AS image_position"}
     FROM lyrics l
     ${hasFilesT && hasLFileImg ? 'LEFT JOIN files f ON f.id_file = l.id_file_image' : ''}
     ${hasLLang ? "WHERE l.id_language = 'pt'" : ''}
@@ -226,7 +226,9 @@ async function main() {
       lyric:          r.lyric || '',
       aux_lyric:      r.aux_lyric || '',
       url_image:      imgUrl,
-      image_position: r.image_position || 'center',
+      // ?? (não ||): 0 é "topo-esquerda", posição válida — com ||, uma linha
+      // configurada de propósito pra 0 caía no fallback por 0 ser falsy em JS.
+      image_position: r.image_position ?? 4,
     });
   });
 

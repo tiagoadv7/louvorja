@@ -37,6 +37,7 @@ const RECEIVE_CHANNELS = [
   'updater:progress',
   'updater:downloaded',
   'updater:error',
+  'displays-changed',
 ];
 
 contextBridge.exposeInMainWorld('electron', {

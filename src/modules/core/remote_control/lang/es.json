@@ -33,6 +33,8 @@
         "copy": "Copiar",
         "copied": "¡Copiado!",
         "firewall_warning": "No fue posible liberar el puerto automáticamente en el Firewall de Windows. Si el código QR no abre en el celular, intente ejecutar LouvorJA como administrador o libere el puerto manualmente en el Firewall de Windows.",
-        "other_ips": "Si el código QR no abre, su computadora puede tener más de una red — pruebe una de estas direcciones manualmente:"
+        "other_ips": "Si el código QR no abre, su computadora puede tener más de una red — pruebe una de estas direcciones manualmente:",
+        "select_network": "Red/IP a usar",
+        "select_network_hint": "Si la computadora tiene más de una red activa (Wi-Fi, Ethernet, etc.), elija la que el celular/OBS puedan alcanzar."
     }
 }

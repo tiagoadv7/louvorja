@@ -10,18 +10,36 @@ import $modules from "@/helpers/Modules";
 // parâmetro que o botão "Compartilhar > Incorporar" do próprio Canva gera).
 // Aqui a gente aceita o link "normal" que o usuário copia e converte sozinho,
 // sem exigir que ele already saiba montar a URL de incorporação certa.
+// Além de "www.", cobre os links que o app oficial do YouTube gera ao
+// compartilhar no celular ("m.youtube.com") e o subdomínio do YouTube Music
+// ("music.youtube.com") — sem isso, esses links caíam no fallback de
+// iframe genérico (que o próprio youtube.com/watch bloqueia, ver comentário
+// abaixo) e o vídeo não aparecia.
+function normalizeHost(hostname) {
+  return hostname.replace(/^(www|m|music)\./, "");
+}
+
 function toEmbeddableUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    const host = url.hostname.replace(/^www\./, "");
+    const host = normalizeHost(url.hostname);
 
-    if (host === "youtube.com") {
+    // youtube-nocookie.com é o domínio que o próprio botão "Compartilhar >
+    // Incorporar > Ativar modo de privacidade" do YouTube gera — mesmo
+    // formato de path, só troca o domínio.
+    if (host === "youtube.com" || host === "youtube-nocookie.com") {
       if (url.pathname === "/watch") {
         const id = url.searchParams.get("v");
         if (id) return `https://www.youtube.com/embed/${id}`;
       }
       const shortsMatch = url.pathname.match(/^\/shorts\/([^/?]+)/);
       if (shortsMatch) return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+      // Link de transmissão em andamento/gravada (comum em cultos
+      // retransmitidos) e o formato antigo "/v/ID" (pré-HTML5).
+      const liveMatch = url.pathname.match(/^\/live\/([^/?]+)/);
+      if (liveMatch) return `https://www.youtube.com/embed/${liveMatch[1]}`;
+      const oldMatch = url.pathname.match(/^\/v\/([^/?]+)/);
+      if (oldMatch) return `https://www.youtube.com/embed/${oldMatch[1]}`;
     }
     if (host === "youtu.be") {
       const id = url.pathname.replace(/^\//, "");
@@ -46,8 +64,8 @@ function toEmbeddableUrl(rawUrl) {
 function extractYoutubeVideoId(rawUrl) {
   try {
     const url = new URL(toEmbeddableUrl(rawUrl));
-    const host = url.hostname.replace(/^www\./, "");
-    if (host === "youtube.com" && url.pathname.startsWith("/embed/")) {
+    const host = normalizeHost(url.hostname);
+    if ((host === "youtube.com" || host === "youtube-nocookie.com") && url.pathname.startsWith("/embed/")) {
       return url.pathname.split("/")[2] || null;
     }
     return null;

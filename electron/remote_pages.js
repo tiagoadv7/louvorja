@@ -1,6 +1,44 @@
 // Páginas HTML estáticas servidas pelo servidor de Controle Remoto (electron/remote_server.js).
 // Auto-contidas (sem build step) — mesmo padrão do form inline usado pelo regServer do Sorteio.
 
+const fs   = require('fs');
+const path = require('path');
+
+// Ícone SVG do volume (traço, currentColor) — substitui o emoji 🔊, que rendia
+// de forma inconsistente entre plataformas/navegadores. Só o visual muda;
+// nenhum comportamento do JS/CSS em volta foi alterado.
+const ICON_VOLUME = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/>' +
+  '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+
+// A fonte usada nas letras (mesma "DIN Condensed" do LouvorJA Delphi — ver
+// fmMusica.pas: lblLetra.Font.Name := 'DIN Condensed') precisa ser embutida
+// como data URI aqui: mirrorPageHtml() é uma página HTML autônoma servida
+// direto pelo Express (fonte de navegador do OBS/vMix), fora do bundle do
+// Vite — sem @font-face próprio ela nunca tinha a fonte declarada e caía
+// silenciosamente no sans-serif padrão do navegador.
+// Fica em electron/assets/ (não em src/) porque só a pasta electron/ é
+// empacotada com o app (ver "files" no electron-builder do package.json);
+// src/ some no build final.
+let _dinCondensedBoldBase64 = null;
+function getDinCondensedBoldFontFace() {
+  if (_dinCondensedBoldBase64 === null) {
+    try {
+      const fontPath = path.join(__dirname, 'assets', 'din-condensed-bold.ttf');
+      _dinCondensedBoldBase64 = fs.readFileSync(fontPath).toString('base64');
+    } catch (e) {
+      console.error('[remote_pages] Falha ao carregar fonte DIN Condensed Bold:', e.message);
+      _dinCondensedBoldBase64 = '';
+    }
+  }
+  if (!_dinCondensedBoldBase64) return '';
+  return `@font-face{font-family:'DINCondensedBold';` +
+    `src:url(data:font/ttf;base64,${_dinCondensedBoldBase64}) format('truetype');` +
+    `font-weight:bold;font-style:normal;font-display:swap}`;
+}
+
+
 function controlPageHtml() {
   return `<!DOCTYPE html>
 <html lang="pt">
@@ -39,7 +77,7 @@ input::placeholder{color:rgba(255,255,255,.35)}
   font-size:12px;cursor:pointer;flex-shrink:0}
 .volume-label{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
 .volume-row{display:flex;align-items:center;gap:12px}
-.volume-icon{font-size:18px;flex-shrink:0}
+.volume-icon{flex-shrink:0;display:flex;color:rgba(255,255,255,.7)}
 .volume-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;
   background:rgba(255,255,255,.18);outline:none}
 .volume-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
@@ -47,6 +85,15 @@ input::placeholder{color:rgba(255,255,255,.35)}
 .volume-row input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#3498db;
   cursor:pointer;border:none}
 .volume-val{font-size:13px;min-width:40px;text-align:right;flex-shrink:0;color:rgba(255,255,255,.7)}
+/* Controle dedicado de vídeo/áudio (independente do controle de slides acima) */
+.media-row{display:flex;align-items:center;gap:10px;padding:8px 2px}
+.media-row:not(:last-child){border-bottom:1px solid rgba(255,255,255,.08)}
+.media-row .media-label{flex:1;font-size:14px}
+.media-row button{flex:0 0 auto;width:44px;height:44px;border:none;border-radius:50%;
+  background:rgba(255,255,255,.09);color:#fff;font-size:18px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer}
+.media-row button:active{background:rgba(255,255,255,.22);transform:scale(.96)}
+.media-row button.media-stop{background:rgba(231,76,60,.25)}
 /* ── Layout de duas colunas: controle de um lado, liturgia do outro ── */
 .layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
 .col{flex:1 1 320px;min-width:280px}
@@ -60,8 +107,8 @@ input::placeholder{color:rgba(255,255,255,.35)}
 .lit-list{max-height:60vh;overflow:auto}
 .lit-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .lit-title{font-weight:700;font-size:14px}
-.lit-header button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;padding:8px 12px;
-  font-size:12px;cursor:pointer;flex-shrink:0}
+.lit-header button,.lit-item button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;
+  padding:8px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
 .token-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;
   justify-content:center;padding:20px;z-index:10}
 .token-modal .box{background:#152238;border-radius:16px;padding:24px;max-width:360px;width:100%}
@@ -93,9 +140,23 @@ input::placeholder{color:rgba(255,255,255,.35)}
     <div class="card">
       <div class="volume-label" id="volumeLabel">Volume</div>
       <div class="volume-row">
-        <span class="volume-icon">🔊</span>
+        <span class="volume-icon">${ICON_VOLUME}</span>
         <input id="volume" type="range" min="0" max="100" value="100" />
         <span class="volume-val" id="volumeVal">100%</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="lit-title" style="margin-bottom:8px">Vídeo / Áudio</div>
+      <div class="media-row">
+        <span class="media-label">Vídeo</span>
+        <button data-media-target="video" data-media-action="toggle" title="Play/Pause do vídeo">⏯</button>
+        <button data-media-target="video" data-media-action="stop" class="media-stop" title="Fechar vídeo">✕</button>
+      </div>
+      <div class="media-row">
+        <span class="media-label">Áudio</span>
+        <button data-media-target="audio" data-media-action="toggle" title="Play/Pause do áudio">⏯</button>
+        <button data-media-target="audio" data-media-action="stop" class="media-stop" title="Fechar áudio">✕</button>
       </div>
     </div>
 
@@ -186,6 +247,16 @@ document.getElementById('closeBtn').addEventListener('click', () => {
   chamarApi('close-media', {}, (ok) => { if (!ok) testarApi(); });
 });
 
+// Controle de vídeo/áudio: independente da música/slide (media-control não
+// olha pra "módulo ativo", ver App.vue) — funciona mesmo com vídeo e áudio
+// tocando ao mesmo tempo.
+document.querySelectorAll('.media-row button[data-media-target]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    chamarApi('media-control', { target: btn.dataset.mediaTarget, action: btn.dataset.mediaAction },
+      (ok) => { if (!ok) testarApi(); });
+  });
+});
+
 // ── Volume ──────────────────────────────────────────────────────────────
 const volumeInput = document.getElementById('volume');
 const volumeVal    = document.getElementById('volumeVal');
@@ -268,11 +339,17 @@ function carregarLiturgia() {
       // → também mostra o botão, mas ele só leva o operador até a busca já
       // preenchida com o nome do item (não dá pra abrir sem saber qual música
       // exatamente o nome do item da liturgia corresponde).
+      // has_media (midia/arquivo/link com arquivo anexado) → botão "Abrir" que
+      // toca o vídeo/áudio/link no computador (ver open-liturgia-item); o
+      // controle de play/pause/fechar depois é feito pelos botões fixos de
+      // Vídeo/Áudio no card acima, não item a item.
       const button = item.type === 'musica' && item.id_music
         ? '<button data-id="' + item.id_music + '">Abrir</button>'
         : item.type === 'musica'
           ? '<button data-select="' + escapeHtml(item.name || '') + '">Selecionar</button>'
-          : '';
+          : item.has_media
+            ? '<button data-open-item="' + item.id + '">Abrir</button>'
+            : '';
       return '<div class="lit-item">' +
         '<span class="name">' + escapeHtml(item.name || '') + '</span>' +
         button +
@@ -286,6 +363,12 @@ document.getElementById('liturgiaList').addEventListener('click', (e) => {
   if (id) {
     e.target.textContent = '...';
     chamarApi('open-song', { id, tag: 1 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Abrir'; });
+    return;
+  }
+  const itemId = e.target?.dataset?.openItem;
+  if (itemId !== undefined) {
+    e.target.textContent = '...';
+    chamarApi('open-liturgia-item', { id: itemId }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Abrir'; });
     return;
   }
   const nome = e.target?.dataset?.select;
@@ -343,6 +426,7 @@ function mirrorPageHtml() {
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LouvorJA — Transmissão</title>
 <style>
+${getDinCondensedBoldFontFace()}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:transparent}
 #stage{position:fixed;inset:0;overflow:hidden}
@@ -353,7 +437,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent}
 #textwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   flex-direction:column;gap:0}
 #auxtext,#maintext{background:rgba(0,0,0,.75);text-align:center;text-transform:uppercase;
-  font-weight:700;letter-spacing:.02em;transition:opacity .5s ease;opacity:0;max-width:92vw}
+  font-weight:700;letter-spacing:.02em;transition:opacity .5s ease;opacity:0;max-width:92vw;
+  font-family:'DINCondensedBold',sans-serif}
 #auxtext.show,#maintext.show{opacity:1}
 </style>
 </head>
@@ -428,6 +513,35 @@ function applyBg(state) {
   activeLayer = next;
 }
 
+// Troca o conteúdo de um texto com o mesmo efeito de crossfade de
+// src/components/Slide.vue (fade 0.5s): some o texto atual, troca o
+// conteúdo/estilo só depois de já estar bem apagado, e revela o novo.
+// "sig" identifica o conteúdo mostrado — chamadas repetidas com o mesmo sig
+// (ex.: outros campos do estado mudando, tick de progresso) não refazem o
+// fade, só quando o texto realmente muda de uma linha pra outra.
+function fadeSwapText(el, sig, hasContent, applyFn) {
+  if (!hasContent) {
+    clearTimeout(el._fadeTimer);
+    el.classList.remove('show');
+    el._lastSig = null;
+    return;
+  }
+  if (el._lastSig === sig) return;
+  el._lastSig = sig;
+
+  if (!el.classList.contains('show')) {
+    applyFn();
+    el.classList.add('show');
+    return;
+  }
+  el.classList.remove('show');
+  clearTimeout(el._fadeTimer);
+  el._fadeTimer = setTimeout(() => {
+    applyFn();
+    el.classList.add('show');
+  }, 260); // um pouco mais da metade dos 0.5s de saída — troca já bem apagado, sem "pop"
+}
+
 function applyText(state) {
   const w = window.innerWidth, h = window.innerHeight;
   const bg = state.bg || {};
@@ -435,19 +549,17 @@ function applyText(state) {
   const border = bg.border_spacing ?? 5;
 
   const aux = document.getElementById('auxtext');
-  if (state.aux_text) {
+  fadeSwapText(aux, 'aux:' + state.aux_text, !!state.aux_text, () => {
     aux.innerHTML = state.aux_text;
     aux.style.fontFamily = family;
     aux.style.fontSize = fontSizePc(bg.panel_font_size ?? 10, w, h) + 'px';
     aux.style.color = bg.panel_font_color || 'rgb(246, 195, 42)';
     aux.style.padding = '0px ' + fontSizePc(border, w, h) + 'px';
-    aux.classList.add('show');
-  } else {
-    aux.classList.remove('show');
-  }
+  });
 
   const main = document.getElementById('maintext');
-  if (state.text) {
+  const mainSig = 'main:' + state.text + ':' + state.cover + ':' + state.repeat + ':' + family;
+  fadeSwapText(main, mainSig, !!state.text, () => {
     main.innerHTML = state.text;
     main.style.fontFamily = family;
     main.style.padding = '0px ' + fontSizePc(border, w, h) + 'px';
@@ -461,10 +573,7 @@ function applyText(state) {
       main.style.fontSize = fontSizePc(bg.font_size ?? 20, w, h) + 'px';
       main.style.color = bg.font_color || 'rgb(255, 255, 255)';
     }
-    main.classList.add('show');
-  } else {
-    main.classList.remove('show');
-  }
+  });
 }
 
 function applyState(state) {

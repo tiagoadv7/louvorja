@@ -113,21 +113,20 @@
               </template>
             </v-text-field>
 
-            <div v-if="otherIps.length" class="mt-3">
-              <small class="text-medium-emphasis">{{ t('transmit.other_ips') }}</small>
-              <div class="d-flex flex-wrap gap-2 mt-1">
-                <v-chip
-                  v-for="ip in otherIps"
-                  :key="ip"
-                  size="small"
-                  variant="tonal"
-                  :title="controlUrlFor(ip)"
-                  @click="copyText(controlUrlFor(ip))"
-                >
-                  {{ ip }}
-                </v-chip>
-              </div>
-            </div>
+            <v-select
+              v-if="serverStatus.ips.length > 1"
+              :model-value="activeIp"
+              @update:modelValue="selectIp"
+              :items="serverStatus.ips"
+              :label="t('transmit.select_network')"
+              :hint="t('transmit.select_network_hint')"
+              persistent-hint
+              class="mt-3"
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-ip-network-outline"
+              hide-details="auto"
+            />
           </div>
 
           <div v-if="qrDataUrl" class="d-flex flex-column align-center justify-center">
@@ -298,9 +297,30 @@ const serverStatus = ref({ running: false, port: 0, ip: "", ips: [], token: "" }
 const serverLoading = ref(false);
 const qrDataUrl = ref(null);
 
+// IP escolhido manualmente pelo usuário (ver <v-select> no template) — o
+// backend sempre sugere o primeiro IP detectado (serverStatus.ip), mas se o
+// PC tiver mais de uma rede ativa (Ethernet + Wi-Fi, VPN, etc.) o escolhido
+// automaticamente pode não ser o alcançável pelo celular/OBS. O servidor
+// escuta em 0.0.0.0 (todas as interfaces — ver remote_server.js), então
+// qualquer IP detectado funciona igual; isso só decide qual aparece no QR
+// code/links. Persistido pra sobreviver a reinícios do app.
+const preferredIp = ref("");
+
+const activeIp = computed(() => {
+  const ips = serverStatus.value.ips || [];
+  if (preferredIp.value && ips.includes(preferredIp.value)) return preferredIp.value;
+  return serverStatus.value.ip;
+});
+
+function selectIp(ip) {
+  preferredIp.value = ip;
+  proxy.$userdata.set("remote.preferred_ip", ip);
+  refreshQrCode();
+}
+
 const serverUrls = computed(() => {
   if (!serverStatus.value.running) return [];
-  const base = `http://${serverStatus.value.ip}:${serverStatus.value.port}`;
+  const base = `http://${activeIp.value}:${serverStatus.value.port}`;
   const tk = serverStatus.value.token;
   return [
     // Sem "?token=" de propósito — esse é o link pensado pra ser copiado/
@@ -312,21 +332,6 @@ const serverUrls = computed(() => {
   ];
 });
 
-// IPs alternativos detectados na máquina — o primeiro (serverStatus.ip) é o
-// escolhido automaticamente pra montar o QR code/links, mas se o PC tiver
-// mais de uma rede ativa (Ethernet + Wi-Fi, VPN, etc.) o escolhido pode não
-// ser o alcançável pelo celular; expõe os demais pra tentativa manual.
-const otherIps = computed(() => {
-  const ips = serverStatus.value.ips || [];
-  return ips.filter((ip) => ip !== serverStatus.value.ip);
-});
-
-function controlUrlFor(ip) {
-  // Sem token — mesmo motivo do link principal em serverUrls (link pra
-  // copiar/compartilhar; token só embutido no QR code).
-  return `http://${ip}:${serverStatus.value.port}/remote`;
-}
-
 async function refreshServerStatus() {
   const status = await proxy.$electron.remoteServerStatus();
   if (status) serverStatus.value = status;
@@ -335,7 +340,7 @@ async function refreshServerStatus() {
 
 async function refreshQrCode() {
   if (!serverStatus.value.running) { qrDataUrl.value = null; return; }
-  const base = `http://${serverStatus.value.ip}:${serverStatus.value.port}`;
+  const base = `http://${activeIp.value}:${serverStatus.value.port}`;
   qrDataUrl.value = await proxy.$electron.qrcodeGenerate(`${base}/remote?token=${serverStatus.value.token}`, { width: 200 });
 }
 
@@ -376,6 +381,7 @@ function copyText(text) {
 onMounted(() => {
   url.value = proxy.$userdata.get("remote.url");
   token.value = proxy.$userdata.get("remote.token");
+  preferredIp.value = proxy.$userdata.get("remote.preferred_ip", "") || "";
   refreshServerStatus();
 });
 </script>

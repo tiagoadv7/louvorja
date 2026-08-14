@@ -58,6 +58,26 @@ let pipWindow     = null;
 // interceptar antes disso, mas só deve agir para o módulo certo.
 let currentPopupModule = null;
 
+// Lembra se a projeção deve reabrir sozinha na próxima vez que o app for
+// aberto (ver restauração em ipcMain.once('app:loaded')) — "" (só acontece
+// quando o operador fecha a projeção de propósito, ver Popup.js#exit) marca
+// que NÃO deve reabrir; qualquer módulo real marca que deve, com esse
+// módulo. Chamado tanto por 'state-update' quanto por 'state-update-batch'
+// (Media.maximize() — o fluxo mais comum, projetar uma música — manda
+// popup_module dentro de um lote via setMultiple, não por um 'state-update'
+// avulso; sem cobrir os dois canais aqui, a projeção nunca era lembrada pra
+// restaurar nesse caso, que é o mais frequente na prática).
+function rememberPopupModuleForRestore(entry) {
+  if (!entry || entry.param !== 'popup_module') return;
+  currentPopupModule = entry.value || null;
+  if (entry.value) {
+    Store.set('output_window_was_open', true);
+    Store.set('output_window_last_module', entry.value);
+  } else {
+    Store.set('output_window_was_open', false);
+  }
+}
+
 // Previne múltiplas instâncias
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -248,14 +268,11 @@ function nudgeRepaint(win) {
   }
 }
 
-// ── Janela de saída (apresentação) ────────────────────────────────────────────
-function createOutputWindow(moduleId, displayId) {
-  if (outputWindow && !outputWindow.isDestroyed()) {
-    outputWindow.focus();
-    if (moduleId) outputWindow.webContents.send('set-module', moduleId);
-    return outputWindow;
-  }
-
+// Resolve qual monitor usar para a janela de saída: o salvo no Store (se ainda
+// existir), senão o primeiro monitor externo, senão o primário. Extraído para
+// ser reaproveitado tanto na abertura (createOutputWindow) quanto ao reagir a
+// mudanças de monitores com a janela já aberta (ver reconcileDisplays()).
+function resolveOutputDisplay(displayId) {
   const allDisplays = screen.getAllDisplays();
   const primary     = screen.getPrimaryDisplay();
   const external    = allDisplays.find((d) => d.id !== primary.id);
@@ -266,8 +283,19 @@ function createOutputWindow(moduleId, displayId) {
   let target = targetId ? allDisplays.find((d) => d.id === targetId) : null;
   if (!target) target = external || primary;
 
+  return { target, isExternal: target.id !== primary.id };
+}
+
+// ── Janela de saída (apresentação) ────────────────────────────────────────────
+function createOutputWindow(moduleId, displayId) {
+  if (outputWindow && !outputWindow.isDestroyed()) {
+    outputWindow.focus();
+    if (moduleId) outputWindow.webContents.send('set-module', moduleId);
+    return outputWindow;
+  }
+
+  const { target, isExternal } = resolveOutputDisplay(displayId);
   const { x, y, width, height } = target.bounds;
-  const isExternal = target.id !== primary.id;
 
   outputWindow = new BrowserWindow({
     x, y, width, height,
@@ -341,13 +369,9 @@ function createOutputWindow(moduleId, displayId) {
   return outputWindow;
 }
 
-// ── Janela de retorno (monitor de palco) ──────────────────────────────────────
-function createReturnWindow(displayId) {
-  if (returnWindow && !returnWindow.isDestroyed()) {
-    returnWindow.focus();
-    return returnWindow;
-  }
-
+// Mesmo papel de resolveOutputDisplay(), para o monitor de retorno (sem
+// preferência por monitor externo — cai direto pro primário).
+function resolveReturnDisplay(displayId) {
   const allDisplays = screen.getAllDisplays();
   const primary     = screen.getPrimaryDisplay();
 
@@ -357,6 +381,17 @@ function createReturnWindow(displayId) {
   let target = targetId ? allDisplays.find(d => d.id === targetId) : null;
   if (!target) target = primary;
 
+  return { target };
+}
+
+// ── Janela de retorno (monitor de palco) ──────────────────────────────────────
+function createReturnWindow(displayId) {
+  if (returnWindow && !returnWindow.isDestroyed()) {
+    returnWindow.focus();
+    return returnWindow;
+  }
+
+  const { target } = resolveReturnDisplay(displayId);
   const { x, y, width, height } = target.bounds;
 
   returnWindow = new BrowserWindow({
@@ -419,6 +454,57 @@ function createReturnWindow(displayId) {
   });
 
   return returnWindow;
+}
+
+// ── Auto-ajuste de resolução em tempo real ────────────────────────────────────
+// Reage a monitor plugado/desplugado ou resolução alterada COM a projeção já
+// aberta. Sem isso, createOutputWindow()/createReturnWindow() só pegavam os
+// bounds corretos no momento de abrir a janela — se o monitor mudasse de
+// resolução (ou fosse desconectado/trocado) depois, a janela ficava com o
+// tamanho/posição antigos (parte da tela descoberta, ou presa num monitor que
+// não existe mais). registerDisplayWatcher() (chamado uma vez em
+// app.whenReady()) escuta screen.on('display-added'/'removed'/'metrics-changed')
+// e reaplica a mesma resolução de monitor (resolveOutputDisplay/
+// resolveReturnDisplay, com o mesmo fallback pro externo/primário) nas janelas
+// que já estiverem abertas.
+function reconcileDisplays() {
+  if (outputWindow && !outputWindow.isDestroyed()) {
+    try {
+      const { target, isExternal } = resolveOutputDisplay();
+      const { x, y, width, height } = target.bounds;
+      outputWindow.setBounds({ x, y, width, height });
+      outputWindow.setFullScreen(isExternal);
+    } catch (_) {}
+  }
+
+  if (returnWindow && !returnWindow.isDestroyed()) {
+    try {
+      const { target } = resolveReturnDisplay();
+      const { x, y, width, height } = target.bounds;
+      returnWindow.setBounds({ x, y, width, height });
+      returnWindow.setFullScreen(true);
+    } catch (_) {}
+  }
+
+  // Avisa o operador pra atualizar a lista de monitores do seletor (MonitorSelector.vue)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('displays-changed');
+  }
+}
+
+let _reconcileDisplaysTimer = null;
+function scheduleReconcileDisplays() {
+  // display-metrics-changed costuma disparar várias vezes seguidas durante a
+  // própria mudança (Windows aplicando a nova resolução em etapas) — debounce
+  // evita reaplicar bounds várias vezes com valores intermediários.
+  clearTimeout(_reconcileDisplaysTimer);
+  _reconcileDisplaysTimer = setTimeout(reconcileDisplays, 300);
+}
+
+function registerDisplayWatcher() {
+  screen.on('display-added', scheduleReconcileDisplays);
+  screen.on('display-removed', scheduleReconcileDisplays);
+  screen.on('display-metrics-changed', scheduleReconcileDisplays);
 }
 
 // ── Janela flutuante do player de vídeo (PIP no modo operador) ────────────────
@@ -661,6 +747,13 @@ function registerIpcHandlers() {
 
   ipcMain.handle('return:open', (_, displayId) => {
     createReturnWindow(displayId);
+    // Lembra que o retorno deve reabrir sozinho na próxima vez que o app for
+    // aberto (ver restauração em ipcMain.once('app:loaded') abaixo) — mesmo
+    // padrão do "output_window_was_open" pra saída principal. Marcado aqui
+    // (no próprio open/close, e não a partir de algum estado de conteúdo)
+    // porque o retorno não tem um "módulo" que reflita sozinho se ele está
+    // aberto ou não — só o toggle explícito do usuário decide isso.
+    Store.set('return_window_was_open', true);
     return true;
   });
   ipcMain.handle('return:close', async () => {
@@ -671,6 +764,11 @@ function registerIpcHandlers() {
       await sleep(FADE_DURATION_MS);
       if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
     }
+    // Só marca como "não deve reabrir" quando o usuário fecha de propósito
+    // (aqui) — nunca no cascade-destroy do 'closed' da janela (ver comentário
+    // em createReturnWindow), que também dispara ao encerrar o app inteiro e
+    // não deve apagar essa preferência.
+    Store.set('return_window_was_open', false);
     return true;
   });
   ipcMain.handle('return:is-open', () => {
@@ -719,21 +817,7 @@ function registerIpcHandlers() {
   // saltar de volta pra um tempo antigo — visualmente "reiniciava" o vídeo.
   ipcMain.on('state-update', (_, data) => {
     remoteServer.applyStateEntry(data);
-
-    // Lembra se a projeção deve reabrir sozinha na próxima vez que o app for
-    // aberto (ver restauração em ipcMain.once('app:loaded') abaixo) — "" (só
-    // acontece quando o operador fecha a projeção de propósito, ver
-    // Popup.js#exit) marca que NÃO deve reabrir; qualquer módulo real marca
-    // que deve, com esse módulo.
-    if (data && data.param === 'popup_module') {
-      currentPopupModule = data.value || null;
-      if (data.value) {
-        Store.set('output_window_was_open', true);
-        Store.set('output_window_last_module', data.value);
-      } else {
-        Store.set('output_window_was_open', false);
-      }
-    }
+    rememberPopupModuleForRestore(data);
 
     if (data && data.target === 'output') {
       if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update', data);
@@ -762,7 +846,10 @@ function registerIpcHandlers() {
   // Lote atômico (ver AppData.js setMultiple / preload.js) — sempre
   // broadcast (só usado para atualizações "ao vivo", nunca resync completo).
   ipcMain.on('state-update-batch', (_, entries) => {
-    (entries || []).forEach((entry) => remoteServer.applyStateEntry(entry));
+    (entries || []).forEach((entry) => {
+      remoteServer.applyStateEntry(entry);
+      rememberPopupModuleForRestore(entry);
+    });
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update-batch', entries);
     if (returnWindow && !returnWindow.isDestroyed()) returnWindow.webContents.send('state-update-batch', entries);
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update-batch', entries);
@@ -806,6 +893,17 @@ function registerIpcHandlers() {
         createOutputWindow(lastModule);
         mainWindow.webContents.send('restore-output-state', lastModule);
       }
+    }
+
+    // Mesma restauração para o monitor de retorno (ver 'return:open'/'return:close'
+    // acima) — o monitor já é resolvido sozinho via "return_display_id" dentro de
+    // createReturnWindow, igual ao da saída principal. Roda independente da saída
+    // (o retorno não depende de haver um módulo projetado pra existir) e não
+    // manda nada pra outputWindow/mainWindow além do evento "return-window-opened"
+    // que já dispara normalmente — não toca no slide/módulo que a saída principal
+    // acabou de restaurar acima.
+    if (Store.get('return_window_was_open')) {
+      createReturnWindow();
     }
 
     let opacity = 0;
@@ -910,6 +1008,7 @@ app.whenReady().then(() => {
   });
 
   createLoadingWindow();
+  registerDisplayWatcher();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

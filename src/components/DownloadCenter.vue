@@ -183,7 +183,7 @@
                     </div>
                   </div>
 
-                  <div v-else-if="isAlbumFullyDownloaded(album)" class="dc-album-badge-ok">
+                  <div v-else-if="isAlbumComplete(album)" class="dc-album-badge-ok">
                     <v-icon size="16" color="success">mdi-check</v-icon>
                   </div>
                 </div>
@@ -200,12 +200,12 @@
                   icon
                   variant="text"
                   size="x-small"
-                  :color="isAlbumFullyDownloaded(album) ? 'success' : 'primary'"
+                  :color="isAlbumComplete(album) ? 'success' : 'primary'"
                   :disabled="!!albumProgress[album.id_album]"
                   @click="downloadAlbumAny(album)"
                 >
                   <v-icon size="20">
-                    {{ isAlbumFullyDownloaded(album) ? 'mdi-refresh' : 'mdi-download' }}
+                    {{ isAlbumComplete(album) ? 'mdi-refresh' : 'mdi-download' }}
                   </v-icon>
                 </v-btn>
               </div>
@@ -667,6 +667,10 @@ export default {
     replaceAlbumTarget:    null,
     // Infos dos álbuns baixados (id_album -> {name, url_image})
     downloadedAlbumInfos:  {},
+    // Completude real dos álbuns da aba Coletâneas (id_album -> {missing, totalFiles}),
+    // verificada no disco — inclui álbuns nunca baixados pelo app (ex: já
+    // completos por virem da instalação legada do LouvorJA Delphi)
+    albumCompleteStatus:   {},
     // Completude real dos álbuns baixados (id_album -> {missing, totalFiles}),
     // obtida verificando os arquivos no disco — não apenas se o JSON existe
     downloadedAlbumStatus: {},
@@ -772,6 +776,7 @@ export default {
       if (this.section === 'collections') {
         await this.loadCategories();
         await this.loadDownloadedAlbumInfos();
+        this.loadCollectionsCompleteStatus();
       }
       if (this.section === 'downloads') {
         await this.loadDownloadedAlbumInfos();
@@ -785,6 +790,7 @@ export default {
       if (s === 'collections') {
         if (this.categories.length === 0) await this.loadCategories();
         await this.loadDownloadedAlbumInfos();
+        this.loadCollectionsCompleteStatus();
       }
       if (s === 'downloads') {
         await this.loadLocalFiles();
@@ -909,6 +915,28 @@ export default {
       return st ? st.missing : null;
     },
 
+    // Verifica no disco a completude real dos álbuns exibidos na aba Coletâneas
+    // (áudio, capa e imagens) — sem isso, o check "OK" só aparecia para álbuns
+    // já baixados pelo app, mesmo quando os arquivos já existiam localmente
+    // (ex: instalação legada do LouvorJA Delphi). Roda em background: não
+    // bloqueia a renderização da grade de álbuns.
+    async loadCollectionsCompleteStatus() {
+      if (!this.isElectron) return;
+      const ids = this.filteredAlbums.map(a => a.id_album);
+      if (!ids.length) return;
+      try {
+        const result = await this.$electron.checkAlbumsComplete(ids);
+        const map = { ...this.albumCompleteStatus };
+        for (const id of ids) {
+          const st = result?.[String(id)];
+          if (st) map[String(id)] = { missing: st.missing || 0, totalFiles: st.totalFiles || 0 };
+        }
+        this.albumCompleteStatus = map;
+      } catch (_) {
+        // Sem informação nova — mantém o estado anterior
+      }
+    },
+
     isDownloaded(filename) {
       return this.localFiles.some(f => f.name === filename);
     },
@@ -919,6 +947,17 @@ export default {
 
     isAlbumFullyDownloaded(album) {
       return this.isDownloaded(`album_${album.id_album}`);
+    },
+
+    // Completude "real" de um álbum na grade de Coletâneas: usa a verificação
+    // de disco quando disponível (cobre álbuns nunca baixados pelo app, mas já
+    // completos localmente); enquanto isso não chega, cai para o critério
+    // anterior (JSON do álbum já baixado pelo app) para não deixar a badge em
+    // branco durante o carregamento.
+    isAlbumComplete(album) {
+      const st = this.albumCompleteStatus[String(album.id_album)];
+      if (st) return st.missing === 0;
+      return this.isAlbumFullyDownloaded(album);
     },
 
     // Capa a exibir para um álbum na grade de Coletâneas: se já foi baixado,

@@ -285,6 +285,28 @@ async function handleRequest(req, res) {
     return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
   }
 
+  // Abre o áudio/vídeo/link anexado a um item específico da liturgia (ex.: um
+  // item "arquivo"/áudio ou "midia"/vídeo da ordem de culto) — só recebe o
+  // "id" do item, nunca um caminho de arquivo (o renderer resolve o item de
+  // verdade a partir dos dados da liturgia, ver App.vue#open-liturgia-item).
+  if (p === '/api/open-liturgia-item') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const id = url.searchParams.get('id');
+    const r = await requestRenderer('open-liturgia-item', { id });
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  // Controle dedicado de vídeo/áudio (play/pause via "toggle", ou "stop" para
+  // fechar) — target=video|audio, action=toggle|stop. Independente de qual
+  // módulo está "ativo" no momento (ver comentário em App.vue#media-control).
+  if (p === '/api/media-control') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const target = url.searchParams.get('target') || '';
+    const action = url.searchParams.get('action') || '';
+    const r = await requestRenderer('media-control', { target, action });
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
   if (p === '/api/close-media') {
     if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
     const r = await requestRenderer('close-media', {});

@@ -11,7 +11,11 @@ import $audioBus from "@/helpers/AudioBus";
 
 const Media = {
   async open(params) {
-    if (typeof params != "object") {
+    // typeof null === "object" — sem o check explícito, open(null) (ex.: retry
+    // do alerta "não carregou" quando modules.media.id_music ainda não tinha
+    // sido definido) passava batido aqui e travava mais abaixo tentando ler
+    // params.id_music de um params que continuava null.
+    if (typeof params != "object" || params === null) {
       params = { id_music: params };
     }
 
@@ -76,6 +80,22 @@ const Media = {
       $audioBus.requestFocus("media");
     }
 
+    // Reabertura do MESMO slide/música já ativa (ex.: clique duplo acidental no
+    // slide do álbum): antes de decidir o que fazer, limpa qualquer resíduo de
+    // uma transição anterior que tenha sido interrompida no meio — sem isso, um
+    // elemento <audio id="__audio_xfade"> de uma tentativa de crossfade abortada
+    // (setInterval do fade-in que nunca chegou a promover nem a ser pausado)
+    // ficava tocando escondido para sempre em segundo plano. A reabertura em si
+    // continua fazendo crossfade normalmente (ver _willCrossfade abaixo) — só o
+    // lixo de uma transição anterior é removido aqui.
+    const _isSameTrackReopen =
+      params.id_music === _currentId && _currentId != null &&
+      params.mode === _currentMode &&
+      (params.mode === "audio" || params.mode === "instrumental");
+    if (_isSameTrackReopen) {
+      this._killCrossfade({ keepMain: true });
+    }
+
     // Crossfade: se já havia áudio tocando e a nova abertura também produz áudio,
     // faz um crossfade real (ver _crossfadeAudioTrack) em vez de cortar na hora —
     // por isso NÃO chama stopAudio()/_detachAndFadeOut() aqui: o áudio atual continua
@@ -83,6 +103,9 @@ const Media = {
     // começa lá embaixo, no ponto exato em que a nova URL de áudio está pronta.
     // this._crossfading também bloqueia checkTime()/_onAudioEnded()/timeUpdate() de
     // reagirem ao elemento antigo (que ainda gera eventos) enquanto a troca ocorre.
+    // Reabrir a MESMA música/modo que já está tocando também entra aqui: o resultado
+    // é o crossfade terminar suave a instância anterior e reiniciar do zero (currentTime=0
+    // em _crossfadeAudioTrack), em vez de cortar seco.
     const _wasPlayingAudio = !$appdata.get("modules.media.config.is_paused") &&
       ["audio", "instrumental"].includes($appdata.get("modules.media.config.mode"));
     const _willCrossfade = _wasPlayingAudio && (_newMode === "audio" || _newMode === "instrumental");
@@ -116,6 +139,12 @@ const Media = {
       return;
     }
     await this.resolveDataImages(data);
+    // Usado mais abaixo para só considerar a música "não baixada" no Modo Offline
+    // quando NEM o áudio NEM a imagem de fundo (capa) forem encontrados localmente —
+    // resolveImageUrl() retorna "app-local://" quando encontra o arquivo no disco;
+    // se não achar, cai para a URL remota. Sem imagem de capa (slide sem imagem
+    // própria), não há o que verificar: conta como "encontrada".
+    const _imageFoundLocally = !data.url_image || data.url_image.startsWith("app-local://");
 
     // Precarrega a imagem do slide capa no cache do browser (elimina tela preta inicial).
     // Se o arquivo estiver local o protocolo app-local:// o serve em ms; se não estiver,
@@ -206,9 +235,14 @@ const Media = {
       // antigo, ainda usado como fallback abaixo quando não há internet).
       // Em Modo Online o app já assume que vai buscar tudo sob demanda — toca direto,
       // sem perguntar (params._skipOnlineChoice evita perguntar de novo após a escolha).
+      // Só entra aqui quando NEM o áudio NEM a imagem de fundo foram encontrados
+      // localmente — se pelo menos um dos dois já está no disco, a música é tratada
+      // como já baixada (evita perguntar/mostrar aviso à toa por causa de uma falha
+      // pontual de resolução de um dos dois arquivos) e cai direto para o carregamento
+      // imediato mais abaixo.
       const isOfflineMode = $database.isLocalEnabled();
       const hasInternet = typeof navigator === "undefined" || navigator.onLine;
-      if (!localUrl && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
+      if (!localUrl && !_imageFoundLocally && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
         && typeof this._autoCloseCallback !== 'function') {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
@@ -251,8 +285,10 @@ const Media = {
         return;
       }
 
-      // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar
-      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
+      // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar.
+      // Mesma regra acima: só considera "não encontrado" quando NEM o áudio NEM a
+      // imagem de fundo estão no disco.
+      if (!localUrl && !_imageFoundLocally && rawUrl && rawUrl.startsWith("app-local://")) {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
@@ -493,9 +529,20 @@ const Media = {
     const xfadeKey = this._fadeKey;
 
     if (isPaused) {
+      // audio.load() zera currentTime e dispara progress/timeupdate com tempo 0
+      // antes do canplay/seek abaixo — sem bloquear timeUpdate() aqui, o slide_index
+      // é recalculado para o início nesse meio-tempo (mesma causa já documentada
+      // no comentário da promoção do xfade, linha ~555). _crossfading suprime
+      // timeUpdate()/checkTime() até o seek para capturedTime se completar, e então
+      // recalculamos manualmente com o tempo já correto.
+      this._crossfading = true;
       audio.src = newUrl;
       audio.volume = targetVolume;
-      audio.addEventListener("canplay", () => { audio.currentTime = capturedTime; }, { once: true });
+      audio.addEventListener("canplay", () => {
+        audio.currentTime = capturedTime;
+        this._crossfading = false;
+        this.timeUpdate();
+      }, { once: true });
       audio.load();
       return;
     }
@@ -586,17 +633,22 @@ const Media = {
       return;
     }
 
-    this.stopAudio();
-    // setMultiple: uma única mensagem IPC com os dois campos (evita estado
-    // combinado intermediário incorreto do lado da janela de saída).
-    $appdata.setMultiple([
-      ["modules.media.show", false],
-      ["modules.media.minimized", false],
-    ]);
-    // show=false e minimized=false tiram a projeção do modo ativo (Popup.vue do módulo
-    // media passa a renderizar em standby/transparente), mas a janela de saída permanece
-    // aberta até o operador clicar em "Parar projeção". Os dados do slide ficam intactos
-    // (reabertura rápida via F5) — só são substituídos no próximo open().
+    // stopAudio() só chama de volta depois que o áudio de fato silenciou (fade real
+    // quando "Efeito de Fade" está ligado) — só então o slide some da tela. Sem
+    // esperar isso, o slide desaparecia (fade visual de ~0.5s) enquanto o áudio
+    // ainda tocava em fade por mais ~0.7s, dessincronizado (tela em branco com som).
+    this.stopAudio(() => {
+      // setMultiple: uma única mensagem IPC com os dois campos (evita estado
+      // combinado intermediário incorreto do lado da janela de saída).
+      $appdata.setMultiple([
+        ["modules.media.show", false],
+        ["modules.media.minimized", false],
+      ]);
+      // show=false e minimized=false tiram a projeção do modo ativo (Popup.vue do módulo
+      // media passa a renderizar em standby/transparente), mas a janela de saída permanece
+      // aberta até o operador clicar em "Parar projeção". Os dados do slide ficam intactos
+      // (reabertura rápida via F5) — só são substituídos no próximo open().
+    });
   },
 
   // Chamado quando o áudio termina naturalmente (fim da música ou dos slides).
@@ -604,13 +656,16 @@ const Media = {
   // minimized=false colocam a projeção em standby (transparente), mas a janela de
   // saída continua aberta até o operador encerrar a projeção manualmente.
   endSong() {
-    this.stopAudio();
-    $appdata.setMultiple([
-      ["modules.media.show", false],
-      ["modules.media.minimized", false],
-    ]);
-    // Não chama closeOutput() — dados preservados para reabertura rápida; a janela
-    // de saída permanece aberta (modo de projeção ativo).
+    // Mesmo motivo do close(): só esconde o slide depois que o áudio (fade real,
+    // se habilitado) já silenciou de verdade.
+    this.stopAudio(() => {
+      $appdata.setMultiple([
+        ["modules.media.show", false],
+        ["modules.media.minimized", false],
+      ]);
+      // Não chama closeOutput() — dados preservados para reabertura rápida; a janela
+      // de saída permanece aberta (modo de projeção ativo).
+    });
   },
 
   async openLyric(params) {
@@ -839,10 +894,47 @@ const Media = {
     }, 40);
   },
 
-  stopAudio() {
+  // Cancela qualquer crossfade em andamento (switchMode() ou _crossfadeAudioTrack())
+  // e limpa os elementos <audio> envolvidos. Sem isso, parar/fechar a mídia no meio
+  // de um crossfade só pausava o elemento "__audio" antigo (que estava saindo) —
+  // o elemento "__audio_xfade" (a faixa entrando) continuava tocando e seu
+  // setInterval de fade-in seguia rodando até promovê-lo a "__audio" sozinho,
+  // fazendo o áudio "reaparecer" tocando em segundo plano mesmo depois do usuário
+  // ter mandado parar/fechar. keepMain=true preserva o elemento principal
+  // "__audio" tocando (usado ao reabrir a mesma música: só o lixo da transição
+  // anterior é limpo, a faixa atual continua até o novo crossfade assumir).
+  _killCrossfade({ keepMain = false } = {}) {
+    this._fadeKey = (this._fadeKey || 0) + 1;
+    if (this._pauseInterval) { clearInterval(this._pauseInterval); this._pauseInterval = null; }
+    if (this._fades) { clearInterval(this._fades.xfade_out); clearInterval(this._fades.xfade_in); }
+    $appdata.set("modules.media.config.is_fading", false);
+
+    const stray = document.getElementById("__audio_xfade");
+    if (stray) { stray.pause(); stray.src = ""; stray.remove(); }
+    const ghost = document.getElementById("__audio_fadeout");
+    if (ghost) { ghost.pause(); ghost.src = ""; ghost.remove(); }
+
+    if (!keepMain) {
+      const main = document.getElementById("__audio");
+      if (main) { main.pause(); main.setAttribute("src", ""); }
+    }
+  },
+
+  // callback (opcional) só roda depois que o áudio de fato silenciou — com fade_audio
+  // ligado, pause(true,...) só chama de volta ao FIM do fadeOutAudio (ver pause()),
+  // não na hora. Quem fecha/oculta a projeção deve esperar por esse callback (ver
+  // close()/endSong()) para não sumir a tela enquanto o áudio ainda está audível.
+  stopAudio(callback) {
+    // keepMain:true — só cancela um crossfade em andamento e limpa elementos órfãos
+    // (__audio_xfade/__audio_fadeout); o elemento principal "__audio" É MANTIDO
+    // tocando aqui. Se _killCrossfade() o pausasse antes da hora, o pause(true,...)
+    // logo abaixo encontraria o áudio já parado e pularia o fade de verdade (bug:
+    // stopAudio() virava sempre abrupto, mesmo com "Efeito de Fade" ligado).
+    this._killCrossfade({ keepMain: true });
     const audio = this.getElement();
     this.pause(true, () => {
       audio.setAttribute("src", "");
+      if (callback) callback();
     });
   },
 

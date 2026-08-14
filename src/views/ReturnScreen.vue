@@ -11,15 +11,28 @@
             <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
           </div>
 
-          <!-- Área principal: letra / título atual -->
+          <!-- Área principal: letra / título atual.
+               Cada troca de linha empilha um novo "textSlides[1]" (mesmo
+               padrão de src/components/Slide.vue: slides.unshift + active/
+               destroy) — o <transition> anima o crossfade real entre a linha
+               que sai e a que entra, em vez de só trocar o texto no lugar. -->
           <div class="rs-main">
-            <div
-              v-if="displayText"
-              class="rs-main-text"
-              :class="{ 'rs-main-cover': isCover }"
-              v-html="displayText"
-            />
-            <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
+            <transition
+              name="rs-text-fade"
+              v-for="(slide, index) in textSlides.slice().reverse()"
+              :key="'rstxt-' + index"
+            >
+              <div v-if="!slide.destroy" v-show="slide.active" class="rs-main-text-layer">
+                <div
+                  v-if="slide.lyric"
+                  class="rs-main-text"
+                  :class="{ 'rs-main-cover': slide.cover }"
+                  :style="{ color: mainTextColorFor(slide), fontFamily }"
+                  v-html="slide.lyric"
+                />
+                <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
+              </div>
+            </transition>
 
             <!-- Contador discreto no canto inferior direito -->
             <span v-if="slideCounter" class="rs-counter">{{ slideCounter }}</span>
@@ -89,6 +102,11 @@ export default {
     visible: false,
     now: new Date(),
     _tickInterval: null,
+    // Pilha de linhas do texto principal — mesmo padrão de src/components/Slide.vue
+    // (slides.unshift + active/destroy), pra permitir o crossfade real entre a
+    // linha que sai e a que entra em vez de só trocar o texto no lugar.
+    textSlides: [{}, {}],
+    repeat: false,
   }),
 
   computed: {
@@ -196,6 +214,23 @@ export default {
       return s.lyric || '';
     },
 
+    // Snapshot mínimo do slide atual — o watcher abaixo reage a mudanças
+    // dele pra empilhar uma nova linha em textSlides (ver pushTextSlide()).
+    slideSnapshot() {
+      return { lyric: this.displayText, cover: this.isCover };
+    },
+
+    // "Fundo Personalizado" (mesma chave slide_global_bg que src/components/
+    // Slide.vue lê) — usado aqui só pra herdar cor/fonte do texto, igual ao
+    // que a tela de saída (slide) mostra. O retorno mantém seu próprio fundo
+    // preto de propósito (monitor de palco), só o texto acompanha.
+    globalBg() {
+      return this.$appdata.get('slide_global_bg') || null;
+    },
+    fontFamily() {
+      return this.globalBg?.font || "'DINCondensedBold', 'Roboto Condensed', 'Arial Narrow', Arial, sans-serif";
+    },
+
     title() {
       return this.mediaConfig.title || '';
     },
@@ -220,7 +255,46 @@ export default {
     },
   },
 
+  watch: {
+    slideSnapshot(newVal, oldVal) {
+      this.pushTextSlide(newVal, oldVal);
+    },
+  },
+
   methods: {
+    // Empilha a nova linha em textSlides — mesmo padrão de setSlide() em
+    // src/components/Slide.vue: marca a anterior inativa (dispara o fade de
+    // saída), ativa a nova (fade de entrada) e destrói as antigas demais.
+    // "repeat" alterna quando a mesma linha se repete em sequência (ex.:
+    // coro repetido), pra usar a cor de repetição em vez da cor normal —
+    // igual à lógica de repeat em Slide.vue.
+    pushTextSlide(newVal, oldVal) {
+      if (oldVal && newVal.lyric === oldVal.lyric && newVal.cover === oldVal.cover) {
+        this.repeat = !this.repeat;
+      } else {
+        this.repeat = false;
+      }
+
+      this.textSlides.unshift({});
+      if (this.textSlides[2] && this.textSlides[2].active) {
+        this.textSlides[2] = { ...this.textSlides[2], active: false };
+      }
+      this.textSlides[1] = { ...newVal, active: true };
+      if (this.textSlides.length > 3) {
+        this.textSlides[3].destroy = true;
+      }
+    },
+
+    // Cor do texto principal pro slide dado — mesma lógica/mesmos padrões de
+    // cor de src/components/Slide.vue#style_text() (capa/repetição/normal),
+    // lendo do mesmo "Fundo Personalizado" (globalBg) que a tela de saída usa.
+    mainTextColorFor(slide) {
+      const bg = this.globalBg;
+      if (slide?.cover)  return bg?.cover_font_color  || bg?.font_color || 'rgb(246, 195, 42)';
+      if (this.repeat)   return bg?.repeat_font_color || bg?.font_color || 'rgb(246, 195, 42)';
+      return bg?.font_color || 'rgb(255, 255, 255)';
+    },
+
     _fmtTime(secs) {
       if (!secs || isNaN(secs)) return '0:00';
       const m = Math.floor(secs / 60);
@@ -386,18 +460,35 @@ export default {
   padding: 32px 48px;
   position: relative;
 }
+/* Camada absoluta por linha — empilhadas em textSlides pra permitir o
+   crossfade real entre a linha que sai e a que entra (ver .rs-text-fade-*
+   abaixo), mesmo padrão posicional de src/components/Slide.vue. */
+.rs-main-text-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .rs-main-text {
   font-size: clamp(38px, 11vh, 148px);
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
-  color: #fff;
+  /* cor e fonte vêm de :style (mainTextColorFor/fontFamily) — mesmas cores
+     e fonte que o "Fundo Personalizado" aplica na tela de saída (slide) */
   line-height: 1.15;
   letter-spacing: 0.01em;
 }
-/* Slide de capa/título: amarelo */
-.rs-main-cover {
-  color: #efb400;
+
+/* ── Crossfade entre linhas (mesma duração/easing do .fade de Slide.vue) ── */
+.rs-text-fade-enter-active,
+.rs-text-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.rs-text-fade-enter-from,
+.rs-text-fade-leave-to {
+  opacity: 0;
 }
 
 /* ── Espelho dos módulos Relógio / Cronômetro de Culto ──────────── */
