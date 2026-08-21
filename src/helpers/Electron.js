@@ -139,6 +139,8 @@ export default {
     isElectron() ? window.electron.mediaResolveFile(filename) : Promise.resolve(null),
   mediaDownloadFile: (params) =>
     isElectron() ? window.electron.mediaDownloadFile(params) : Promise.resolve(null),
+  mediaResolveRemoteUrl: (url, filesBaseUrl) =>
+    isElectron() ? window.electron.mediaResolveRemoteUrl(url, filesBaseUrl) : Promise.resolve(null),
   mediaGetImagesFolder: () =>
     isElectron() ? window.electron.mediaGetImagesFolder() : Promise.resolve(null),
   mediaSetImagesFolder: (folderPath) =>

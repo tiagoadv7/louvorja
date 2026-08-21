@@ -221,7 +221,16 @@ const Media = {
 
       const rawUrl = mode == "audio" ? data.url_music : data.url_instrumental_music;
       const localUrl = await $electron.mediaResolveFile(rawUrl);
-      $appdata.set("modules.media.config.audio", localUrl || $path.file(rawUrl));
+      // Sem arquivo local: converte a URL "app-local://…" (música lida do banco
+      // local/SQLite legado, ver sqlite-reader.js) na URL remota real da API —
+      // $path.file() sozinho não sabe fazer essa conversão (só reconhece
+      // esquemas já "prontos" e devolve "app-local://…" inalterado), e usar
+      // esse esquema direto num <audio>/XHR falha (CORS/ERR_FAILED, não é
+      // http(s)). Mesmo mapeamento de pastas já usado pelo download de música.
+      const streamUrl = localUrl
+        ? null
+        : await $electron.mediaResolveRemoteUrl(rawUrl, import.meta.env.VITE_URL_FILES);
+      $appdata.set("modules.media.config.audio", localUrl || streamUrl || $path.file(rawUrl));
 
       // Arquivo ainda não baixado, app em Modo Offline e com internet disponível →
       // pergunta a preferência (baixar a música, baixar o álbum inteiro, ou só
@@ -433,7 +442,12 @@ const Media = {
 
     const rawSwitchUrl = newMode === "audio" ? data.url_music : data.url_instrumental_music;
     const localUrl = await $electron.mediaResolveFile(rawSwitchUrl);
-    const newUrl = localUrl || $path.file(rawSwitchUrl);
+    // Mesmo motivo do open() — sem arquivo local, converte "app-local://…" na
+    // URL remota real antes de tocar (ver comentário lá).
+    const streamUrl = localUrl
+      ? null
+      : await $electron.mediaResolveRemoteUrl(rawSwitchUrl, import.meta.env.VITE_URL_FILES);
+    const newUrl = localUrl || streamUrl || $path.file(rawSwitchUrl);
 
     // Mesmo tratamento do open(): Modo Offline + internet + arquivo (cantado/playback)
     // ainda não baixado → pergunta a preferência em vez de só oferecer "Baixar Álbum".

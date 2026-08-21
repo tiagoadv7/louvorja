@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('electron', {
   mediaScanFolder: (folderPath) => ipcRenderer.invoke('media:scan-folder', folderPath),
   mediaResolveFile: (filename) => ipcRenderer.invoke('media:resolve-file', filename),
   mediaDownloadFile: (params) => ipcRenderer.invoke('media:download-file', params),
+  mediaResolveRemoteUrl: (url, filesBaseUrl) => ipcRenderer.invoke('media:resolve-remote-url', url, filesBaseUrl),
   mediaGetImagesFolder: () => ipcRenderer.invoke('media:get-images-folder'),
   mediaSetImagesFolder: (folderPath) => ipcRenderer.invoke('media:set-images-folder', folderPath),
   mediaResolveImage: (filename) => ipcRenderer.invoke('media:resolve-image', filename),

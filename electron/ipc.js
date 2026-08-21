@@ -1401,6 +1401,14 @@ function setupIpc(mainWindow) {
     }
   });
 
+  // Converte uma URL "app-local://…" (usada por músicas lidas do banco local/
+  // SQLite legado, ver sqlite-reader.js) na URL remota real correspondente na
+  // API, reaproveitando o mesmo mapeamento de pastas do download (resolveFileUrl)
+  // — sem baixar nada, só pra tocar via streaming quando o arquivo local não
+  // foi encontrado e o operador escolheu "Ouvir Online" (ver Media.js). Uma URL
+  // já http(s):// volta inalterada (resolveFileUrl já trata esse caso).
+  ipcMain.handle('media:resolve-remote-url', (_, url, filesBaseUrl) => resolveFileUrl(url, filesBaseUrl));
+
   // ── Pasta de imagens locais ───────────────────────────────────────────────
   ipcMain.handle('media:get-images-folder', () => Store.get('media_images_folder', null));
 
