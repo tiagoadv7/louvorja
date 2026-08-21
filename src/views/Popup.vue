@@ -9,14 +9,21 @@
            aparecia sem nenhum fade de entrada. mode="out-in" faz o Vue
            esperar o fade de SAÍDA (leave, mesma duração do fade interno do
            vídeo) terminar antes de desmontar o antigo e montar o novo, que
-           então entra com o próprio fade de ENTRADA. -->
+           então entra com o próprio fade de ENTRADA.
+
+           O <component> fica dentro de um <div> "amortecedor" (em vez de ser
+           filho direto desta <transition>) porque o Popup.vue do módulo media
+           já tem uma <transition> na RAIZ do próprio template dele (fade do
+           slide, ver core/media/interface/Popup.vue) — duas <transition> do
+           Vue disputando os hooks de enter/leave do MESMO nó (a raiz do
+           componente filho) trava o leave desta aqui pra sempre enquanto o
+           álbum está tocando, e o módulo novo (ex. vídeo) nunca chega a
+           montar. O <div> dá a esta <transition> um nó próprio, isolado do
+           que acontece dentro do módulo filho. -->
       <transition name="module-crossfade" mode="out-in">
-        <component
-          v-if="moduleComponent"
-          :is="moduleComponent"
-          :key="module"
-          style="width: 100%; height: 100%;"
-        />
+        <div v-if="moduleComponent" :key="module" style="width: 100%; height: 100%;">
+          <component :is="moduleComponent" style="width: 100%; height: 100%;" />
+        </div>
       </transition>
     </div>
   </transition>
