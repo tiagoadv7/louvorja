@@ -57,10 +57,12 @@ export default {
     config() {
       return this.$appdata.get('modules.video_player.config', {}) || {};
     },
-    // Fechar/minimizar o painel do operador (Index.vue) nunca encerra a
-    // projeção — só o botão "Fechar" da tela de saída (Screen.vue) faz isso,
-    // ou os controles do próprio player (Parar/ESC). Por isso não depende de
-    // "modules.video_player.show"/"minimized" — só de haver algo pra mostrar.
+    // Minimizar o painel do operador (Index.vue) nunca encerra a projeção —
+    // só "Fechar" (que chama stop() antes, ver Index.vue#close), o botão
+    // "Fechar" da tela de saída (Screen.vue), ou os controles do próprio
+    // player (Parar/ESC). Por isso não depende de
+    // "modules.video_player.show"/"minimized" — só de haver algo pra mostrar
+    // (fechar derruba isso indiretamente, limpando config.src via stop()).
     shouldRender() {
       return this.closingHold || !!this.config.src;
     },

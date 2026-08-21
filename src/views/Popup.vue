@@ -1,11 +1,23 @@
 <template>
   <transition name="popup-fade" appear>
     <div v-if="visible" class="popup-root">
-      <component
-        v-if="moduleComponent"
-        :is="moduleComponent"
-        style="width: 100%; height: 100%;"
-      />
+      <!-- Troca entre módulos (ex.: vídeo em execução → slide de uma música do
+           álbum) — sem isso o <component :is> troca na hora: o módulo antigo é
+           desmontado (removendo o elemento <video>/<img> da árvore) antes do
+           seu próprio fade interno (ver video_player/interface/Popup.vue,
+           ~1s) terminar, cortando a saída de forma abrupta, e o módulo novo
+           aparecia sem nenhum fade de entrada. mode="out-in" faz o Vue
+           esperar o fade de SAÍDA (leave, mesma duração do fade interno do
+           vídeo) terminar antes de desmontar o antigo e montar o novo, que
+           então entra com o próprio fade de ENTRADA. -->
+      <transition name="module-crossfade" mode="out-in">
+        <component
+          v-if="moduleComponent"
+          :is="moduleComponent"
+          :key="module"
+          style="width: 100%; height: 100%;"
+        />
+      </transition>
     </div>
   </transition>
 </template>
@@ -236,6 +248,18 @@ export default {
 }
 .popup-fade-enter-from,
 .popup-fade-leave-to {
+  opacity: 0;
+}
+
+/* Crossfade entre módulos (ver comentário no template) — 1s para acompanhar
+   o fade interno do video_player (mesmo tempo, ver Popup.vue dele) em vez de
+   um corte perceptível antes dele terminar. */
+.module-crossfade-enter-active,
+.module-crossfade-leave-active {
+  transition: opacity 1s ease;
+}
+.module-crossfade-enter-from,
+.module-crossfade-leave-to {
   opacity: 0;
 }
 </style>

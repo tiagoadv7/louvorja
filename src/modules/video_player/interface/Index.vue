@@ -206,7 +206,13 @@ export default {
       }
       return result;
     },
-    close() { this.$modules.close(this.module_id); },
+    // Fechar (diferente de minimizar, ver onMinimize) encerra a projeção
+    // também — reaproveita o mesmo fade suave do botão "Parar" (stop()),
+    // em vez de só esconder o painel e deixar o vídeo tocando escondido.
+    close() {
+      this.$videoPlayer.stop();
+      this.$modules.close(this.module_id);
+    },
 
     fmt(s) {
       if (!s || isNaN(s)) return '0:00';
