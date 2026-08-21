@@ -283,7 +283,12 @@ const Media = {
       // Arquivo local não encontrado (sem internet, ou fora do Modo Offline) → oferecer
       // download ao invés de tentar carregar e falhar. Mesma regra acima: depende só
       // do áudio, não da imagem de capa.
-      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
+      // !params._skipOnlineChoice: quem já passou pela pergunta acima e escolheu "Ouvir
+      // Online" reabre com esse flag — sem essa checagem aqui, esse segundo aviso
+      // aparecia de novo na hora (localUrl continua null de propósito, é streaming),
+      // e a única ação nele é baixar o álbum: clicar "Ouvir Online" parecia
+      // redirecionar direto pra baixar o álbum em vez de simplesmente tocar online.
+      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://") && !params._skipOnlineChoice) {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
@@ -474,8 +479,12 @@ const Media = {
       return;
     }
 
-    // Arquivo local não encontrado (sem internet, ou Modo Online) → aviso antigo
-    if (!localUrl && rawSwitchUrl && rawSwitchUrl.startsWith("app-local://")) {
+    // Arquivo local não encontrado (sem internet, ou Modo Online) → aviso antigo.
+    // !skipChoice: mesmo motivo do open() (ver comentário lá) — quem já escolheu
+    // "Ouvir Online" reabre com skipChoice=true; sem essa checagem, esse aviso
+    // aparecia de novo na hora (localUrl continua null de propósito) oferecendo só
+    // "baixar álbum", em vez de simplesmente tocar online como foi escolhido.
+    if (!localUrl && rawSwitchUrl && rawSwitchUrl.startsWith("app-local://") && !skipChoice) {
       $alert.show(
         {
           title: "modules.media.alerts.not_loaded_offline",
