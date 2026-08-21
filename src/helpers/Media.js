@@ -139,12 +139,6 @@ const Media = {
       return;
     }
     await this.resolveDataImages(data);
-    // Usado mais abaixo para só considerar a música "não baixada" no Modo Offline
-    // quando NEM o áudio NEM a imagem de fundo (capa) forem encontrados localmente —
-    // resolveImageUrl() retorna "app-local://" quando encontra o arquivo no disco;
-    // se não achar, cai para a URL remota. Sem imagem de capa (slide sem imagem
-    // própria), não há o que verificar: conta como "encontrada".
-    const _imageFoundLocally = !data.url_image || data.url_image.startsWith("app-local://");
 
     // Precarrega a imagem do slide capa no cache do browser (elimina tela preta inicial).
     // Se o arquivo estiver local o protocolo app-local:// o serve em ms; se não estiver,
@@ -235,14 +229,15 @@ const Media = {
       // antigo, ainda usado como fallback abaixo quando não há internet).
       // Em Modo Online o app já assume que vai buscar tudo sob demanda — toca direto,
       // sem perguntar (params._skipOnlineChoice evita perguntar de novo após a escolha).
-      // Só entra aqui quando NEM o áudio NEM a imagem de fundo foram encontrados
-      // localmente — se pelo menos um dos dois já está no disco, a música é tratada
-      // como já baixada (evita perguntar/mostrar aviso à toa por causa de uma falha
-      // pontual de resolução de um dos dois arquivos) e cai direto para o carregamento
-      // imediato mais abaixo.
+      // Depende só do ÁUDIO ter sido encontrado localmente (!localUrl) — a imagem de
+      // capa é irrelevante pra decidir se dá pra tocar o som; antes essa condição
+      // também exigia a capa estar ausente localmente, o que fazia essa pergunta
+      // nunca aparecer pra músicas sem capa própria (conta como "encontrada" por
+      // definição) ou com a capa cacheada de outra música do mesmo álbum, mesmo
+      // com o áudio de fato não encontrado.
       const isOfflineMode = $database.isLocalEnabled();
       const hasInternet = typeof navigator === "undefined" || navigator.onLine;
-      if (!localUrl && !_imageFoundLocally && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
+      if (!localUrl && rawUrl && !params._skipOnlineChoice && isOfflineMode && hasInternet
         && typeof this._autoCloseCallback !== 'function') {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
@@ -285,10 +280,10 @@ const Media = {
         return;
       }
 
-      // Arquivo local não encontrado → oferecer download ao invés de tentar carregar e falhar.
-      // Mesma regra acima: só considera "não encontrado" quando NEM o áudio NEM a
-      // imagem de fundo estão no disco.
-      if (!localUrl && !_imageFoundLocally && rawUrl && rawUrl.startsWith("app-local://")) {
+      // Arquivo local não encontrado (sem internet, ou fora do Modo Offline) → oferecer
+      // download ao invés de tentar carregar e falhar. Mesma regra acima: depende só
+      // do áudio, não da imagem de capa.
+      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://")) {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
