@@ -550,6 +550,16 @@ const Media = {
     audio.volume = targetVolume;
     $appdata.set("modules.media.config.is_fading", true);
 
+    // Mesmo motivo do ramo isPaused acima: "times" já foi trocado pro modo
+    // NOVO (linha ~518), mas o áudio ANTIGO continua tocando (e disparando
+    // timeupdate/progress) até a promoção do xfade, mais abaixo. Sem
+    // suprimir timeUpdate()/checkTime() aqui, o slide_index era recalculado
+    // usando os tempos do modo NOVO contra o currentTime do áudio ANTIGO
+    // (ainda na linha do tempo do modo velho) — fazendo o slide saltar pra
+    // frente (ou pra trás) durante os ~1.2s do crossfade, até a promoção lá
+    // embaixo corrigir sozinha no próximo timeupdate natural.
+    this._crossfading = true;
+
     const existing = document.getElementById("__audio_xfade");
     if (existing) { existing.pause(); existing.remove(); }
 
@@ -614,6 +624,13 @@ const Media = {
 
           audio.remove();
           $appdata.set("modules.media.config.is_fading", false);
+
+          // Libera timeUpdate()/checkTime() (ver _crossfading = true acima) e
+          // recalcula o slide_index já com o áudio novo — sem isso o slide
+          // ficava travado na posição de antes do crossfade até o próximo
+          // timeupdate natural do elemento recém-promovido.
+          this._crossfading = false;
+          this.timeUpdate();
         }
       }, INTERVAL);
     }, { once: true });
