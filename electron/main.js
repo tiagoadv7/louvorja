@@ -61,18 +61,30 @@ let currentPopupModule = null;
 // Lembra se a projeção deve reabrir sozinha na próxima vez que o app for
 // aberto (ver restauração em ipcMain.once('app:loaded')) — "" (só acontece
 // quando o operador fecha a projeção de propósito, ver Popup.js#exit) marca
-// que NÃO deve reabrir; qualquer módulo real marca que deve, com esse
-// módulo. Chamado tanto por 'state-update' quanto por 'state-update-batch'
-// (Media.maximize() — o fluxo mais comum, projetar uma música — manda
-// popup_module dentro de um lote via setMultiple, não por um 'state-update'
-// avulso; sem cobrir os dois canais aqui, a projeção nunca era lembrada pra
-// restaurar nesse caso, que é o mais frequente na prática).
+// que NÃO deve reabrir; um módulo real marca que deve, MAS só se a janela de
+// saída estiver de fato aberta nesse momento (ver checagem abaixo) — ver
+// createOutputWindow (Store.set('output_window_was_open', true) no
+// ready-to-show) pra quando ela vira true de verdade. Chamado tanto por
+// 'state-update' quanto por 'state-update-batch' (Media.maximize() — o
+// fluxo mais comum, projetar uma música — manda popup_module dentro de um
+// lote via setMultiple, não por um 'state-update' avulso; sem cobrir os
+// dois canais aqui, o módulo nunca era lembrado pra restaurar nesse caso,
+// que é o mais frequente na prática).
+//
+// A checagem de outputWindow aberta existe porque popup_module pode mudar
+// SEM a janela de saída estar aberta — a própria Media.maximize() documenta
+// que isso vira no-op nesse caso (ex.: o operador reabre a barra de áudio
+// minimizada depois de já ter fechado a projeção). Sem essa checagem, esse
+// no-op ainda gravava "deve reabrir" no Store, e a próxima abertura do app
+// tentava restaurar uma projeção que nunca esteve de fato na tela.
 function rememberPopupModuleForRestore(entry) {
   if (!entry || entry.param !== 'popup_module') return;
   currentPopupModule = entry.value || null;
   if (entry.value) {
-    Store.set('output_window_was_open', true);
-    Store.set('output_window_last_module', entry.value);
+    if (outputWindow && !outputWindow.isDestroyed()) {
+      Store.set('output_window_was_open', true);
+      Store.set('output_window_last_module', entry.value);
+    }
   } else {
     Store.set('output_window_was_open', false);
   }
@@ -350,6 +362,14 @@ function createOutputWindow(moduleId, displayId) {
     outputWindow.setResizable(false);
     outputWindow.setMovable(false);
     outputWindow.show();
+    // Marca "deve reabrir sozinho da próxima vez" (ver restauração em
+    // ipcMain.once('app:loaded')) só agora, que a janela de saída de fato
+    // abriu — ver comentário em rememberPopupModuleForRestore sobre por que
+    // isso não pode vir só de popup_module mudar. NÃO espelhar isso no
+    // 'closed' abaixo: o cascade-destroy de mainWindow.on('closed') também
+    // passa por ali ao encerrar o app inteiro, e apagar a flag nesse
+    // momento destruiria a própria restauração que ela existe pra viabilizar.
+    Store.set('output_window_was_open', true);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('output-window-opened');
     }
