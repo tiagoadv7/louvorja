@@ -66,12 +66,31 @@ export default {
     const _hash = window.location.hash;
     if (_hash.includes('/popup') || _hash.includes('/return-screen') || _hash.includes('/video-pip')) return;
 
-    // Garante que o fundo personalizado não persista de sessões anteriores.
-    // O slide sempre inicia com a imagem padrão do álbum (globalBg = null).
-    try {
-      localStorage.removeItem('slide_global_bg');
-      window.dispatchEvent(new CustomEvent('slide-bg-changed'));
-    } catch (_) {}
+    // Restaura o "Fundo Personalizado" com o mesmo estado (ativo ou inativo)
+    // que ele tinha quando o app foi fechado — a ativação é persistida no
+    // electron-store por modules/core/slide_bg/interface/Index.vue#syncToLocalStorage.
+    // Sem essa chave (recurso nunca ativado, ou desativado por último), o slide
+    // volta a usar a imagem padrão do álbum.
+    this.$electron.storeGet('slide_global_bg_persisted', null)
+      .then(persisted => {
+        try {
+          if (persisted) localStorage.setItem('slide_global_bg', JSON.stringify(persisted));
+          else localStorage.removeItem('slide_global_bg');
+          window.dispatchEvent(new CustomEvent('slide-bg-changed'));
+          // Empurra também por IPC para a janela de saída/retorno — elas não
+          // compartilham este localStorage (cada janela tem o seu, ver
+          // SystemBar.vue) e, se a projeção anterior for restaurada neste
+          // mesmo boot (ver 'restore-output-state' abaixo), a janela de saída
+          // pode terminar de carregar e pedir seu resync ('output-ready')
+          // ANTES deste storeGet resolver — sem este envio explícito, ela
+          // ficava com o fundo/tamanho de texto padrão (em vez do
+          // personalizado) até a próxima alteração manual no painel.
+          if (window.electron) {
+            window.electron.sendStateUpdate({ param: 'slide_global_bg', value: persisted ?? null });
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
 
     // Segurança: se offline mode estava ativo mas não há nenhum arquivo local
     // (build nova ou localStorage persistido de sessão de desenvolvimento),

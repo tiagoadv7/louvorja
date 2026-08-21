@@ -414,6 +414,9 @@ function syncToLocalStorage() {
     if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
       window.electron.sendStateUpdate({ param: 'slide_global_bg', value: null });
     }
+    // Marca o recurso como inativo — é isso que o App.vue lê na próxima
+    // inicialização pra saber se deve restaurar o fundo personalizado ou não.
+    proxy?.$electron?.storeRemove?.('slide_global_bg_persisted').catch(() => {});
     return;
   }
   const ud = proxy?.$userdata;
@@ -453,6 +456,11 @@ function syncToLocalStorage() {
     if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
       window.electron.sendStateUpdate({ param: 'slide_global_bg', value: bgData });
     }
+
+    // Persiste o recurso como ATIVO no electron-store (sobrevive a reinícios do
+    // app) — o App.vue lê essa chave na próxima inicialização pra restaurar o
+    // mesmo fundo/texto personalizado em vez de sempre voltar ao padrão.
+    proxy?.$electron?.storeSet?.('slide_global_bg_persisted', bgData).catch(() => {});
   } catch (_) {}
 }
 
