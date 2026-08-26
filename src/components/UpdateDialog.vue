@@ -344,11 +344,19 @@ export default {
     },
 
     async startDownload() {
-      this.step         = 'downloading';
-      this.snackbar     = true;
+      // Não força step='downloading' aqui — o diálogo nativo "Salvar como"
+      // abre primeiro (ver electron/main.js, handler 'updater:download'), e só
+      // depois de escolhido o destino o download começa de fato (evento
+      // 'updater:progress' abaixo já cuida de mudar o step). Se o usuário
+      // cancelar o diálogo, o step permanece 'available' — sem tela de erro.
       this.errorMessage = '';
       try {
-        await this.$electron.updaterDownload();
+        const result = await this.$electron.updaterDownload();
+        if (result?.canceled) return;
+        if (result && result.ok === false) {
+          this.errorMessage = result.error || 'Erro ao baixar a atualização.';
+          this.step = 'error';
+        }
       } catch (_) {
         this.step = 'error';
         // O handler principal (electron/main.js) já manda a mensagem real via

@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, screen, session, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session, protocol, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const https = require('https');
 
 // Deve ser chamado ANTES de app.whenReady() — registra o esquema como seguro
 // para que <img src="app-local://capas/2026.bmp"> funcione no renderer
@@ -611,8 +612,7 @@ function logUpdaterError(context, err) {
 // Qualquer falha durante a VERIFICAÇÃO é tratada como "sem atualização
 // disponível" — o usuário que clica em "Verificar atualizações" não precisa
 // saber a razão técnica, só se há ou não uma versão nova. A tela de erro fica
-// reservada para falhas de download (ver isCheckingUpdate abaixo e o handler
-// 'updater:download').
+// reservada para falhas de download (ver downloadInstallerWithRetry abaixo).
 let isCheckingUpdate = false;
 
 async function runUpdateCheck() {
@@ -620,7 +620,14 @@ async function runUpdateCheck() {
 
   isCheckingUpdate = true;
   try {
-    await autoUpdater.checkForUpdates();
+    const r = await autoUpdater.checkForUpdates();
+    // Em dev (app não empacotado, sem dev-app-update.yml), checkForUpdates()
+    // resolve com null SEM emitir nenhum evento (ver isUpdaterActive() no
+    // electron-updater) — sem isso o diálogo fica preso em "Verificando
+    // atualizações..." pra sempre em dev. Em produção o autoUpdater sempre
+    // emite 'update-available'/'update-not-available', então isso não
+    // duplica evento nenhum ali.
+    if (r == null) sendToRenderer('updater:not-available', {});
   } catch (e) {
     console.error('[updater] Falha ao verificar no GitHub:', e.message || e);
     logUpdaterError('check', e);
@@ -628,6 +635,102 @@ async function runUpdateCheck() {
   } finally {
     isCheckingUpdate = false;
   }
+}
+
+// ── Download do instalador ──────────────────────────────────────────────────
+// electron-updater (autoUpdater.downloadUpdate) baixa sempre para a própria
+// pasta de cache dele (%LOCALAPPDATA%\louvorja-updater) e depois instala
+// silenciosamente — o usuário nunca escolhe o destino. Aqui o download do
+// instalador é feito à parte, direto da API do GitHub Releases (mesma fonte
+// do autoUpdater), só para poder perguntar ANTES onde salvar o arquivo —
+// nunca dentro da pasta de instalação do Louvor JA, que também guarda
+// músicas/capas/banco de dados do usuário (ver getWritableBase() em ipc.js e
+// build/installer.nsh). O autoUpdater continua sendo usado só para VERIFICAR
+// se há versão nova (runUpdateCheck acima).
+const GITHUB_OWNER = 'tiagoadv7';
+const GITHUB_REPO = 'louvorja';
+
+let downloadedInstallerPath = null;
+
+function assetExtensionForPlatform() {
+  if (process.platform === 'win32') return 'exe';
+  if (process.platform === 'darwin') return 'dmg';
+  return 'AppImage';
+}
+
+/** GET simples de JSON via HTTPS, seguindo redirecionamentos. */
+function githubApiRequest(urlStr, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const req = https.get(
+      { hostname: u.hostname, path: u.pathname + u.search, headers: { 'User-Agent': 'LouvorJA', Accept: 'application/vnd.github+json' } },
+      (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          if (redirects >= 10) return reject(new Error('Muitos redirecionamentos ao consultar o GitHub'));
+          return githubApiRequest(new URL(res.headers.location, urlStr).toString(), redirects + 1).then(resolve, reject);
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode >= 400) return reject(new Error(`HTTP ${res.statusCode} ao consultar o GitHub`));
+          try { resolve(JSON.parse(body)); } catch (e) { reject(new Error(`Resposta inválida do GitHub: ${e.message}`)); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(30000, () => req.destroy(new Error('Timeout ao consultar o GitHub')));
+  });
+}
+
+/** Busca a release mais recente e o asset compatível com a plataforma atual. */
+async function findLatestReleaseAsset() {
+  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+  const ext = assetExtensionForPlatform();
+  const asset = (release.assets || []).find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
+  if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na última release`);
+  const version = String(release.tag_name || '').replace(/^v/, '');
+  return { asset, version };
+}
+
+/** Baixa uma URL para um arquivo local, com progresso e redirecionamentos. */
+function downloadFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const tmpPath = `${destPath}.tmp`;
+    const request = (u) => {
+      https.get(u, { headers: { 'User-Agent': 'LouvorJA' } }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          return request(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode} ao baixar o instalador`));
+        }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        let sample = { time: Date.now(), received: 0 };
+        const out = fs.createWriteStream(tmpPath);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          const now = Date.now();
+          if (now - sample.time >= 250) {
+            const bytesPerSecond = Math.round(((received - sample.received) / (now - sample.time)) * 1000);
+            sample = { time: now, received };
+            const eta = bytesPerSecond > 0 && total > 0 ? Math.round((total - received) / bytesPerSecond) : null;
+            onProgress({ percent: total ? Math.min(99, Math.round((received / total) * 100)) : 0, transferred: received, total, bytesPerSecond, eta });
+          }
+        });
+        res.pipe(out);
+        out.on('finish', () => out.close(() => fs.rename(tmpPath, destPath, (err) => (err ? reject(err) : resolve()))));
+        out.on('error', reject);
+      }).on('error', reject).setTimeout(120000, function () {
+        this.destroy(new Error('Timeout ao baixar o instalador'));
+      });
+    };
+    request(url);
+  });
 }
 
 // Tenta o download algumas vezes com espera entre tentativas antes de desistir.
@@ -640,79 +743,74 @@ async function runUpdateCheck() {
 // Atraso progressivo (10s, 15s, 20s, 25s, 30s) soma ~100s de tolerância total.
 const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 25000, 30000];
 
-// isRetryingDownload sinaliza pro listener global 'error' (abaixo) não repassar
-// pro renderer as falhas das tentativas intermediárias — só a última, se todas
-// falharem — senão o usuário veria a tela de erro piscar mesmo quando uma
-// tentativa posterior dá certo.
-let isRetryingDownload = false;
-
-async function downloadUpdateWithRetry() {
-  isRetryingDownload = true;
-  try {
-    const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
-    let lastErr;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        return await autoUpdater.downloadUpdate();
-      } catch (e) {
-        lastErr = e;
-        logUpdaterError(`download tentativa ${attempt}/${maxAttempts} falhou`, e);
-        const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
-        if (delayMs) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-      }
+async function downloadInstallerWithRetry(url, destPath, onProgress) {
+  const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await downloadFile(url, destPath, onProgress);
+    } catch (e) {
+      lastErr = e;
+      logUpdaterError(`download tentativa ${attempt}/${maxAttempts} falhou`, e);
+      try { fs.unlinkSync(`${destPath}.tmp`); } catch (_) { /* pode não existir ainda */ }
+      const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
+      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw lastErr;
-  } finally {
-    isRetryingDownload = false;
   }
+  throw lastErr;
 }
 
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false; // download é feito manualmente (ver acima) — autoUpdater só verifica
   autoUpdater.logger = null; // silencia logs internos do electron-updater
-  // Histórico de releases já teve tags reaproveitadas apontando pra conteúdo
-  // diferente do esperado — um download diferencial (baseado no .blockmap da
-  // versão anterior) é bem mais frágil nesse cenário do que baixar o instalador
-  // completo de novo. Desliga a otimização em troca de confiabilidade.
-  autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on('checking-for-update',  ()       => sendToRenderer('updater:checking'));
   autoUpdater.on('update-available',     (info)   => sendToRenderer('updater:available', info));
   autoUpdater.on('update-not-available', (info)   => sendToRenderer('updater:not-available', info));
-  autoUpdater.on('download-progress',    (prog)   => sendToRenderer('updater:progress', prog));
-  autoUpdater.on('update-downloaded',    (info)   => sendToRenderer('updater:downloaded', info));
   autoUpdater.on('error', (err) => {
     const msg = err?.message || String(err);
     console.error('[updater] Erro do autoUpdater:', msg);
     logUpdaterError('autoUpdater error event', err);
-    // Erro durante a verificação (não durante o download) → sem atualização
-    if (isCheckingUpdate) {
-      sendToRenderer('updater:not-available', {});
-      return;
-    }
-    // Falha de uma tentativa intermediária do retry — não repassa ainda (ver
-    // downloadUpdateWithRetry); só a falha final (lançada pro catch do handler
-    // 'updater:download' abaixo) chega no renderer.
-    if (isRetryingDownload) return;
-    sendToRenderer('updater:error', msg);
+    // O autoUpdater só é usado para verificar — qualquer erro dele é erro de
+    // verificação, tratado como "sem atualização" (ver runUpdateCheck acima).
+    if (isCheckingUpdate) sendToRenderer('updater:not-available', {});
   });
 
   ipcMain.handle('updater:check', () => runUpdateCheck());
 
   ipcMain.handle('updater:download', async () => {
     try {
-      await downloadUpdateWithRetry();
+      const { asset, version } = await findLatestReleaseAsset();
+
+      const chosen = await dialog.showSaveDialog(mainWindow, {
+        title: 'Salvar instalador da atualização',
+        defaultPath: path.join(app.getPath('downloads'), asset.name),
+        filters: [{ name: 'Instalador', extensions: [assetExtensionForPlatform()] }],
+      });
+      if (chosen.canceled || !chosen.filePath) return { canceled: true };
+
+      await downloadInstallerWithRetry(asset.browser_download_url, chosen.filePath, (prog) => sendToRenderer('updater:progress', prog));
+
+      downloadedInstallerPath = chosen.filePath;
+      sendToRenderer('updater:downloaded', { version });
+      return { ok: true, path: chosen.filePath };
     } catch (e) {
       logUpdaterError('download', e);
       sendToRenderer('updater:error', e.message);
+      return { ok: false, error: e.message };
     }
   });
 
   ipcMain.handle('updater:install', () => {
-    setImmediate(() => autoUpdater.quitAndInstall());
+    if (!downloadedInstallerPath) return;
+    shell.openPath(downloadedInstallerPath).then((err) => {
+      if (err) {
+        logUpdaterError('install', new Error(err));
+        sendToRenderer('updater:error', err);
+        return;
+      }
+      setTimeout(() => app.quit(), 500);
+    });
   });
 }
 
