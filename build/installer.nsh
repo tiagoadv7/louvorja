@@ -407,6 +407,14 @@ FunctionEnd
 
   CreateDirectory "$INSTDIR\config\server"
 
+  ; db/ guarda os JSONs locais (getDbDir() em electron/ipc.js) — fica FORA de
+  ; config/ por isso precisa do próprio icacls abaixo; sem essa pasta existir
+  ; e sem a permissão, "db:local-save" falha com EPERM pra qualquer usuário
+  ; sem privilégio de admin (a raiz de $INSTDIR em Program Files não herda a
+  ; permissão de config/, só as pastas CRIADAS dentro dela).
+  CreateDirectory "$INSTDIR\db"
+  DetailPrint "  » Pasta db/ criada"
+
   DetailPrint "Verificando banco de dados do usuário..."
 
   ; Fallback só pro caso do RestoreLegacyMerge acima não ter tido nada pra
@@ -435,6 +443,7 @@ FunctionEnd
   ; Concede permissão total de leitura/escrita a todos os usuários
   ; (necessário para o app baixar arquivos sem precisar de admin)
   nsExec::ExecToLog 'icacls "$INSTDIR\config" /grant:r "*S-1-1-0":(OI)(CI)F /T /Q'
+  nsExec::ExecToLog 'icacls "$INSTDIR\db" /grant:r "*S-1-1-0":(OI)(CI)F /T /Q'
   DetailPrint "  » Permissões de escrita concedidas para todos os usuários"
 
   DetailPrint "Instalação concluída com sucesso!"
