@@ -82,18 +82,24 @@
         </div>
       </div>
       <div
-        v-if="!media.config.audio && location == 'footer'"
+        v-if="!media.config.audio && location == 'footer' && source === 'media'"
         class="d-flex align-center justify-center py-1 px-3"
       >
         <small class="text-center">
           {{ slide_text }}
         </small>
       </div>
+      <div
+        v-else-if="!media.config.audio && location == 'footer' && source === 'video'"
+        class="d-flex align-center justify-center py-1 px-3"
+      >
+        <small class="text-center">Imagem exibida na tela de projeção</small>
+      </div>
     </div>
     <div class="d-flex flex-column">
       <div class="d-flex align-center justify-end pa-1 flex-grow-1">
         <v-menu
-          v-if="location !== 'fullscreen' && $vuetify.display.width > 350"
+          v-if="source === 'media' && location !== 'fullscreen' && $vuetify.display.width > 350"
         >
           <template v-slot:activator="{ props }">
             <v-btn
@@ -123,7 +129,19 @@
           </v-list>
         </v-menu>
 
-        <v-menu v-if="this.media.minimized && !compact">
+        <!-- Vídeo: sem modo cantado/instrumental — botão dedicado pro mini
+             player flutuante (PIP) no mesmo lugar do menu de modos do media -->
+        <v-btn
+          v-if="source === 'video' && $electron.isElectron()"
+          variant="text"
+          size="small"
+          :color="pipOpen ? 'primary' : ''"
+          icon="mdi-picture-in-picture-bottom-right"
+          title="Mini player flutuante"
+          @click="togglePip"
+        />
+
+        <v-menu v-if="source === 'media' && this.media.minimized && !compact">
           <template v-slot:activator="{ props }">
             <v-btn variant="flat" size="x-small" color="white" v-bind="props">
               {{ this.media.config.slide_index + 1 }}
@@ -174,7 +192,10 @@
           icon="mdi-fullscreen"
           @click="fullscreen()"
         />
-        <LScreenBtn v-if="location !== 'fullscreen'" module="media" />
+        <LScreenBtn
+          v-if="location !== 'fullscreen' && source !== 'soundmaster' && source !== 'web_link'"
+          :module="source === 'video' ? 'video_player' : 'media'"
+        />
 
         <v-menu v-if="location !== 'fullscreen' && compact">
           <template v-slot:activator="{ props }">
@@ -200,19 +221,21 @@
               <v-icon :icon="button.icon" />
             </v-list-item>
 
-            <v-divider v-if="$vuetify.display.width <= 350" />
-            <template v-for="(mode, key) in menu_modes" :key="key">
-              <v-divider
-                v-if="mode.title == '-' && $vuetify.display.width <= 350"
-              />
-              <v-list-item
-                v-else-if="$vuetify.display.width <= 350"
-                :active="mode.active"
-                :disabled="mode.disabled"
-                @click="mode.click"
-              >
-                <v-icon :icon="mode.icon" />
-              </v-list-item>
+            <template v-if="source === 'media'">
+              <v-divider v-if="$vuetify.display.width <= 350" />
+              <template v-for="(mode, key) in menu_modes" :key="key">
+                <v-divider
+                  v-if="mode.title == '-' && $vuetify.display.width <= 350"
+                />
+                <v-list-item
+                  v-else-if="$vuetify.display.width <= 350"
+                  :active="mode.active"
+                  :disabled="mode.disabled"
+                  @click="mode.click"
+                >
+                  <v-icon :icon="mode.icon" />
+                </v-list-item>
+              </template>
             </template>
           </v-list>
         </v-menu>
@@ -260,12 +283,93 @@ export default {
   name: "PlayerComponent",
   props: {
     location: String,
+    // 'media' (padrão, comportamento original) | 'video' | 'soundmaster' |
+    // 'web_link' — mesma barra/layout, só troca de onde os dados/comandos vêm.
+    // Assim a Liturgia/módulo de Vídeo/SoundMaster não precisam de uma barra própria.
+    source: { type: String, default: "media" },
   },
   components: {
     LScreenBtn,
   },
+  data: () => ({
+    pipOpen: false,
+    _volumeFadeInterval: null,
+  }),
   computed: {
+    // Formato compatível com $modules.get("media") — só o necessário pro
+    // resto do componente (template/botões) funcionar sem saber a origem.
     media() {
+      if (this.source === "video") {
+        const cfg = this.$videoPlayer.getConfig();
+        const isImage = cfg.mediaType === "image";
+        return {
+          minimized: this.$videoPlayer.isMinimized(),
+          loading: false,
+          data: {},
+          config: {
+            title: cfg.name || "",
+            subtitle: "",
+            track: 0,
+            image: "",
+            audio: !isImage ? (cfg.src || "") : "",
+            current_time: cfg.currentTime || 0,
+            duration: cfg.duration || 0,
+            progress: cfg.duration > 0 ? (cfg.currentTime / cfg.duration) * 100 : 0,
+            buffered: 100,
+            is_paused: !cfg.isPlaying,
+            is_fading: false,
+            volume: cfg.volume ?? 100,
+          },
+        };
+      }
+      if (this.source === "soundmaster") {
+        const np = this.$soundMaster.nowPlaying();
+        return {
+          minimized: this.$soundMaster.isMinimized(),
+          loading: false,
+          data: {},
+          config: {
+            title: np.name || "",
+            subtitle: "",
+            track: 0,
+            image: "",
+            audio: np.name ? "x" : "",
+            current_time: np.current_time || 0,
+            duration: np.duration || 0,
+            progress: np.progress || 0,
+            buffered: 100,
+            is_paused: !np.playing,
+            is_fading: false,
+            volume: np.volume ?? 100,
+          },
+        };
+      }
+      if (this.source === "web_link") {
+        const cfg = this.$webLink.getConfig();
+        return {
+          minimized: this.$webLink.isMinimized(),
+          loading: false,
+          data: {},
+          config: {
+            title: "YouTube",
+            subtitle: "",
+            track: 0,
+            image: "",
+            // "audio" aqui é só o flag genérico de "tem mídia carregada" que o
+            // resto do componente usa pra mostrar play/pause/progresso (mesmo
+            // uso overloadado do source="video" acima) — não tem relação com
+            // áudio de fato.
+            audio: cfg.videoId ? "x" : "",
+            current_time: cfg.current_time || 0,
+            duration: cfg.duration || 0,
+            progress: cfg.duration > 0 ? (cfg.current_time / cfg.duration) * 100 : 0,
+            buffered: 100,
+            is_paused: !cfg.isPlaying,
+            is_fading: !!cfg.isFading,
+            volume: cfg.volume ?? 100,
+          },
+        };
+      }
       return this.$modules.get("media");
     },
     slides() {
@@ -290,7 +394,7 @@ export default {
           },
         },
         {
-          show: true,
+          show: this.source === 'media',
           compact: true,
           disabled: this.media.config.slide_index <= 0,
           highlight: false,
@@ -299,7 +403,7 @@ export default {
           shortkey: ["home"],
         },
         {
-          show: true,
+          show: this.source === 'media',
           compact: false,
           disabled: this.media.config.slide_index <= 0,
           highlight: false,
@@ -321,7 +425,7 @@ export default {
           shortkey: ["space"],
         },
         {
-          show: true,
+          show: this.source === 'media',
           compact: false,
           disabled:
             this.media.config.slide_index >= this.media.config.last_slide - 1,
@@ -335,7 +439,7 @@ export default {
           },
         },
         {
-          show: true,
+          show: this.source === 'media',
           compact: true,
           disabled:
             this.media.config.slide_index >= this.media.config.last_slide - 1,
@@ -446,6 +550,9 @@ export default {
   },
   methods: {
     play() {
+      if (this.source === 'video') { this.$videoPlayer.togglePlay(); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.togglePlay(); return; }
+      if (this.source === 'web_link') { this.$webLink.togglePlay(); return; }
       if (this.media.config.is_paused) {
         this.$media.play();
       } else {
@@ -453,6 +560,9 @@ export default {
       }
     },
     rewind: function () {
+      if (this.source === 'video') { this.$videoPlayer.seekBy(-10); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.seekBy(-10); return; }
+      if (this.source === 'web_link') { this.$webLink.seekBy(-10); return; }
       this.$media.advanceTime(-10);
     },
     first() {
@@ -468,6 +578,9 @@ export default {
       this.$media.lastSlide();
     },
     forward: function () {
+      if (this.source === 'video') { this.$videoPlayer.seekBy(10); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.seekBy(10); return; }
+      if (this.source === 'web_link') { this.$webLink.seekBy(10); return; }
       this.$media.advanceTime(+10);
     },
     open: function (data) {
@@ -477,25 +590,77 @@ export default {
       this.$media.openLyric();
     },
     maximize: function () {
+      if (this.source === 'video') { this.$videoPlayer.maximize(); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.maximize(); return; }
+      if (this.source === 'web_link') { this.$webLink.maximize(); return; }
       this.$media.maximize();
     },
     close: function () {
+      if (this.source === 'video') { this.$videoPlayer.stop(); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.stop(); return; }
+      if (this.source === 'web_link') { this.$webLink.stop(); return; }
       this.$media.close();
     },
     changeProgress() {
       const time =
         (this.media.config.duration * this.media.config.progress) / 100;
+      if (this.source === 'video') { this.$videoPlayer.seekTo(time); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.seekTo(time); return; }
+      if (this.source === 'web_link') { this.$webLink.seekTo(time); return; }
       this.$media.goToTime(time);
     },
     fullscreen(value = true) {
       this.$media.fullscreen(value);
     },
     toogleVolume() {
-      this.$media.toogleVolume();
+      const from = this.media.config.volume;
+      const target = from < 100 ? 100 : 0;
+      this._fadeVolumeTo(from, target);
+    },
+    // Mute/unmute suave (em passos, ~280ms) em vez de saltar direto pro
+    // volume final — vale pra media, vídeo e coletânea (mesmo botão aqui na
+    // barra, incluindo quando ela está minimizada mostrando o rodapé).
+    _fadeVolumeTo(from, target) {
+      clearInterval(this._volumeFadeInterval);
+      const STEPS = 10;
+      const INTERVAL = 28;
+      const delta = (target - from) / STEPS;
+      const setStep = (v) => {
+        const vol = Math.round(Math.max(0, Math.min(100, v)));
+        if (this.source === 'video') this.$videoPlayer.setVolume(vol);
+        else if (this.source === 'soundmaster') this.$soundMaster.setVolume(vol);
+        else if (this.source === 'web_link') this.$webLink.setVolume(vol);
+        else this.$media.setVolume(vol);
+      };
+      let n = 0;
+      this._volumeFadeInterval = setInterval(() => {
+        n++;
+        setStep(n >= STEPS ? target : from + delta * n);
+        if (n >= STEPS) {
+          clearInterval(this._volumeFadeInterval);
+          this._volumeFadeInterval = null;
+        }
+      }, INTERVAL);
     },
     changeVolume() {
+      if (this.source === 'video') { this.$videoPlayer.setVolume(this.media.config.volume); return; }
+      if (this.source === 'soundmaster') { this.$soundMaster.setVolume(this.media.config.volume); return; }
+      if (this.source === 'web_link') { this.$webLink.setVolume(this.media.config.volume); return; }
       this.$media.setVolume(this.media.config.volume);
     },
+    async togglePip() {
+      if (this.pipOpen) { await this.$electron.pipClose(); this.pipOpen = false; }
+      else { await this.$electron.pipOpen(); this.pipOpen = true; }
+    },
+  },
+  async mounted() {
+    if (this.source !== 'video' || !this.$electron.isElectron()) return;
+    this.pipOpen = await this.$electron.pipIsOpen();
+    this._pipClosedHandler = this.$electron.on('video-pip:closed', () => { this.pipOpen = false; });
+  },
+  beforeUnmount() {
+    if (this._pipClosedHandler) this.$electron.off('video-pip:closed', this._pipClosedHandler);
+    clearInterval(this._volumeFadeInterval);
   },
 };
 </script>

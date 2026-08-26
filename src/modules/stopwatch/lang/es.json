@@ -10,6 +10,13 @@
     "saved_times": "Tiempos Guardados",
     "clear_all": "Limpiar Todos",
     "no_saved_times": "Sin tiempos guardados",
+    "mode_normal": "Normal",
+    "mode_countdown": "Regresivo",
+    "duration_minutes": "Duración (min.)",
+    "add_subtract_time": "Agregar/Restar Tiempo",
+    "auto_stop_at_zero": "Detener al llegar a cero",
+    "end_message": "Mensaje al llegar a cero",
+    "end_message_placeholder": "¡Tiempo Terminado!",
     "customization": {
         "background": "Fondo",
         "color": "Color",

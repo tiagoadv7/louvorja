@@ -1,5 +1,10 @@
 {
     "title": "Aparência",
     "light-themes": "Temas Claros",
-    "dark-themes": "Temas Escuros"
+    "dark-themes": "Temas Escuros",
+    "monitors": "Monitor de Saída",
+    "loading-monitors": "Detectando monitores...",
+    "no-monitors": "Nenhum monitor detectado.",
+    "primary": "Principal",
+    "identify-monitors": "Identificar Monitores"
 }

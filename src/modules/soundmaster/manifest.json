@@ -1,0 +1,13 @@
+{
+  "id": "soundmaster",
+  "name": "SoundMaster",
+  "description": "Mesa de som profissional com pads de áudio, efeitos e controle de volume",
+  "category": "utilities",
+  "icon": "mdi-tune-vertical",
+  "customization": {
+    "fade_in_ms":     { "default": 1200 },
+    "fade_out_ms":    { "default": 2500 },
+    "ducking_level":  { "default": 0.25 },
+    "master_volume":  { "default": 1.0 }
+  }
+}

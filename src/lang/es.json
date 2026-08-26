@@ -33,6 +33,7 @@
         "customization": {
             "restore": "Restaurar",
             "restore_configs": "Restaurar Configuración",
+            "clear_image": "Eliminar imagen",
             "restore_dialog": "¿Quieres restaurar la configuración?",
             "fit": {
                 "none": "Ninguno",

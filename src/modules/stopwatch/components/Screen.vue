@@ -18,8 +18,15 @@
         opacity: userdata.image_opacity / 100,
       }"
     />
-    <span class="text-right" :style="textStyle">
-      {{ formattedTime }}
+    <span v-if="!showEndMessage" class="text-right" :style="textStyle">
+      {{ displayTime }}
+    </span>
+    <!-- Mensagem de fim de contagem (ex.: "Tempo Acabou!") — troca os dígitos
+         quando o regressivo chega a zero, igual ao "Screen.vue" ser o mesmo
+         componente usado na saída E no retorno (ver views/ReturnScreen.vue),
+         então aparece nas duas telas automaticamente, sem lógica extra. -->
+    <span v-else class="text-center" :style="endMessageStyle">
+      {{ userdata.end_message }}
     </span>
   </div>
 </template>
@@ -35,6 +42,11 @@ export default {
     timer: null,
     elapsedTime: 0,
     now: null,
+    // Modo "regressivo": timer local próprio (igual ao Cronômetro de Culto)
+    // calculando o restante a partir de targetEndAt, em vez de depender de
+    // atualizações contínuas vindas do painel do operador.
+    countdownTimer: null,
+    countdownNow: new Date(),
   }),
   computed: {
     module_id() {
@@ -130,11 +142,18 @@ export default {
     textStyle() {
       return {
         fontFamily: this.font,
-        color: this.fontColor,
+        // Modo regressivo passado do tempo (com "Desligar ao zerar tempo"
+        // desmarcado): mesmo tratamento do Cronômetro de Culto, texto fica
+        // vermelho em vez de mostrar sinal de negativo.
+        color: this.isOvertime ? '#ff5252' : this.fontColor,
         zIndex: 1,
         fontSize: `${this.fontSizePc(this.fontSize)}px`,
         textAlign: `${this.horizontalAlign}`,
       };
+    },
+
+    mode() {
+      return this.userdata.mode || 'normal';
     },
 
     startTime() {
@@ -151,12 +170,93 @@ export default {
       return this.appdata.is_running ?? null;
     },
 
+    // Modo regressivo — mesmos campos do Cronômetro de Culto (ver
+    // cronometro_culto/components/Screen.vue), só que sob o namespace deste
+    // módulo (modules.stopwatch.*), sem colisão entre os dois.
+    targetEndAt() {
+      const value = this.appdata.target_end_at;
+      if (!value) return null;
+      return value instanceof Date ? value : new Date(value);
+    },
+    totalDurationMs() {
+      return this.appdata.total_duration_ms || 0;
+    },
+    remainingMs() {
+      if (!this.targetEndAt) return 0;
+      return this.targetEndAt - this.countdownNow;
+    },
+    isOvertime() {
+      return (
+        this.mode === 'countdown' &&
+        this.isRunning &&
+        this.remainingMs < 0 &&
+        !this.userdata.auto_stop_at_zero
+      );
+    },
+
+    // Mostra a mensagem (em vez dos dígitos) a partir do instante em que o
+    // regressivo chega a zero, contanto que haja mensagem digitada e o
+    // horário de término ainda esteja configurado (Reset limpa targetEndAt,
+    // fazendo a mensagem sumir junto). Independe de isRunning de propósito:
+    // cobre tanto o caso "Desligar ao zerar tempo" (para sozinho, mensagem
+    // fica) quanto "Continuar após zero" (segue passando do tempo, mensagem
+    // aparece do mesmo jeito, no lugar do relógio em overtime).
+    showEndMessage() {
+      return (
+        this.mode === 'countdown' &&
+        !!this.targetEndAt &&
+        this.remainingMs <= 0 &&
+        !!(this.userdata.end_message && this.userdata.end_message.trim())
+      );
+    },
+    endMessageStyle() {
+      return {
+        fontFamily: this.font,
+        color: '#ff5252',
+        zIndex: 1,
+        fontSize: `${this.fontSizePc(this.fontSize * 0.6)}px`,
+        textAlign: 'center',
+        lineHeight: 1.2,
+      };
+    },
+
     formattedTime() {
       const elapsedTime = this.now
         ? this.now - (this.startTime ?? this.now)
         : 0;
-
-      const totalMilliseconds = elapsedTime;
+      return this.formatMs(elapsedTime);
+    },
+    formattedRemaining() {
+      return this.formatMs(Math.abs(this.remainingMs));
+    },
+    displayTime() {
+      return this.mode === 'countdown' ? this.formattedRemaining : this.formattedTime;
+    },
+  },
+  watch: {
+    isRunning() {
+      if (this.mode === 'countdown') {
+        clearInterval(this.countdownTimer);
+        if (this.isRunning) {
+          this.countdownNow = new Date();
+          this.countdownTimer = setInterval(() => {
+            this.countdownNow = new Date();
+          }, 250);
+        }
+        return;
+      }
+      if (this.isRunning) {
+        this.timer = setInterval(() => {
+          this.now = new Date();
+        }, 10);
+      } else {
+        clearInterval(this.timer);
+        this.now = this.pausedTime;
+      }
+    },
+  },
+  methods: {
+    formatMs(totalMilliseconds) {
       const hours = Math.floor(totalMilliseconds / 3600000);
       const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
       const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
@@ -173,20 +273,6 @@ export default {
 
       return this.timeFormat.replace(/hh|mm|ss|ms/g, (match) => tokens[match]);
     },
-  },
-  watch: {
-    isRunning() {
-      if (this.isRunning) {
-        this.timer = setInterval(() => {
-          this.now = new Date();
-        }, 10);
-      } else {
-        clearInterval(this.timer);
-        this.now = this.pausedTime;
-      }
-    },
-  },
-  methods: {
     fontSizePc(pc) {
       const v = Math.min(this.s_width, this.s_height);
       return (pc * v) / 100 / 2;
@@ -211,14 +297,22 @@ export default {
     window.addEventListener("resize", this.windowResize);
 
     if (this.isRunning) {
-      this.timer = setInterval(() => {
-        this.now = new Date();
-      }, 10);
+      if (this.mode === 'countdown') {
+        this.countdownNow = new Date();
+        this.countdownTimer = setInterval(() => {
+          this.countdownNow = new Date();
+        }, 250);
+      } else {
+        this.timer = setInterval(() => {
+          this.now = new Date();
+        }, 10);
+      }
     }
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
     clearInterval(this.timer);
+    clearInterval(this.countdownTimer);
   },
 };
 </script>

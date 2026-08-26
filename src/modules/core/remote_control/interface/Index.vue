@@ -1,49 +1,140 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest">
     <v-card flat>
-      <v-card-text class="px-0">
-        <small>{{ t("info_module") }}</small>
-      </v-card-text>
-      <v-card-text class="px-0">
-        <v-text-field
-          v-model="url"
-          :disabled="loading || is_connected"
-          :label="t('labels.ip')"
-          density="compact"
-          variant="outlined"
-          prepend-icon="mdi-ip-network"
-          :hint="t('messages.get_ip')"
-          persistent-hint
-          :loading="loading ? 'warning' : null"
-        />
-        <v-text-field
-          v-model="token"
-          :disabled="loading || is_connected"
-          :label="t('labels.token')"
-          class="mt-3"
-          density="compact"
-          variant="outlined"
-          prepend-icon="mdi-code-braces"
-          persistent-hint
-          :loading="loading ? 'warning' : null"
-        />
-      </v-card-text>
-      <v-card-actions class="px-0">
-        <v-spacer></v-spacer>
-        <v-btn color="info" :text="t('labels.test_connection')" @click="test" />
-        <v-btn
-          v-if="!is_connected"
+      <!-- Conectar-se a outro LouvorJA como controle remoto (usado pelo teclado
+           virtual em Header.vue) — oculto por ora, sem remover a funcionalidade. -->
+      <template v-if="false">
+        <v-card-text class="px-0">
+          <small>{{ t("info_module") }}</small>
+        </v-card-text>
+        <v-card-text class="px-0">
+          <v-text-field
+            v-model="url"
+            :disabled="loading || is_connected"
+            :label="t('labels.ip')"
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-ip-network"
+            :hint="t('messages.get_ip')"
+            persistent-hint
+            :loading="loading ? 'warning' : null"
+          />
+          <v-text-field
+            v-model="token"
+            :disabled="loading || is_connected"
+            :label="t('labels.token')"
+            class="mt-3"
+            density="compact"
+            variant="outlined"
+            prepend-icon="mdi-code-braces"
+            persistent-hint
+            :loading="loading ? 'warning' : null"
+          />
+        </v-card-text>
+        <v-card-actions class="px-0">
+          <v-spacer></v-spacer>
+          <v-btn color="info" :text="t('labels.test_connection')" @click="test" />
+          <v-btn
+            v-if="!is_connected"
+            color="success"
+            text="Conectar"
+            @click="connect"
+          />
+          <v-btn
+            v-else
+            color="error"
+            :text="t('labels.disconnect')"
+            @click="disonnect"
+          />
+        </v-card-actions>
+
+        <v-divider class="my-2" />
+      </template>
+
+      <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
+      <v-card-title class="px-0 text-subtitle-1 d-flex align-center gap-2">
+        <v-icon size="18">mdi-broadcast</v-icon>
+        <span>{{ t('transmit.title') }}</span>
+        <v-switch
+          :model-value="serverStatus.running"
+          :loading="serverLoading"
           color="success"
-          text="Conectar"
-          @click="connect"
+          hide-details
+          density="compact"
+          class="flex-grow-0 ml-4"
+          @update:modelValue="toggleServer"
         />
-        <v-btn
-          v-else
-          color="error"
-          :text="t('labels.disconnect')"
-          @click="disonnect"
-        />
-      </v-card-actions>
+        <span class="text-body-2 text-medium-emphasis ml-1">
+          {{ serverStatus.running ? t('transmit.running') : t('transmit.stopped') }}
+        </span>
+      </v-card-title>
+      <v-card-text class="px-0">
+        <small>{{ t('transmit.info') }}</small>
+      </v-card-text>
+
+      <template v-if="serverStatus.running">
+        <v-card-text v-if="serverStatus.firewall && serverStatus.firewall.ok === false" class="px-0 pt-0">
+          <v-alert type="warning" density="compact" variant="tonal">
+            {{ t('transmit.firewall_warning') }}
+          </v-alert>
+        </v-card-text>
+
+        <v-card-text class="px-0 d-flex gap-4 flex-wrap">
+          <div style="flex:1; min-width:280px">
+            <v-text-field
+              :model-value="serverStatus.token"
+              :label="t('transmit.token')"
+              readonly
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-key-outline"
+              hide-details
+            >
+              <template v-slot:append>
+                <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(serverStatus.token)" />
+                <v-btn size="small" variant="text" icon="mdi-refresh" :title="t('transmit.regenerate_token')" @click="confirmRegenerateToken" />
+              </template>
+            </v-text-field>
+
+            <v-text-field
+              v-for="link in serverUrls"
+              :key="link.label"
+              :model-value="link.value"
+              :label="link.label"
+              readonly
+              class="mt-3"
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-link-variant"
+              hide-details
+            >
+              <template v-slot:append>
+                <v-btn size="small" variant="text" icon="mdi-content-copy" @click="copyText(link.value)" />
+              </template>
+            </v-text-field>
+
+            <v-select
+              v-if="serverStatus.ips.length > 1"
+              :model-value="activeIp"
+              @update:modelValue="selectIp"
+              :items="serverStatus.ips"
+              :label="t('transmit.select_network')"
+              :hint="t('transmit.select_network_hint')"
+              persistent-hint
+              class="mt-3"
+              density="compact"
+              variant="outlined"
+              prepend-icon="mdi-ip-network-outline"
+              hide-details="auto"
+            />
+          </div>
+
+          <div v-if="qrDataUrl" class="d-flex flex-column align-center justify-center">
+            <img :src="qrDataUrl" width="140" height="140" alt="QR" />
+            <span class="text-caption text-medium-emphasis mt-1">{{ t('transmit.control_page') }}</span>
+          </div>
+        </v-card-text>
+      </template>
     </v-card>
   </ModuleContainer>
 </template>
@@ -57,7 +148,16 @@ import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 const moduleContainer = ref(null);
 const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+  if (!moduleContainer.value) {
+    const tr = manifest.translations?.['pt'];
+    if (tr) {
+      const val = key.split('.').reduce((obj, k) => obj?.[k], tr);
+      if (typeof val === 'string') return val;
+    }
+    return key;
+  }
+  const result = moduleContainer.value.t(key);
+  return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
 /* ########################################################### */
 /* ########################################################### */
@@ -190,11 +290,98 @@ function disonnect() {
 }
 
 /* ########################################################### */
+/* ############### TRANSMITIR (servidor local) ################ */
+/* ########################################################### */
+
+const serverStatus = ref({ running: false, port: 0, ip: "", ips: [], token: "" });
+const serverLoading = ref(false);
+const qrDataUrl = ref(null);
+
+// IP escolhido manualmente pelo usuário (ver <v-select> no template) — o
+// backend sempre sugere o primeiro IP detectado (serverStatus.ip), mas se o
+// PC tiver mais de uma rede ativa (Ethernet + Wi-Fi, VPN, etc.) o escolhido
+// automaticamente pode não ser o alcançável pelo celular/OBS. O servidor
+// escuta em 0.0.0.0 (todas as interfaces — ver remote_server.js), então
+// qualquer IP detectado funciona igual; isso só decide qual aparece no QR
+// code/links. Persistido pra sobreviver a reinícios do app.
+const preferredIp = ref("");
+
+const activeIp = computed(() => {
+  const ips = serverStatus.value.ips || [];
+  if (preferredIp.value && ips.includes(preferredIp.value)) return preferredIp.value;
+  return serverStatus.value.ip;
+});
+
+function selectIp(ip) {
+  preferredIp.value = ip;
+  proxy.$userdata.set("remote.preferred_ip", ip);
+  refreshQrCode();
+}
+
+const serverUrls = computed(() => {
+  if (!serverStatus.value.running) return [];
+  const base = `http://${activeIp.value}:${serverStatus.value.port}`;
+  const tk = serverStatus.value.token;
+  return [
+    // Sem "?token=" de propósito — esse é o link pensado pra ser copiado/
+    // colado (WhatsApp, etc.); o QR code (refreshQrCode) é que carrega o
+    // token embutido pra conectar direto ao ler. Quem abrir este link à mão
+    // cai no modal de token normalmente (ver remote_pages.js).
+    { label: t('transmit.control_page'), value: `${base}/remote` },
+    { label: t('transmit.mirror_page'),  value: `${base}/mirror?token=${tk}` },
+  ];
+});
+
+async function refreshServerStatus() {
+  const status = await proxy.$electron.remoteServerStatus();
+  if (status) serverStatus.value = status;
+  await refreshQrCode();
+}
+
+async function refreshQrCode() {
+  if (!serverStatus.value.running) { qrDataUrl.value = null; return; }
+  const base = `http://${activeIp.value}:${serverStatus.value.port}`;
+  qrDataUrl.value = await proxy.$electron.qrcodeGenerate(`${base}/remote?token=${serverStatus.value.token}`, { width: 200 });
+}
+
+async function toggleServer(value) {
+  serverLoading.value = true;
+  try {
+    if (value) {
+      const status = await proxy.$electron.remoteServerStart();
+      if (status) serverStatus.value = status;
+    } else {
+      await proxy.$electron.remoteServerStop();
+      serverStatus.value = { ...serverStatus.value, running: false };
+    }
+    await refreshQrCode();
+  } finally {
+    serverLoading.value = false;
+  }
+}
+
+function confirmRegenerateToken() {
+  proxy.$alert.yesno("modules.remote_control.transmit.regenerate_confirm", async (btn) => {
+    if (btn !== "yes") return;
+    const newToken = await proxy.$electron.remoteServerRegenerateToken();
+    if (newToken) serverStatus.value = { ...serverStatus.value, token: newToken };
+    await refreshQrCode();
+  });
+}
+
+function copyText(text) {
+  if (!text) return;
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+/* ########################################################### */
 /* ###################### MOUNTED ############################# */
 /* ########################################################### */
 
 onMounted(() => {
   url.value = proxy.$userdata.get("remote.url");
   token.value = proxy.$userdata.get("remote.token");
+  preferredIp.value = proxy.$userdata.get("remote.preferred_ip", "") || "";
+  refreshServerStatus();
 });
 </script>

@@ -1,6 +1,8 @@
-import { createRouter, createWebHistory } from "vue-router";
-import Main from "@/views/Main.vue"; // Importando um componente de exemplo
+import { createRouter, createWebHistory, createWebHashHistory } from "vue-router";
+import Main from "@/views/Main.vue";
 import Popup from "@/views/Popup.vue";
+import ReturnScreen from "@/views/ReturnScreen.vue";
+import VideoPip from "@/views/VideoPip.vue";
 
 const routes = [
   {
@@ -13,10 +15,26 @@ const routes = [
     name: "Popup",
     component: Popup,
   },
+  {
+    path: "/return-screen",
+    name: "ReturnScreen",
+    component: ReturnScreen,
+  },
+  {
+    path: "/video-pip",
+    name: "VideoPip",
+    component: VideoPip,
+  },
 ];
 
+// Electron usa hash history (carrega de file://) — browser usa web history
+const isElectron = typeof window !== "undefined" && navigator.userAgent.includes("Electron");
+const history = isElectron
+  ? createWebHashHistory()
+  : createWebHistory(import.meta.env.BASE_URL ?? "/");
+
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL ?? "/"),
+  history,
   routes,
 });
 

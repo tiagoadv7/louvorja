@@ -9,6 +9,8 @@
     :compact="compact"
     :index="index"
     :size="manifest?.moduleOptions?.size ?? null"
+    :width="manifest?.moduleOptions?.width ?? null"
+    :height="manifest?.moduleOptions?.height ?? null"
     @close="close()"
     @minimize="minimize()"
     @scroll="scroll()"
@@ -115,7 +117,19 @@ export default {
   },
   methods: {
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return this.manifest?.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     close() {
       this.$modules.close(this.module_id);
