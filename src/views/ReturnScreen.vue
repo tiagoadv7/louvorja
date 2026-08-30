@@ -1,6 +1,6 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive || stopwatchModuleActive }">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive || stopwatchModuleActive || videoPlayerActive }">
       <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
            junto com uma música realmente ativa; some com fade quando ela
            termina. -->
@@ -77,6 +77,18 @@
           <StopwatchScreen />
         </div>
       </transition>
+
+      <!-- Espelho do módulo Vídeo (vídeo/imagem, sempre mudo — ver
+           video_player/components/Screen.vue). Igual ao Relógio/Cronômetro,
+           "return_popup_module" permite manter o vídeo no retorno mesmo que
+           o operador já tenha desligado a projeção principal (ver
+           components/buttons/Screen.vue#popup, que só limpa popup_module,
+           sem mexer na config do vídeo). -->
+      <transition name="rs-fade">
+        <div v-if="videoPlayerActive" class="rs-module-mirror">
+          <VideoPlayerScreen />
+        </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -85,6 +97,7 @@
 import ClockScreen from '@/modules/clock/components/Screen.vue';
 import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
 import StopwatchScreen from '@/modules/stopwatch/components/Screen.vue';
+import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
 
 const isElectron = () =>
   typeof window !== 'undefined' &&
@@ -93,7 +106,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen, StopwatchScreen },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen },
 
   data: () => ({
     stateHandler: null,
@@ -135,6 +148,10 @@ export default {
     stopwatchModuleActive() {
       if (this.returnPopupModule) return this.returnPopupModule === 'stopwatch';
       return this.popupModule === 'stopwatch';
+    },
+    videoPlayerActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'video_player';
+      return this.popupModule === 'video_player';
     },
 
     mediaConfig() {

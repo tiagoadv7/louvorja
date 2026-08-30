@@ -14,6 +14,7 @@
   >
     <template v-slot:system_buttons>
       <LScreenBtn module="video_player" />
+      <LReturnScreenBtn module="video_player" />
     </template>
 
     <div class="vp-root">
@@ -158,11 +159,12 @@
 import manifest from '../manifest.json';
 import Window from '@/components/Window.vue';
 import LScreenBtn from '@/components/buttons/Screen.vue';
+import LReturnScreenBtn from '@/components/buttons/ReturnScreen.vue';
 import $audioBus from '@/helpers/AudioBus';
 
 export default {
   name: 'VideoPlayerModule',
-  components: { Window, LScreenBtn },
+  components: { Window, LScreenBtn, LReturnScreenBtn },
 
   data: () => ({
     pipOpen: false,
