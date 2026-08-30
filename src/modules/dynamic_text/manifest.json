@@ -1,0 +1,18 @@
+{
+  "id": "dynamic_text",
+  "name": "Texto Dinâmico",
+  "description": "Exibe uma linha de texto na projeção, com formatação personalizável.",
+  "category": "utilities",
+  "icon": "mdi-format-text",
+  "showInMainMenu": false,
+  "moduleOptions": {
+    "width": 560,
+    "height": 260
+  },
+  "customization": {
+    "background_color": { "type": "color", "label": "customization.color", "default": "#000000" },
+    "image": { "type": "image", "label": "customization.image", "default": "" },
+    "image_opacity": { "type": "opacity", "label": "customization.transparency", "default": 100 },
+    "image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "cover" }
+  }
+}
