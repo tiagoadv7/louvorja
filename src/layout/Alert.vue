@@ -15,6 +15,16 @@
             <span v-else v-html="alert.text" />
           </div>
           <div v-if="alert.error" class="al-error" v-html="alert.error" />
+          <v-text-field
+            v-if="alert.input"
+            v-model="inputVal"
+            density="compact"
+            variant="outlined"
+            hide-details
+            autofocus
+            class="al-input"
+            @keydown.enter="confirmInput"
+          />
         </div>
       </div>
 
@@ -43,9 +53,20 @@ const ICON_BY_COLOR = {
 
 export default {
   name: "AlertLayout",
+  data: () => ({
+    inputVal: "",
+  }),
   computed: {
     alert: function () {
       return this.$appdata.get("alert");
+    },
+    // Botão que o Enter do campo de texto deve acionar — o primeiro que não
+    // seja de cancelamento/fechamento (prompt() sempre usa value:"confirm").
+    primaryButtonValue() {
+      const btn = (this.alert.buttons || []).find(
+        (b) => !["cancel", "no", "close"].includes(b.value)
+      );
+      return btn?.value ?? null;
     },
     // Ícone/cor do badge de acordo com alert.color — sem isso o card inteiro
     // ficava pintado da cor (ex.: amarelo warning tomando o card todo), o que
@@ -56,10 +77,23 @@ export default {
       return ICON_BY_COLOR[this.alert.color] || { icon: "mdi-information-outline", tone: "neutral" };
     },
   },
+  watch: {
+    "alert.show"(open) {
+      // Preenche o campo com o valor default toda vez que um novo prompt abre.
+      if (open) this.inputVal = this.alert.input_default || "";
+    },
+  },
   methods: {
     clickBtn(value) {
-      this.$appdata.set("alert.value", value);
+      // Em modo prompt, o botão que não é de cancelar devolve o texto digitado
+      // em vez do próprio `value` estático do botão.
+      const resolved =
+        this.alert.input && value !== "cancel" ? this.inputVal : value;
+      this.$appdata.set("alert.value", resolved);
       this.$appdata.set("alert.show", false);
+    },
+    confirmInput() {
+      if (this.primaryButtonValue) this.clickBtn(this.primaryButtonValue);
     },
   },
 };
@@ -113,6 +147,10 @@ export default {
   margin-top: 6px;
   font-size: 12px;
   color: #e53935;
+}
+
+.al-input {
+  margin-top: 10px;
 }
 
 .al-actions {

@@ -40,7 +40,7 @@
           <div
             v-if="slide.aux_text"
             v-html="slide.aux_text"
-            :style="style_aux_text()"
+            :style="style_aux_text(slide)"
           />
           <div
             v-if="slide.text"
@@ -91,6 +91,18 @@ export default {
     aux_text: String,
     image: String,
     image_position: Number,
+    // ── Overrides opcionais por slide (Editor de Músicas) ──────────────────
+    // Quando omitidos (undefined/null), o comportamento é IDÊNTICO ao atual:
+    // toda a formatação continua vindo só de `slide_global_bg`. Usados pelo
+    // módulo slide_editor pra permitir cor/tamanho/fundo próprios por slide,
+    // sem afetar nenhum outro chamador (media, etc.) que nunca os passa.
+    color: { type: String, default: null },
+    aux_color: { type: String, default: null },
+    font_size_pct: { type: Number, default: null },
+    aux_font_size_pct: { type: Number, default: null },
+    background_color: { type: String, default: null },
+    text_bg_transparent: { type: Boolean, default: null },
+    text_align: { type: String, default: null },
   },
   data() {
     // Inicializa slides[1] com os props já recebidos para evitar que bgKey mude
@@ -105,6 +117,13 @@ export default {
           aux_text:       this.aux_text,
           image:          this.image,
           image_position: this.image_position,
+          color:          this.color,
+          aux_color:      this.aux_color,
+          font_size_pct:  this.font_size_pct,
+          aux_font_size_pct: this.aux_font_size_pct,
+          background_color: this.background_color,
+          text_bg_transparent: this.text_bg_transparent,
+          text_align:     this.text_align,
           active:         true,
         },
       ],
@@ -125,6 +144,7 @@ export default {
       // imagens cuja proporção já é parecida com a da tela.
       defaultBgFit:   'cover',
       _fitCache:      new Map(),
+      _resizeObserver: null,
     };
   },
   computed: {
@@ -136,6 +156,13 @@ export default {
         aux_text:       this.aux_text,
         image:          this.image,
         image_position: this.image_position,
+        color:          this.color,
+        aux_color:      this.aux_color,
+        font_size_pct:  this.font_size_pct,
+        aux_font_size_pct: this.aux_font_size_pct,
+        background_color: this.background_color,
+        text_bg_transparent: this.text_bg_transparent,
+        text_align:     this.text_align,
       };
     },
     screenSize() {
@@ -274,7 +301,7 @@ export default {
       // Estilo padrão do slide (usado quando não há fundo personalizado ativo)
       const slideDefault = {
         overflow:           "hidden",
-        backgroundColor:    "rgb(0, 0, 0)",
+        backgroundColor:    slide.background_color || "rgb(0, 0, 0)",
         backgroundImage:    `url(${slide.image})`,
         backgroundRepeat:   "no-repeat",
         backgroundPosition: BG_POSITIONS[resolveBgPositionIndex(this.image_position)],
@@ -320,18 +347,23 @@ export default {
       return slideDefault;
     },
 
-    style_aux_text() {
+    style_aux_text(slide = {}) {
       const bg     = this.globalBg;
       const family = bg?.font           || 'DINCondensedBold';
       const size   = bg?.panel_font_size ?? 10;
       const border = bg?.border_spacing  ?? 5;
+      // Overrides por slide (Editor de Músicas) — vencem qualquer default global
+      // quando fornecidos; ausentes (null), comportamento igual ao atual.
+      const overrideSize  = slide.aux_font_size_pct ?? null;
+      const overrideColor = slide.aux_color || null;
       return {
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
-        fontSize:        `${this.fontSizePc(size)}px`,
-        color:           bg?.panel_font_color || "rgb(246, 195, 42)",
+        backgroundColor: slide.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
+        fontSize:        `${this.fontSizePc(overrideSize ?? size)}px`,
+        color:           overrideColor || bg?.panel_font_color || "rgb(246, 195, 42)",
         padding:         `0px ${this.fontSizePc(border)}px`,
         fontFamily:      family,
         textTransform:   "uppercase",
+        whiteSpace:      "pre-line",
       };
     },
 
@@ -341,13 +373,21 @@ export default {
       const customSize  = bg?.font_size      ?? null;
       const customColor = bg?.font_color     || null;
       const border      = bg?.border_spacing ?? 5;
+      // Overrides por slide (Editor de Músicas) — vencem qualquer default global
+      // (inclusive as cores especiais de capa/refrão) quando fornecidos;
+      // ausentes (null), comportamento igual ao atual.
+      const overrideSize  = slide.font_size_pct ?? null;
+      const overrideColor = slide.color || null;
 
       const base = {
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
+        backgroundColor: slide.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
         padding:         `0px ${this.fontSizePc(border)}px`,
-        textAlign:       "center",
+        textAlign:       slide.text_align || "center",
         fontFamily:      family,
         textTransform:   "uppercase",
+        // Respeita quebras de linha simples (\n) do texto, não só tags <br>
+        // explícitas — o textarea do Editor de Músicas grava \n de verdade.
+        whiteSpace:      "pre-line",
       };
 
       if (slide.cover) {
@@ -355,22 +395,22 @@ export default {
           ...base,
           // Tamanho próprio do título — não cai para o tamanho do texto normal
           // (customSize), senão o título fica preso ao mesmo valor do Texto.
-          fontSize: `${this.fontSizePc(bg?.cover_font_size ?? 25)}px`,
-          color:    bg?.cover_font_color || customColor || "rgb(246, 195, 42)",
+          fontSize: `${this.fontSizePc(overrideSize ?? bg?.cover_font_size ?? 25)}px`,
+          color:    overrideColor || bg?.cover_font_color || customColor || "rgb(246, 195, 42)",
         };
       }
       if (this.repeat) {
         return {
           ...base,
           // Tamanho igual ao do texto normal (customSize) — só a cor é própria.
-          fontSize: `${this.fontSizePc(customSize ?? 20)}px`,
-          color:    bg?.repeat_font_color || customColor || "rgb(246, 195, 42)",
+          fontSize: `${this.fontSizePc(overrideSize ?? customSize ?? 20)}px`,
+          color:    overrideColor || bg?.repeat_font_color || customColor || "rgb(246, 195, 42)",
         };
       }
       return {
         ...base,
-        fontSize: `${this.fontSizePc(customSize ?? 20)}px`,
-        color:    customColor || "rgb(255, 255, 255)",
+        fontSize: `${this.fontSizePc(overrideSize ?? customSize ?? 20)}px`,
+        color:    overrideColor || customColor || "rgb(255, 255, 255)",
       };
     },
 
@@ -413,10 +453,19 @@ export default {
 
     this.setSlide();
     this.windowResize();
-    window.addEventListener("resize", this.windowResize);
+    // ResizeObserver em vez de só "window.resize": o preview do Editor de
+    // Slides fica num painel que muda de tamanho por outros motivos
+    // (accordion, coluna lateral), não só quando a janela do SO redimensiona.
+    if (typeof ResizeObserver !== "undefined" && this.$refs.container) {
+      this._resizeObserver = new ResizeObserver(() => this.windowResize());
+      this._resizeObserver.observe(this.$refs.container);
+    } else {
+      window.addEventListener("resize", this.windowResize);
+    }
   },
   unmounted() {
-    window.removeEventListener("resize", this.windowResize);
+    if (this._resizeObserver) this._resizeObserver.disconnect();
+    else window.removeEventListener("resize", this.windowResize);
     if (this._bgListener)    window.removeEventListener('slide-bg-changed', this._bgListener);
     if (this._ipcBgListener) window.electron?.off?.('state-update', this._ipcBgListener);
   },

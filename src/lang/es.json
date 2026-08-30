@@ -47,7 +47,9 @@
         "close": "Cerrar",
         "yes": "Sí",
         "no": "No",
-        "wait": "Aguardar..."
+        "wait": "Aguardar...",
+        "cancel": "Cancelar",
+        "confirm": "Confirmar"
     },
     "popup": {
         "close": "Cerrar Ventana"
