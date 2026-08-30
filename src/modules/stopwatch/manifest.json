@@ -15,6 +15,11 @@
       "label": "customization.color",
       "default": "#FFFFFF"
     },
+    "alert_color": {
+      "type": "color",
+      "label": "customization.color",
+      "default": "#ff5252"
+    },
     "font_size": {
       "type": "font-size",
       "label": "customization.size",

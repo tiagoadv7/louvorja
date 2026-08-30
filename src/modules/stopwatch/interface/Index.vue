@@ -29,6 +29,10 @@
             name: t('customization.text'),
             items: [['font', 'font_size', 'font_color']],
           },
+          {
+            name: t('customization.alert'),
+            items: ['alert_color'],
+          },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
       />
@@ -95,6 +99,18 @@
           </l-toolbar-item>
 
           <l-toolbar-item>
+            <div class="text-caption text-medium-emphasis mb-1">{{ t("duration_seconds") }}</div>
+            <input
+              type="number"
+              min="0"
+              max="59"
+              v-model.number="userdata.duration_seconds"
+              class="sw-number-input"
+              :disabled="isRunning"
+            />
+          </l-toolbar-item>
+
+          <l-toolbar-item>
             <div class="text-caption text-medium-emphasis mb-1">{{ t("add_subtract_time") }}</div>
             <div class="d-flex sw-btn-row">
               <v-btn size="x-small" variant="tonal" @click="adjustCountdownDuration(1)">+1</v-btn>
@@ -133,62 +149,28 @@
               class="sw-text-input"
               :placeholder="t('end_message_placeholder')"
             />
+            <div class="text-caption text-medium-emphasis mb-1 mt-2">{{ t("end_message_duration") }}</div>
+            <!-- 0 = mensagem fica até o operador resetar (comportamento antigo). -->
+            <input
+              type="number"
+              min="0"
+              v-model.number="userdata.end_message_duration"
+              class="sw-number-input"
+            />
           </l-toolbar-item>
         </template>
-
-        <v-spacer />
-        <l-toolbar-item>
-          <v-btn
-            v-if="!isRunning"
-            color="green"
-            size="small"
-            @click="startStopwatch"
-            variant="tonal"
-          >
-            <v-icon left>mdi-play</v-icon>
-            {{ t("start") }}
-          </v-btn>
-
-          <v-btn
-            v-else
-            color="orange"
-            size="small"
-            @click="pauseStopwatch"
-            variant="tonal"
-          >
-            <v-icon left>mdi-pause</v-icon>
-            {{ t("pause") }}
-          </v-btn>
-
-          <v-btn
-            color="red"
-            size="small"
-            @click="resetStopwatch"
-            style="margin-left: 8px"
-            variant="tonal"
-          >
-            <v-icon left>mdi-refresh</v-icon>
-            {{ t("reset") }}
-          </v-btn>
-
-          <v-btn
-            v-if="userdata.mode !== 'countdown'"
-            color="blue"
-            size="small"
-            @click="saveTime"
-            style="margin-left: 8px"
-            variant="tonal"
-          >
-            <v-icon left>mdi-content-save</v-icon>
-            {{ t("save") }}
-          </v-btn>
-        </l-toolbar-item>
-
-        <v-spacer />
       </l-toolbar>
     </template>
 
-    <Screen ref="screen" />
+    <!-- Play/pausa/reiniciar/salvar ficam só junto ao próprio cronômetro
+         (ver Screen.vue), não duplicados aqui na toolbar. -->
+    <Screen
+      ref="screen"
+      @start-run="startStopwatch"
+      @pause-run="pauseStopwatch"
+      @reset-run="resetStopwatch"
+      @save-time="saveTime"
+    />
 
     <template v-slot:right v-if="savedTimes.length > 0 && userdata.mode !== 'countdown'">
       <v-card
@@ -424,8 +406,10 @@ export default {
         this.remainingAtPauseMs = null;
       } else {
         const minutes = Math.max(0, Number(this.userdata.duration_minutes) || 0);
-        this.targetEndAt = new Date(now.getTime() + minutes * 60000);
-        this.totalDurationMs = minutes * 60000;
+        const seconds = Math.max(0, Math.min(59, Number(this.userdata.duration_seconds) || 0));
+        const durationMs = minutes * 60000 + seconds * 1000;
+        this.targetEndAt = new Date(now.getTime() + durationMs);
+        this.totalDurationMs = durationMs;
       }
       this.isRunning = true;
       this.startCountdownTicker();
@@ -519,8 +503,10 @@ export default {
   mounted() {
     if (!this.userdata.mode) this.userdata.mode = 'normal';
     if (this.userdata.duration_minutes == null) this.userdata.duration_minutes = 5;
+    if (this.userdata.duration_seconds == null) this.userdata.duration_seconds = 0;
     if (this.userdata.auto_stop_at_zero == null) this.userdata.auto_stop_at_zero = true;
-    if (this.userdata.end_message == null) this.userdata.end_message = '';
+    if (!this.userdata.end_message) this.userdata.end_message = this.t('end_message_placeholder');
+    if (this.userdata.end_message_duration == null) this.userdata.end_message_duration = 5;
 
     const savedTarget = this.appdata.target_end_at;
     const savedRunning = this.appdata.is_running;
