@@ -84,8 +84,11 @@ export default {
       }
       this.$popup.open(this.module);
     },
+    // Item "Fechar" do menu — diferente do clique no ícone (desligamento
+    // suave, mantém a janela viva), aqui é uma ação explícita de encerrar a
+    // janela de saída de vez.
     close() {
-      this.$popup.close();
+      this.$popup.shutdown();
     },
   },
 };

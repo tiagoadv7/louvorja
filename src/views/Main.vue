@@ -111,7 +111,9 @@ export default {
             //popup.postMessage({ all: data }, window.location.origin);
           }
         } else if (event.data == "closed") {
-          this.$popup.close();
+          // A janela (browser) já fechou sozinha — limpa o estado de vez
+          // (não é o "desligamento suave" do botão de tela).
+          this.$popup.shutdown();
         }
       }
     });

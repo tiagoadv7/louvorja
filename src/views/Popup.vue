@@ -74,8 +74,14 @@ export default {
     _applyStateEntry(data) {
       if (!data || !data.param) return;
       this.$appdata.set(data.param, data.value);
-      if (data.param === "popup_module" && data.value) {
-        this.module = data.value;
+      // Sem o "&& data.value" antigo: precisa reagir também quando o valor
+      // vem vazio (desligar a projeção pelo ícone da tela agora só limpa
+      // popup_module, sem fechar a janela — ver helpers/Popup.js#close) para
+      // que o <component :is="moduleComponent"> realmente desmonte. Com o
+      // guard antigo, uma string vazia nunca atualizava "module", e o
+      // conteúdo anterior ficava preso na tela pra sempre.
+      if (data.param === "popup_module") {
+        this.module = data.value || null;
       }
       if (data.param === "theme" && data.value) {
         try { this.$vuetify.theme.global.name = data.value; } catch { /* */ }
