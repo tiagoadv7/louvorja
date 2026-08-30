@@ -155,9 +155,13 @@ export default {
     isElectron() ? window.electron.sqliteGetImportInfo() : Promise.resolve(null),
   sqliteClear: () =>
     isElectron() ? window.electron.sqliteClear() : Promise.resolve(false),
-  sqliteCheckUpdate: (dbBaseUrl, token) =>
+  sqliteCheckDbUpdate: (dbBaseUrl, token) =>
     isElectron()
-      ? window.electron.sqliteCheckUpdate(dbBaseUrl, token)
+      ? window.electron.sqliteCheckDbUpdate(dbBaseUrl, token)
+      : Promise.resolve({ updateAvailable: false, reason: 'not-electron' }),
+  sqliteApplyDbUpdate: (version) =>
+    isElectron()
+      ? window.electron.sqliteApplyDbUpdate(version)
       : Promise.resolve({ updated: false, reason: 'not-electron' }),
 
   // ── SQLite direto (better-sqlite3) — sem conversão para JSON ──────────

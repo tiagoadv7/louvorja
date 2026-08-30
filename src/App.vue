@@ -15,6 +15,9 @@
   <!-- Auto-updater -->
   <UpdateDialog ref="updater" />
 
+  <!-- Aviso de novo conteúdo publicado -->
+  <DbUpdateDialog ref="dbUpdater" @sync-requested="onDbUpdateSyncRequested" />
+
   <!-- Snackbar do auto-import SQLite -->
   <v-snackbar
     v-model="autoImportSnack"
@@ -44,10 +47,11 @@
 import AppLoading    from "@/layout/Loading.vue";
 import FileCheckDialog from "@/components/FileCheckDialog.vue";
 import UpdateDialog    from "@/components/UpdateDialog.vue";
+import DbUpdateDialog  from "@/components/DbUpdateDialog.vue";
 
 export default {
   name: "App",
-  components: { AppLoading, FileCheckDialog, UpdateDialog },
+  components: { AppLoading, FileCheckDialog, UpdateDialog, DbUpdateDialog },
 
   data: () => ({
     autoImportSnack:     false,
@@ -128,15 +132,17 @@ export default {
 
     // 3. Abre verificador de arquivos após o app carregar — só automaticamente na
     //    primeira vez (flag persistida via Store). Nas próximas aberturas do app,
-    //    só roda de novo se houver conteúdo novo (ver checkSqliteUpdate) ou
+    //    só roda de novo se houver nova versão do banco de dados (ver onDbUpdateSyncRequested) ou
     //    manualmente via "Sincronizar arquivos" no menu (fileCheck.open(true)).
     //    Delay maior para garantir que o router e os refs estão prontos.
     this.$electron.storeGet('startup_file_check_done', false)
       .then(done => { if (!done) this.scheduleStartupFileCheck(); })
       .catch(() => this.scheduleStartupFileCheck());
 
-    // 4. Verifica atualização do banco SQLite via API (após 6s para não competir com o auto-import)
-    setTimeout(() => this.checkSqliteUpdate(), 6000);
+    // 4. Verifica atualização do banco SQLite via API (após 6s para não competir com o
+    //    auto-import). Diferente de antes, não baixa mais silenciosamente — só abre o
+    //    diálogo de confirmação quando encontra versão nova (ver DbUpdateDialog.vue).
+    setTimeout(() => this.$refs.dbUpdater?.check(), 6000);
 
     // 5. Ouve evento global para abrir o verificador de arquivos (disparado pelo Menu)
     this._syncFilesHandler = () => this.$refs.fileCheck?.open(true);
@@ -227,34 +233,14 @@ export default {
       }, 4000);
     },
 
-    async checkSqliteUpdate() {
-      if (this._autoImportRunning) return;
-      try {
-        const result = await this.$electron.sqliteCheckUpdate(
-          import.meta.env.VITE_URL_DATABASE,
-          import.meta.env.VITE_API_TOKEN,
-        );
-        if (result?.updated && result?.dbPath) {
-          await this.startAutoImport(result.dbPath);
-          await this.$nextTick();
-          setTimeout(() => this.openFileCheck(), 1500);
-        }
-      } catch (_) {}
-    },
-
-    async startAutoImport(dbPath) {
-      this._autoImportRunning = true;
-      this.autoImportDone     = false;
-      this.autoImportMessage  = 'Carregando banco local...';
-      this.autoImportSnack    = true;
-      try {
-        await this.$electron.sqliteImport({ dbPath, capasPath: null });
-      } catch (_) {
-        this.autoImportMessage = 'Erro ao carregar banco local.';
-        this.autoImportDone    = true;
-      } finally {
-        this._autoImportRunning = false;
-      }
+    // Chamado pelo DbUpdateDialog (evento 'sync-requested') depois que o
+    // usuário confirma que quer sincronizar a nova versão do banco de dados. Não existe mais
+    // um "database.db" único pra baixar (ver electron/ipc.js#sqlite:check-db-update) —
+    // delega direto pro fluxo de arquivo-por-arquivo já existente, forçando
+    // a tela mesmo que nada esteja faltando (o operador pediu explicitamente).
+    async onDbUpdateSyncRequested() {
+      await this.$nextTick();
+      this.$refs.fileCheck?.open(true);
     },
 
     // Atende requisições do servidor de Controle Remoto (electron/remote_server.js),

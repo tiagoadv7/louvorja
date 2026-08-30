@@ -4,6 +4,17 @@ const path = require('path');
 const Store = require('./store');
 const sqliteReader = require('./sqlite-reader');
 
+// GUI empacotada sem terminal anexado — sem isso, uma falha real do check de
+// atualização do banco SQLite (ver 'sqlite:check-db-update'/'sqlite:apply-db-update'
+// abaixo) é indiagnosticável depois do fato. Mesmo arquivo usado pelo updater do
+// app (ver logUpdaterError em electron/main.js) — um só lugar pra olhar depois.
+function logDbUpdateError(context, err) {
+  try {
+    const line = `[${new Date().toISOString()}] [db-update] ${context}: ${err?.stack || err?.message || err}\n`;
+    fs.appendFileSync(path.join(app.getPath('userData'), 'updater.log'), line);
+  } catch (_) { /* não crítico — só o console.warn já emitido segue valendo */ }
+}
+
 // Resolve o arquivo WASM do sql.js tanto em dev quanto no app empacotado.
 // electron-builder desempacota sql.js para app.asar.unpacked via asarUnpack.
 function resolveSqlWasm() {
@@ -194,7 +205,9 @@ function setupIpc(mainWindow) {
     const primary = screen.getPrimaryDisplay();
     const primaryScale = primary.scaleFactor || 1;
 
-    // Tamanho base da janela em pixels físicos (referência: 1920×1080)
+    // Tamanho base da janela em pixels físicos (referência: monitor primário)
+    // — fixo, não cresce com a resolução do monitor de destino, pra o cartão
+    // parecer sempre igual ao que aparece no monitor principal.
     const BASE_W_PHYS = 220;
     const BASE_H_PHYS = 140;
 
@@ -203,17 +216,22 @@ function setupIpc(mainWindow) {
       const { x, y, width, height } = display.bounds;
       const scale = display.scaleFactor || 1;
 
-      // Escala proporcional à resolução física do display (referência 1920px de largura)
-      // Clampado entre 1× (monitores pequenos) e 3× (painéis LED/TV 4K+)
-      const physW = width * scale;
-      const sizeFactor = Math.max(1, Math.min(3, physW / 1920));
+      // Converte pixels físicos (medidos na escala do monitor primário) para
+      // DIP do monitor atual, mantendo o mesmo tamanho físico em qualquer tela.
+      let winW = Math.round(BASE_W_PHYS * primaryScale / scale);
+      let winH = Math.round(BASE_H_PHYS * primaryScale / scale);
 
-      const wPhys = Math.round(BASE_W_PHYS * sizeFactor);
-      const hPhys = Math.round(BASE_H_PHYS * sizeFactor);
-
-      // Converte pixels físicos para DIP do monitor atual
-      const winW = Math.round(wPhys * primaryScale / scale);
-      const winH = Math.round(hPhys * primaryScale / scale);
+      // Trava de segurança: o cartão nunca deve passar de metade do monitor
+      // de destino (só entra em ação em monitores pequenos/incomuns).
+      const maxW = width  / 2;
+      const maxH = height / 2;
+      const overflow = Math.max(winW / maxW, winH / maxH, 1);
+      let fontScale = 1;
+      if (overflow > 1) {
+        winW = Math.round(winW / overflow);
+        winH = Math.round(winH / overflow);
+        fontScale = 1 / overflow;
+      }
 
       const cx = x + Math.floor(width  / 2) - Math.floor(winW / 2);
       const cy = y + Math.floor(height / 2) - Math.floor(winH / 2);
@@ -223,12 +241,12 @@ function setupIpc(mainWindow) {
       const num   = isPrimary ? 0 : nonPrimaryIdx;
       const zoom  = primaryScale / scale;
 
-      // Fontes escaladas proporcionalmente ao display
-      const fsNum   = Math.round(52  * sizeFactor);
-      const fsLabel = Math.round(13  * sizeFactor);
-      const fsRes   = Math.round(11  * sizeFactor);
-      const border  = Math.max(2, Math.round(2.5 * sizeFactor));
-      const radius  = Math.round(14  * sizeFactor);
+      // Fontes no mesmo tamanho fixo do cartão do monitor principal
+      const fsNum   = Math.round(52  * fontScale);
+      const fsLabel = Math.round(13  * fontScale);
+      const fsRes   = Math.round(11  * fontScale);
+      const border  = Math.max(2, Math.round(2.5 * fontScale));
+      const radius  = Math.round(14  * fontScale);
 
       const win = new BW({
         x: cx, y: cy, width: winW, height: winH,
@@ -251,8 +269,8 @@ function setupIpc(mainWindow) {
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
     <div style="font-size:${fsNum}px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>
-    <div style="font-size:${fsLabel}px;margin-top:${Math.round(8*sizeFactor)}px;opacity:0.85;font-weight:500">${label}</div>
-    <div style="font-size:${fsRes}px;opacity:0.45;margin-top:${Math.round(4*sizeFactor)}px;letter-spacing:0.3px">${width}×${height}</div>
+    <div style="font-size:${fsLabel}px;margin-top:${Math.round(8*fontScale)}px;opacity:0.85;font-weight:500">${label}</div>
+    <div style="font-size:${fsRes}px;opacity:0.45;margin-top:${Math.round(4*fontScale)}px;letter-spacing:0.3px">${width}×${height}</div>
   </div>
 </body></html>`;
 
@@ -1844,49 +1862,77 @@ function setupIpc(mainWindow) {
     return true;
   });
 
-  // Verifica e baixa atualização do banco SQLite da API
-  // Compara ETag/Last-Modified com o armazenado. Se diferente, baixa e salva.
-  ipcMain.handle('sqlite:check-update', async (_, { dbBaseUrl, token }) => {
-    try {
-      if (!dbBaseUrl) return { updated: false, reason: 'no-url' };
-      const dbUrl = dbBaseUrl.replace(/\/$/, '') + '/database.db';
+  // net.fetch não tem timeout embutido — uma conexão que aceita e nunca
+  // responde (proxy/firewall capenga, servidor travado) deixava a consulta
+  // pendurada pra sempre. AbortController é o mesmo mecanismo do fetch
+  // padrão; net.fetch do Electron aceita "signal" normalmente.
+  function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return net.fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
 
-      // HEAD para verificar versão via ETag ou Last-Modified
-      const headResp = await net.fetch(dbUrl, {
-        method: 'HEAD',
-        headers: token ? { 'Api-Token': token } : {},
-      }).catch(() => null);
-
-      if (!headResp || !headResp.ok) return { updated: false, reason: 'api-unavailable' };
-
-      const version = headResp.headers.get('etag') || headResp.headers.get('last-modified') || '';
-      const storedVersion = Store.get('sqlite_db_version', '');
-
-      if (version && version === storedVersion) return { updated: false, reason: 'up-to-date' };
-
-      // Download do novo database.db
-      const resp = await net.fetch(dbUrl, {
-        headers: token ? { 'Api-Token': token } : {},
-      }).catch(() => null);
-
-      if (!resp || !resp.ok) return { updated: false, reason: 'download-failed' };
-
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer.length) return { updated: false, reason: 'empty-response' };
-
-      const configDir = getWritableConfigDir();
-      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-
-      const dbPath = path.join(configDir, 'database.db');
-      fs.writeFileSync(dbPath, buffer);
-
-      if (version) Store.set('sqlite_db_version', version);
-
-      return { updated: true, dbPath };
-    } catch (e) {
-      console.warn('[IPC] sqlite:check-update error:', e.message);
-      return { updated: false, reason: e.message };
+  // Consulta a versão do conteúdo publicado na API. NÃO existe um arquivo
+  // único "database.db" baixável por HTTP na API real (confirmado: HEAD/GET
+  // em `${dbBaseUrl}/database.db` sempre voltam 404) — o contrato real é
+  // `${origin}/params?type=env`, que devolve um texto "chave=valor" por linha
+  // incluindo `db_version=<inteiro>`. Deriva o "origin" a partir de
+  // dbBaseUrl (que aponta pra .../json_db) em vez de um novo env var.
+  async function fetchRemoteDbVersion(dbBaseUrl) {
+    const origin = new URL(dbBaseUrl).origin;
+    const url = `${origin}/params?type=env`;
+    const resp = await fetchWithTimeout(url, {}, 15000).catch((e) => { logDbUpdateError('GET ' + url, e); return null; });
+    if (!resp || !resp.ok) {
+      if (resp) logDbUpdateError('GET ' + url, new Error(`HTTP ${resp.status}`));
+      return { ok: false };
     }
+    const text = await resp.text();
+    const match = text.match(/^db_version=(\d+)/m);
+    if (!match) {
+      logDbUpdateError('GET ' + url, new Error('db_version não encontrado na resposta'));
+      return { ok: false };
+    }
+    return { ok: true, version: parseInt(match[1], 10) };
+  }
+
+  // Verifica se há uma nova versão do banco de dados publicada (número de
+  // versão só cresce) —
+  // não baixa nada aqui, só compara com o que já foi visto (ver
+  // 'sqlite:apply-db-update' abaixo, chamado quando o usuário aceita
+  // sincronizar). A sincronização de verdade reaproveita o fluxo de
+  // arquivo-por-arquivo já existente (scanAlbumsFiles/downloadMissingFiles,
+  // ver FileCheckDialog.vue) em vez de um banco único — mais simples e já
+  // testado, dado que não há um arquivo de banco baixável de fato.
+  ipcMain.handle('sqlite:check-db-update', async (_, { dbBaseUrl }) => {
+    try {
+      if (!dbBaseUrl) return { updateAvailable: false, reason: 'no-url' };
+      const remote = await fetchRemoteDbVersion(dbBaseUrl);
+      if (!remote.ok) return { updateAvailable: false, reason: 'api-unavailable' };
+
+      const storedVersion = Store.get('content_db_version', 0);
+      if (remote.version <= storedVersion) {
+        return { updateAvailable: false, reason: 'up-to-date' };
+      }
+
+      return {
+        updateAvailable: true,
+        currentVersion: String(storedVersion || '?'),
+        newVersion: String(remote.version),
+        rawVersion: remote.version,
+      };
+    } catch (e) {
+      console.warn('[IPC] sqlite:check-db-update error:', e.message);
+      logDbUpdateError('check-db-update', e);
+      return { updateAvailable: false, reason: e.message };
+    }
+  });
+
+  // Marca a versão como "vista" — chamado depois que o usuário opta por
+  // sincronizar (ver DbUpdateDialog.vue), que então delega o download de
+  // verdade pro FileCheckDialog. Não baixa nada aqui.
+  ipcMain.handle('sqlite:apply-db-update', (_, { version }) => {
+    if (typeof version === 'number' && version > 0) Store.set('content_db_version', version);
+    return { updated: true };
   });
 
   // ── Servidor de registro (QR Code) ────────────────────────────────────────

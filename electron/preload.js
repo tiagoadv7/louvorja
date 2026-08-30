@@ -99,7 +99,8 @@ contextBridge.exposeInMainWorld('electron', {
   sqliteGetImportInfo: () => ipcRenderer.invoke('sqlite:get-import-info'),
   sqliteClear: () => ipcRenderer.invoke('sqlite:clear'),
   sqliteCheckAutoImport: () => ipcRenderer.invoke('sqlite:check-auto-import'),
-  sqliteCheckUpdate: (dbBaseUrl, token) => ipcRenderer.invoke('sqlite:check-update', { dbBaseUrl, token }),
+  sqliteCheckDbUpdate: (dbBaseUrl, token) => ipcRenderer.invoke('sqlite:check-db-update', { dbBaseUrl, token }),
+  sqliteApplyDbUpdate: (version) => ipcRenderer.invoke('sqlite:apply-db-update', { version }),
 
   // ── SQLite direto (better-sqlite3) ───────────────────────────────────────
   sqliteOpenPath:   (dbPath) => ipcRenderer.invoke('sqlite:open-path', dbPath),

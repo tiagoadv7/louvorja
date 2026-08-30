@@ -613,12 +613,15 @@ function logUpdaterError(context, err) {
 // disponível" — o usuário que clica em "Verificar atualizações" não precisa
 // saber a razão técnica, só se há ou não uma versão nova. A tela de erro fica
 // reservada para falhas de download (ver downloadInstallerWithRetry abaixo).
-let isCheckingUpdate = false;
-
+//
+// Se o electron-updater falhar ao verificar (proxy/firewall corporativo
+// bloqueando o formato de request dele, parsing do feed, etc.), cai para uma
+// consulta direta à API do GitHub antes de desistir — mesma fonte, caminho
+// mais simples, sem o overhead do provider do electron-updater. Só depois
+// dessa segunda tentativa falhar é que reporta "sem atualização".
 async function runUpdateCheck() {
   sendToRenderer('updater:checking');
 
-  isCheckingUpdate = true;
   try {
     const r = await autoUpdater.checkForUpdates();
     // Em dev (app não empacotado, sem dev-app-update.yml), checkForUpdates()
@@ -629,11 +632,17 @@ async function runUpdateCheck() {
     // duplica evento nenhum ali.
     if (r == null) sendToRenderer('updater:not-available', {});
   } catch (e) {
-    console.error('[updater] Falha ao verificar no GitHub:', e.message || e);
-    logUpdaterError('check', e);
-    sendToRenderer('updater:not-available', {});
-  } finally {
-    isCheckingUpdate = false;
+    console.error('[updater] Falha ao verificar via electron-updater, tentando fallback GitHub API:', e.message || e);
+    logUpdaterError('check (electron-updater)', e);
+    try {
+      const info = await checkGithubReleaseDirect();
+      if (info.updateAvailable) sendToRenderer('updater:available', { version: info.version });
+      else sendToRenderer('updater:not-available', {});
+    } catch (e2) {
+      console.error('[updater] Fallback GitHub API também falhou:', e2.message || e2);
+      logUpdaterError('check (github fallback)', e2);
+      sendToRenderer('updater:not-available', {});
+    }
   }
 }
 
@@ -692,6 +701,28 @@ async function findLatestReleaseAsset() {
   if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na última release`);
   const version = String(release.tag_name || '').replace(/^v/, '');
   return { asset, version };
+}
+
+/** Compara duas versões "major.minor.patch". Retorna >0 se a > b. */
+function compareVersions(a, b) {
+  const pa = String(a).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+// Fallback de VERIFICAÇÃO usado por runUpdateCheck quando autoUpdater.checkForUpdates()
+// falha (ex.: proxy/firewall bloqueando o formato de request do electron-updater) —
+// consulta a mesma release "latest" direto pela API do GitHub, sem depender do
+// provider do electron-updater, só para decidir se há versão nova.
+async function checkGithubReleaseDirect() {
+  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+  const version = String(release.tag_name || '').replace(/^v/, '');
+  if (!version) return { updateAvailable: false, version: null };
+  return { updateAvailable: compareVersions(version, app.getVersion()) > 0, version };
 }
 
 /** Baixa uma URL para um arquivo local, com progresso e redirecionamentos. */
@@ -771,9 +802,11 @@ function setupAutoUpdater() {
     const msg = err?.message || String(err);
     console.error('[updater] Erro do autoUpdater:', msg);
     logUpdaterError('autoUpdater error event', err);
-    // O autoUpdater só é usado para verificar — qualquer erro dele é erro de
-    // verificação, tratado como "sem atualização" (ver runUpdateCheck acima).
-    if (isCheckingUpdate) sendToRenderer('updater:not-available', {});
+    // Só loga aqui — quem decide o que reportar ao renderer é o catch de
+    // runUpdateCheck (que também recebe esse mesmo erro via rejeição da
+    // promise de checkForUpdates() e tenta o fallback do GitHub antes de
+    // reportar "sem atualização"). Enviar 'updater:not-available' aqui
+    // também correria com o resultado do fallback.
   });
 
   ipcMain.handle('updater:check', () => runUpdateCheck());
