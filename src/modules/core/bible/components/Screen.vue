@@ -1,5 +1,7 @@
 <template>
+  <transition name="bb-visibility">
   <div
+    v-if="isActive"
     ref="container"
     :style="{
       position: 'relative',
@@ -77,6 +79,7 @@
       </div>
     </transition>
   </div>
+  </transition>
 </template>
 
 <script>
@@ -115,6 +118,12 @@ export default {
       );
     },
     /* COMPUTEDS OBRIGATÓRIAS - FIM */
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente), sem afetar o painel do próprio
+    // operador nem o estado "minimizado".
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
+    },
     // Valores padrão — sem eles, userdata.xxx fica null até o operador
     // customizar a exibição pelo menos uma vez, e font_size null vira
     // fontSizePc(null) === 0 (texto montado no DOM com tamanho zero,
@@ -167,6 +176,14 @@ export default {
 </script>
 
 <style scoped>
+.bb-visibility-enter-active,
+.bb-visibility-leave-active {
+  transition: opacity 0.4s ease;
+}
+.bb-visibility-enter-from,
+.bb-visibility-leave-to {
+  opacity: 0;
+}
 .fade-enter-active {
   transition: opacity 0.4s ease-in-out;
   will-change: opacity;

@@ -1,5 +1,7 @@
 <template>
+  <transition name="cc-visibility">
   <div
+    v-if="isActive"
     ref="container"
     class="d-flex flex-column"
     :class="alignClass"
@@ -26,6 +28,7 @@
       <div class="cc-gauge-fill" :style="{ width: `${progressPct}%` }" />
     </div>
   </div>
+  </transition>
 </template>
 
 <script>
@@ -47,6 +50,12 @@ export default {
     },
     module() {
       return this.$modules.get(this.module_id);
+    },
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente), sem afetar o painel do próprio
+    // operador nem o estado "minimizado".
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     userdata() {
       return new Proxy(
@@ -249,6 +258,14 @@ export default {
 </script>
 
 <style scoped>
+.cc-visibility-enter-active,
+.cc-visibility-leave-active {
+  transition: opacity 0.4s ease;
+}
+.cc-visibility-enter-from,
+.cc-visibility-leave-to {
+  opacity: 0;
+}
 .cc-remaining {
   font-weight: 700;
   line-height: 1;

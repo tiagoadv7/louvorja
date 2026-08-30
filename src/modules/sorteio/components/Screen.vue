@@ -1,5 +1,6 @@
 <template>
-  <div ref="container" class="sorteio-screen" :style="containerStyle">
+  <transition name="sr-visibility">
+  <div v-if="isActive" ref="container" class="sorteio-screen" :style="containerStyle">
     <!-- Imagem de fundo -->
     <img
       v-if="userdata.image"
@@ -68,6 +69,7 @@
       </div>
     </div>
   </div>
+  </transition>
 </template>
 
 <script>
@@ -89,6 +91,12 @@ export default {
   computed: {
     module_id() {
       return manifest.id;
+    },
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente), sem afetar o painel do próprio
+    // operador nem o estado "minimizado".
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     module() {
       return this.$modules.get(this.module_id);
@@ -256,6 +264,14 @@ export default {
 </script>
 
 <style scoped>
+.sr-visibility-enter-active,
+.sr-visibility-leave-active {
+  transition: opacity 0.4s ease;
+}
+.sr-visibility-enter-from,
+.sr-visibility-leave-to {
+  opacity: 0;
+}
 .sorteio-screen {
   position: relative;
 }

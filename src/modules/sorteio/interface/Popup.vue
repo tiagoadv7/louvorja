@@ -1,6 +1,6 @@
 <template>
   <!-- Modo roleta -->
-  <div v-if="isRoulette" class="rp-root" :style="bgStyle">
+  <div v-if="isActive && isRoulette" class="rp-root" :style="bgStyle">
 
     <!-- Painel esquerdo: participantes -->
     <div v-if="showParticipants" class="rp-panel" :style="panelBorderStyle">
@@ -95,6 +95,12 @@ export default {
   computed: {
     module_id() { return manifest.id; },
     module()     { return this.$modules.get(this.module_id); },
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente) — o modo "números/nomes" (<Screen>)
+    // já cuida disso sozinho; aqui cobre o modo roleta.
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
+    },
 
     appdata() {
       return new Proxy({}, {
