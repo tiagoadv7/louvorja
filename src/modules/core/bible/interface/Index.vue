@@ -346,6 +346,9 @@ export default {
     verses: [],
     last_verse: 1,
     last_bible_file: null,
+    // Evita repetir o alerta de "dados offline faltando" a cada troca de
+    // capítulo/versão enquanto os livros/versões continuarem indisponíveis.
+    _offlineDataMissingNotified: false,
   }),
   computed: {
     /* COMPUTEDS OBRIGATÓRIAS - INÍCIO */
@@ -487,29 +490,50 @@ export default {
 
       if (this.books.length <= 0) {
         this.loading_book = true;
-        this.books = await this.$database.get(
+        // Modo Offline sem esse arquivo baixado ainda → $database.get()
+        // devolve null (ver Database.js) em vez de lançar erro. Sem o "|| []"
+        // aqui, "this.books[0]" abaixo lançava um TypeError não tratado, que
+        // travava o painel pra sempre em "carregando" (o loading=false do fim
+        // do método nunca era alcançado).
+        this.books = (await this.$database.get(
           `${this.$i18n.locale?.value || this.$i18n.locale}_bible_book`,
-        );
-        if (!this.bible.id_bible_book) {
+        )) || [];
+        if (!this.bible.id_bible_book && this.books.length) {
           await this.selBook(this.books[0].id_bible_book);
         }
         this.loading_book = false;
       }
 
       if (this.versions.length <= 0) {
-        this.versions = await this.$database.get(
+        this.versions = (await this.$database.get(
           `${this.$i18n.locale?.value || this.$i18n.locale}_bible_version`,
-        );
-        if (!this.bible.id_bible_version) {
+        )) || [];
+        if (!this.bible.id_bible_version && this.versions.length) {
           await this.selVersion(this.versions[0].id_bible_version);
         }
+      }
+
+      // Sem livros/versões (ex.: Modo Offline sem esses arquivos baixados
+      // ainda) não há capítulo/versículo pra buscar — some do "carregando"
+      // aqui e avisa o operador (só uma vez) em vez de deixar a tela vazia
+      // sem explicação nenhuma.
+      if (!this.books.length || !this.versions.length) {
+        if (this.$database.isLocalEnabled() && !this._offlineDataMissingNotified) {
+          this._offlineDataMissingNotified = true;
+          this.$alert.info({
+            text: "Os dados da Bíblia ainda não foram baixados para uso offline. Desative o Modo Offline uma vez (com internet) pra baixá-los, ou baixe-os pelo Centro de Downloads.",
+            translate: false,
+          });
+        }
+        this.loading = false;
+        return;
       }
 
       const bible_file = `bible_${this.bible.id_bible_version}_${this.bible.id_bible_book}_${this.bible.chapter}`;
       if (bible_file != this.last_bible_file) {
         this.loading_verses = true;
         this.verses = {};
-        this.verses = await this.$database.get(bible_file);
+        this.verses = (await this.$database.get(bible_file)) || {};
         this.last_bible_file = bible_file;
         this.loading_verses = false;
       }
