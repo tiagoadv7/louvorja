@@ -418,7 +418,6 @@ export default {
         {
           show: this.media.config.audio,
           compact: false,
-          disabled: this.media.config.is_fading,
           highlight: true,
           icon: this.media.config.is_paused ? "mdi-play" : "mdi-pause",
           click: () => this.play(),

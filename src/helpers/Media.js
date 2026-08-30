@@ -596,7 +596,9 @@ const Media = {
 
       // Sincroniza posição com o audio atual
       xfade.currentTime = audio.currentTime;
-      xfade.play().catch(() => {});
+      // Mesmo motivo do guard em _crossfadeAudioTrack: um pause() do usuário
+      // entre o início da troca de modo e este canplay não pode ser ignorado.
+      if (!$appdata.get("modules.media.config.is_paused")) xfade.play().catch(() => {});
 
       // Padrão SoundMaster: dois fades independentes com slots nomeados, 40 ms/passo
       const FADE_MS = 1200;
@@ -642,6 +644,9 @@ const Media = {
 
           audio.remove();
           $appdata.set("modules.media.config.is_fading", false);
+          // Garante que a faixa promovida respeite um pause() feito durante
+          // a transição (mesmo motivo do guard no canplay, acima).
+          if ($appdata.get("modules.media.config.is_paused")) xfade.pause();
 
           // Libera timeUpdate()/checkTime() (ver _crossfading = true acima) e
           // recalcula o slide_index já com o áudio novo — sem isso o slide
@@ -848,7 +853,13 @@ const Media = {
       }
 
       xfade.currentTime = 0;
-      xfade.play().catch(() => {});
+      // Entre o início deste crossfade e este canplay (busca assíncrona da
+      // faixa nova), o usuário pode ter clicado pause — sem checar is_paused
+      // aqui, o play() abaixo ignorava essa pausa e a faixa nova começava a
+      // tocar escondida mesmo assim (ver pause(), que só pausa o "__audio_xfade"
+      // se ele já estiver tocando neste momento).
+      const startPaused = $appdata.get("modules.media.config.is_paused");
+      if (!startPaused) xfade.play().catch(() => {});
 
       const FADE_MS = 1200;
       const INTERVAL = 40;
@@ -890,7 +901,14 @@ const Media = {
           xfade.addEventListener("ended", this._onAudioEnded.bind(this));
 
           this._crossfading = false;
-          $appdata.set("modules.media.config.is_paused", false);
+          // Só libera is_paused se ninguém pausou durante a transição — do
+          // contrário isso desfazia silenciosamente o pause() do usuário
+          // assim que o crossfade terminava (ver comentário acima).
+          if ($appdata.get("modules.media.config.is_paused")) {
+            xfade.pause();
+          } else {
+            $appdata.set("modules.media.config.is_paused", false);
+          }
           $appdata.set("modules.media.config.is_fading", false);
         }
       }, INTERVAL);
@@ -1095,6 +1113,16 @@ const Media = {
     const fade_audio = $userdata.get("modules.media.fade_audio");
 
     if (bool) {
+      // Durante um crossfade em andamento (troca de música/modo, ver
+      // _crossfadeAudioTrack/switchMode), a faixa NOVA já está tocando num
+      // elemento à parte ("__audio_xfade") e só é promovida a "__audio"
+      // (o que getElement() devolve) ao final da transição, ~1.2s depois.
+      // Sem pausar esse elemento aqui também, pausar durante essa janela só
+      // afetava a faixa antiga — a nova continuava tocando escondida e
+      // "reaparecia" tocando quando o crossfade terminava, ignorando a pausa.
+      const xfade = document.getElementById("__audio_xfade");
+      if (xfade && !xfade.paused) xfade.pause();
+
       if (fade_audio) {
         this.fadeOutAudio(() => {
           audio.pause();
