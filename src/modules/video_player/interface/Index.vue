@@ -492,26 +492,22 @@ export default {
       }
     },
 
-    // Minimizar agora encerra a reprodução de vídeo e SoundMaster (mesmo fade
-    // suave do botão "Parar" de cada um, ver stopSmooth() em
-    // SoundMasterPanel.vue e $videoPlayer.stop()) — antes ficavam tocando
-    // escondidos, sem indicação nenhuma pro operador, e só paravam de fato ao
-    // fechar (X) ou apertar Esc. O mini player flutuante (PIP) continua sendo
-    // uma ação manual e separada (botão dedicado) — nunca some/aparece
-    // sozinho junto do minimizar, pra não nascer sem o operador ter pedido.
-    // O Overlay de Imagem é a exceção: minimizado continua ativo na saída
-    // (é só uma imagem estática, não tem "reprodução" pra encerrar) — ver
-    // isActive em image_overlay/interface/Popup.vue.
-    async onMinimize() {
-      // $videoPlayer.stop() dispara o fade do vídeo (~1.1s) e retorna na
-      // hora — chamar ANTES do await do SoundMaster (que pode levar até
-      // fadeOutMs, ~2.5s) garante que os dois fades rodem em paralelo. Na
-      // ordem antiga (SoundMaster primeiro), o vídeo só começava a parar
-      // DEPOIS do fade do SoundMaster terminar — com os dois tocando ao
-      // mesmo tempo, o vídeo parecia "não parar nunca" por ficar tocando
-      // normalmente durante todo aquele tempo de espera.
-      this.$videoPlayer.stop();
-      await this.$refs.soundMasterPanel?.stopSmooth();
+    // Minimizar o painel NÃO pausa nem interrompe a reprodução — vídeo e
+    // SoundMaster continuam tocando normalmente (na projeção e aqui mesmo no
+    // painel do operador), só trocando a prévia pelos controles da barra do
+    // rodapé — igual ao comportamento de sempre dos álbuns/coletâneas do
+    // sistema (ver Footer.vue/videoActive e #soundmasterActive). Só o botão
+    // fechar (X) ou Esc realmente encerra a reprodução (ver close() acima).
+    // O mini player flutuante (PIP) é sempre uma ação manual e separada
+    // (botão dedicado) — nunca some/aparece sozinho junto do minimizar, pra
+    // não nascer sem o operador ter pedido. Minimiza o Overlay de Imagem e o
+    // SoundMaster junto — mesma janela agora. Minimizado (ao contrário de
+    // fechado) mantém o overlay ativo na saída mesmo com o painel escondido
+    // (ver isActive em image_overlay/interface/Popup.vue), e mantém
+    // `modules.soundmaster.minimized=true` pra barra do rodapé continuar
+    // mostrando o mini-player enquanto toca (ver Footer.vue#soundmasterActive,
+    // que depende exatamente dessa flag).
+    onMinimize() {
       this.$modules.minimize(this.module_id);
       this.$modules.minimize('image_overlay');
       this.$modules.minimize('soundmaster');
