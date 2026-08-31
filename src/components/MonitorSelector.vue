@@ -43,6 +43,14 @@
         disabled
       />
 
+      <v-list-item
+        v-if="outputNotFoundWarning"
+        prepend-icon="mdi-alert"
+        title="Monitor de saída salvo não encontrado"
+        subtitle="Selecione o monitor novamente"
+        density="compact"
+      />
+
       <v-divider class="my-1" />
 
       <v-list-item prepend-icon="mdi-monitor-multiple" rounded="lg" @click="identify">
@@ -53,6 +61,14 @@
       <v-divider class="my-1" />
 
       <v-list-subheader>Monitor de retorno</v-list-subheader>
+
+      <v-list-item
+        v-if="returnNotFoundWarning"
+        prepend-icon="mdi-alert"
+        title="Monitor de retorno salvo não encontrado"
+        subtitle="Selecione o monitor novamente"
+        density="compact"
+      />
 
       <v-list-item
         :prepend-icon="returnOpen ? 'mdi-monitor-eye' : 'mdi-monitor-off'"
@@ -95,11 +111,14 @@ export default {
     outputOpen: false,
     returnOpen: false,
     returnSelectedId: null,
+    outputNotFoundWarning: false,
+    returnNotFoundWarning: false,
     _outputOpenedHandler: null,
     _outputClosedHandler: null,
     _returnOpenedHandler: null,
     _returnClosedHandler: null,
     _displaysChangedHandler: null,
+    _displayNotFoundHandler: null,
   }),
   computed: {
     is_desktop() {
@@ -145,6 +164,15 @@ export default {
     this._displaysChangedHandler = this.$electron.on('displays-changed', () => {
       this.refreshScreens();
     });
+    // Emitido pelo processo main (electron/main.js, resolveOutputDisplay/
+    // resolveReturnDisplay) quando o monitor salvo não é mais encontrado entre
+    // os conectados (ex.: projetor com id instável entre reconexões) e a
+    // janela caiu no monitor de fallback em vez do escolhido — sem isso o
+    // operador só descobriria olhando a projeção real, sem saber o motivo.
+    this._displayNotFoundHandler = this.$electron.on('output-display-not-found', ({ kind }) => {
+      if (kind === 'return') this.returnNotFoundWarning = true;
+      else this.outputNotFoundWarning = true;
+    });
   },
   beforeUnmount() {
     if (this._outputOpenedHandler)
@@ -157,6 +185,8 @@ export default {
       this.$electron.off('return-window-closed', this._returnClosedHandler);
     if (this._displaysChangedHandler)
       this.$electron.off('displays-changed', this._displaysChangedHandler);
+    if (this._displayNotFoundHandler)
+      this.$electron.off('output-display-not-found', this._displayNotFoundHandler);
   },
   methods: {
     async onToggle(open) {
@@ -193,8 +223,8 @@ export default {
     async lock(id) {
       const movedScreen = this.selectedId !== id;
       this.selectedId = id;
+      this.outputNotFoundWarning = false;
       await this.$electron.storeSet('output_display_id', id);
-      this.$userdata.set('modules.theme.output_display_id', id);
 
       if (this.outputOpen && !movedScreen) return;
       if (this.outputOpen) await this.$electron.closeOutput();
@@ -240,6 +270,7 @@ export default {
     async lockReturn(id) {
       const movedScreen = this.returnSelectedId !== id;
       this.returnSelectedId = id;
+      this.returnNotFoundWarning = false;
       await this.$electron.storeSet('return_display_id', id);
 
       if (this.returnOpen && !movedScreen) return;

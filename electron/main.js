@@ -281,20 +281,76 @@ function nudgeRepaint(win) {
   }
 }
 
-// Resolve qual monitor usar para a janela de saída: o salvo no Store (se ainda
-// existir), senão o primeiro monitor externo, senão o primário. Extraído para
-// ser reaproveitado tanto na abertura (createOutputWindow) quanto ao reagir a
+// Acha o monitor salvo entre os atualmente conectados. `display.id` (gerado
+// pelo Windows) não é garantidamente estável entre reinícios/reconexões — um
+// projetor atrás de switch HDMI/KVM, ou que ainda está "acordando" (handshake
+// EDID) no exato momento em que o Electron enumera os monitores no boot, pode
+// reaparecer com um id diferente do salvo. Isso fazia a saída silenciosamente
+// "esquecer" o monitor escolhido e cair pro monitor principal logo na abertura.
+// Por isso, além do id, guardamos os `bounds` (posição+tamanho) do monitor
+// escolhido e usamos como segundo critério de correspondência: mesma posição e
+// resolução é um sinal forte de que é fisicamente o mesmo monitor, mesmo com
+// id novo.
+function findSavedDisplay(allDisplays, savedId, savedBounds) {
+  let target = savedId ? allDisplays.find((d) => d.id === savedId) : null;
+  if (target) return target;
+
+  if (savedBounds) {
+    target = allDisplays.find(
+      (d) =>
+        d.bounds.x === savedBounds.x &&
+        d.bounds.y === savedBounds.y &&
+        d.bounds.width === savedBounds.width &&
+        d.bounds.height === savedBounds.height
+    );
+  }
+  return target || null;
+}
+
+// Entre os monitores não-primários, prefere o maior (em pixels) — motivo:
+// quando o monitor salvo não é encontrado (ver findSavedDisplay), o fallback
+// antigo pegava só "o primeiro externo" na ordem em que o Windows os lista,
+// que não tem relação nenhuma com qual é o de fato usado para projeção. Numa
+// sala com mais de um monitor externo (ex.: um monitor comum de operador +
+// um monitor/projetor wide de tela grande), a tela grande quase sempre é a
+// destinada à projeção — então é a escolha mais segura na ausência de outra
+// informação.
+function largestExternalDisplay(allDisplays, primary) {
+  const externals = allDisplays.filter((d) => d.id !== primary.id);
+  if (!externals.length) return null;
+  return externals.reduce((best, d) =>
+    d.bounds.width * d.bounds.height > best.bounds.width * best.bounds.height ? d : best
+  );
+}
+
+// Resolve qual monitor usar para a janela de saída: o salvo no Store (por id,
+// com fallback por bounds — ver findSavedDisplay) se ainda existir, senão o
+// maior monitor externo conectado, senão o primário. Extraído para ser
+// reaproveitado tanto na abertura (createOutputWindow) quanto ao reagir a
 // mudanças de monitores com a janela já aberta (ver reconcileDisplays()).
 function resolveOutputDisplay(displayId) {
   const allDisplays = screen.getAllDisplays();
   const primary     = screen.getPrimaryDisplay();
-  const external    = allDisplays.find((d) => d.id !== primary.id);
 
-  const targetId = displayId || Store.get('output_display_id');
-  if (displayId) Store.set('output_display_id', displayId);
+  const targetId     = displayId || Store.get('output_display_id');
+  const savedBounds  = displayId ? null : Store.get('output_display_bounds');
 
-  let target = targetId ? allDisplays.find((d) => d.id === targetId) : null;
-  if (!target) target = external || primary;
+  let target = findSavedDisplay(allDisplays, targetId, savedBounds);
+  const matched = !!target;
+  if (!target) target = largestExternalDisplay(allDisplays, primary) || primary;
+
+  if (displayId) {
+    Store.set('output_display_id', displayId);
+    Store.set('output_display_bounds', target.bounds);
+  } else if (matched && targetId) {
+    // Mantém os bounds salvos atualizados (ex.: monitor mudou de resolução
+    // mas continua sendo fisicamente o mesmo), pro match por bounds continuar
+    // valendo se o id mudar numa próxima reconexão.
+    Store.set('output_display_bounds', target.bounds);
+  } else if (targetId && !matched) {
+    console.warn(`[Display] Monitor de saída salvo (id ${targetId}) não encontrado — usando fallback.`);
+    sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'output' });
+  }
 
   return { target, isExternal: target.id !== primary.id };
 }
@@ -390,17 +446,29 @@ function createOutputWindow(moduleId, displayId) {
   return outputWindow;
 }
 
-// Mesmo papel de resolveOutputDisplay(), para o monitor de retorno (sem
-// preferência por monitor externo — cai direto pro primário).
+// Mesmo papel de resolveOutputDisplay() (mesmo fallback por bounds — ver
+// findSavedDisplay), para o monitor de retorno — mas sem preferência por
+// monitor externo no fallback final: cai direto pro primário.
 function resolveReturnDisplay(displayId) {
   const allDisplays = screen.getAllDisplays();
   const primary     = screen.getPrimaryDisplay();
 
-  const targetId = displayId || Store.get('return_display_id');
-  if (displayId) Store.set('return_display_id', displayId);
+  const targetId    = displayId || Store.get('return_display_id');
+  const savedBounds = displayId ? null : Store.get('return_display_bounds');
 
-  let target = targetId ? allDisplays.find(d => d.id === targetId) : null;
+  let target = findSavedDisplay(allDisplays, targetId, savedBounds);
+  const matched = !!target;
   if (!target) target = primary;
+
+  if (displayId) {
+    Store.set('return_display_id', displayId);
+    Store.set('return_display_bounds', target.bounds);
+  } else if (matched && targetId) {
+    Store.set('return_display_bounds', target.bounds);
+  } else if (targetId && !matched) {
+    console.warn(`[Display] Monitor de retorno salvo (id ${targetId}) não encontrado — usando fallback.`);
+    sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'return' });
+  }
 
   return { target };
 }
@@ -424,7 +492,14 @@ function createReturnWindow(displayId) {
     // no Windows a borda de resize invisível do frame frameless deixava uma
     // faixa sem cobrir a tela (o usuário conseguia até arrastar pra redimensionar).
     fullscreen: true,
-    alwaysOnTop: !isDev,
+    // Sem alwaysOnTop (ao contrário da saída principal, ver createOutputWindow)
+    // — o monitor de retorno às vezes também precisa exibir outra coisa por
+    // cima (ex.: o operador arrasta outra janela/app pro mesmo monitor), e com
+    // alwaysOnTop=true essa outra janela nunca conseguia ficar na frente,
+    // mesmo focada. Sem isso, a ordenação normal do SO se aplica — clicar
+    // "Ativar retorno" de novo (ver createReturnWindow acima, early-return com
+    // focus()) traz o retorno de volta pra frente quando o operador quiser.
+    alwaysOnTop: false,
     // Transparente (igual à janela de saída) — sem isso, antes de qualquer
     // música tocar (visible=false em ReturnScreen.vue) a janela mostrava o
     // fundo escuro padrão do tema em vez de ficar em branco/transparente.
@@ -683,7 +758,23 @@ function githubApiRequest(urlStr, redirects = 0) {
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
           const body = Buffer.concat(chunks).toString('utf8');
-          if (res.statusCode >= 400) return reject(new Error(`HTTP ${res.statusCode} ao consultar o GitHub`));
+          if (res.statusCode >= 400) {
+            // A API do GitHub sem autenticação libera só 60 requisições/hora por
+            // IP — numa rede compartilhada (igreja/escritório com vários
+            // instaladores checando update) isso estoura fácil e aparecia pro
+            // usuário só como "HTTP 403", sem nenhuma pista do que fazer.
+            // rate-limit vem sempre com esses dois headers, então dá pra
+            // detectar com certeza (em vez de adivinhar pelo texto do body,
+            // que muda) e avisar quando o limite libera de novo.
+            const remaining = res.headers['x-ratelimit-remaining'];
+            const resetHeader = res.headers['x-ratelimit-reset'];
+            if (res.statusCode === 403 && remaining === '0' && resetHeader) {
+              const resetDate = new Date(parseInt(resetHeader, 10) * 1000);
+              const mins = Math.max(1, Math.ceil((resetDate.getTime() - Date.now()) / 60000));
+              return reject(new Error(`Limite de requisições do GitHub atingido — tente novamente em cerca de ${mins} min`));
+            }
+            return reject(new Error(`HTTP ${res.statusCode} ao consultar o GitHub`));
+          }
           try { resolve(JSON.parse(body)); } catch (e) { reject(new Error(`Resposta inválida do GitHub: ${e.message}`)); }
         });
       }
@@ -693,9 +784,28 @@ function githubApiRequest(urlStr, redirects = 0) {
   });
 }
 
+// Cache curto da release "latest" — runUpdateCheck (verificação, periódica ou
+// manual) e updater:download (clique em "Baixar agora") consultavam o mesmo
+// endpoint em separado, cada um consumindo sua própria cota das 60
+// requisições/hora sem autenticação. Reaproveitar a resposta por alguns
+// minutos cobre o caso comum (usuário vê "atualização disponível" e clica em
+// baixar logo em seguida) sem precisar de token.
+let _releaseCache = { data: null, time: 0 };
+const RELEASE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchLatestRelease() {
+  const now = Date.now();
+  if (_releaseCache.data && now - _releaseCache.time < RELEASE_CACHE_TTL_MS) {
+    return _releaseCache.data;
+  }
+  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+  _releaseCache = { data: release, time: now };
+  return release;
+}
+
 /** Busca a release mais recente e o asset compatível com a plataforma atual. */
 async function findLatestReleaseAsset() {
-  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+  const release = await fetchLatestRelease();
   const ext = assetExtensionForPlatform();
   const asset = (release.assets || []).find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
   if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na última release`);
@@ -719,7 +829,7 @@ function compareVersions(a, b) {
 // consulta a mesma release "latest" direto pela API do GitHub, sem depender do
 // provider do electron-updater, só para decidir se há versão nova.
 async function checkGithubReleaseDirect() {
-  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+  const release = await fetchLatestRelease();
   const version = String(release.tag_name || '').replace(/^v/, '');
   if (!version) return { updateAvailable: false, version: null };
   return { updateAvailable: compareVersions(version, app.getVersion()) > 0, version };

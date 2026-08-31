@@ -7,6 +7,7 @@
     "email": "mayco_rolbuche@hotmail.com"
   },
   "homepage": "https://louvorja.com.br/",
+  "repository": "https://github.com/tiagoadv7/louvorja",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -148,8 +149,6 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "tiagoadv7",
-      "repo": "louvorja",
       "releaseType": "release"
     }
   },

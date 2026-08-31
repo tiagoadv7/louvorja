@@ -38,6 +38,7 @@ const RECEIVE_CHANNELS = [
   'updater:downloaded',
   'updater:error',
   'displays-changed',
+  'output-display-not-found',
 ];
 
 contextBridge.exposeInMainWorld('electron', {

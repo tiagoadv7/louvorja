@@ -1910,6 +1910,21 @@ function setupIpc(mainWindow) {
       if (!remote.ok) return { updateAvailable: false, reason: 'api-unavailable' };
 
       const storedVersion = Store.get('content_db_version', 0);
+
+      // Primeira verificação de todas nesse perfil (instalação nova, ou um
+      // perfil de antes desse recurso existir) — sem uma versão de
+      // referência conhecida, "remote.version > 0" sempre seria verdade e o
+      // diálogo apareceria em TODO início do app até o operador clicar em
+      // "Sincronizar arquivos" (clicar "Agora não" não marca como visto, de
+      // propósito — ver dismiss() em DbUpdateDialog.vue). Sem uma versão
+      // antiga real pra comparar, não existe "nova versão" de fato — grava a
+      // atual como linha de base silenciosamente; só a PRÓXIMA publicação
+      // além dela conta como atualização de verdade.
+      if (storedVersion === 0) {
+        Store.set('content_db_version', remote.version);
+        return { updateAvailable: false, reason: 'baseline-set' };
+      }
+
       if (remote.version <= storedVersion) {
         return { updateAvailable: false, reason: 'up-to-date' };
       }
