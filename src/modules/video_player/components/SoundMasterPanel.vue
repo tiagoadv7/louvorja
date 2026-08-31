@@ -272,6 +272,13 @@ export default {
         if (!cmd?.path || cmd.ts === this._lastPlayTs) return;
         this._lastPlayTs = cmd.ts;
         this.playExternalFile(cmd.path, cmd.name);
+        // Limpa o comando já consumido — sem isso, ele fica parado em $appdata
+        // e, como este componente só é montado quando a janela "Mídia" abre
+        // pela primeira vez na sessão (v-dialog lazy), reabrir a janela mais
+        // tarde (ex.: só pra ver o Vídeo) remontava o painel do zero, perdia
+        // o _lastPlayTs local e o watch "immediate" tocava o mesmo áudio de
+        // novo sozinho, mesmo sem nenhum pedido novo da Liturgia.
+        this.$appdata.set('modules.soundmaster.pending_play', null);
       },
     },
     footerCommand(cmd) {

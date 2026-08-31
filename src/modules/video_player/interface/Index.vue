@@ -269,8 +269,6 @@ export default {
   components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel },
 
   data: () => ({
-    activeTab: 'video',
-
     pipOpen: false,
     _pipHandlers: [],
     _focusHandler: null,
@@ -285,6 +283,15 @@ export default {
     /* ── obrigatórias ── */
     module_id() { return manifest.id; },
     module()    { return this.$modules.get(this.module_id) || {}; },
+
+    // Persistida em appdata (não estado local do componente) para que outros
+    // módulos (ex. Liturgia, via helpers/SoundMaster.js#play()) possam abrir
+    // a janela "Mídia" já na aba certa, mesmo que ela ainda nem esteja
+    // montada (o helper só grava o valor; o v-tabs abaixo lê pronto ao montar).
+    activeTab: {
+      get() { return this.$appdata.get('modules.video_player.active_tab') || 'video'; },
+      set(v) { this.$appdata.set('modules.video_player.active_tab', v); },
+    },
 
     // Lógica de fila/config compartilhada com outros módulos (ex. Liturgia)
     // vive em @/helpers/VideoPlayer — aqui só lemos/gravamos através dela.
@@ -389,15 +396,22 @@ export default {
     // também — reaproveita o mesmo fade suave do botão "Parar" (stop()),
     // em vez de só esconder o painel e deixar o vídeo tocando escondido.
     // Fecha também o Overlay de Imagem e o SoundMaster junto (mesma janela
-    // agora, ver watch/module.show acima pro sentido inverso, abrir). O
-    // SoundMaster fecha via ref (não $modules.close direto) porque seu
-    // close() próprio faz um fade suave do áudio antes de encerrar de
-    // verdade — ver components/SoundMasterPanel.vue#close.
+    // agora, ver watch/module.show acima pro sentido inverso, abrir).
+    //
+    // Ordem importa: o SoundMaster tem que terminar de baixar o volume
+    // ANTES de `this.$modules.close(this.module_id)` — esse último é o que
+    // fecha a janela "Mídia" de verdade (v-model="module.show"), e SoundMaster
+    // toca o áudio direto aqui no painel do operador (ao contrário de
+    // vídeo/overlay, que projetam numa janela de saída separada) — fechar a
+    // janela achando que o fade ainda ia rolar "por baixo" cortava o som na
+    // hora em vez de baixar suave. Por isso o await do fade do SoundMaster
+    // vem PRIMEIRO, antes de fechar qualquer coisa (inclusive o próprio
+    // vídeo) — ver components/SoundMasterPanel.vue#close.
     async close() {
+      await this.$refs.soundMasterPanel?.close();
       this.$videoPlayer.stop();
       this.$modules.close(this.module_id);
       this.$modules.close('image_overlay');
-      await this.$refs.soundMasterPanel?.close();
     },
 
     fmt(s) {

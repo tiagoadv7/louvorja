@@ -690,25 +690,45 @@ function logUpdaterError(context, err) {
 // reservada para falhas de download (ver downloadInstallerWithRetry abaixo).
 //
 // Se o electron-updater falhar ao verificar (proxy/firewall corporativo
-// bloqueando o formato de request dele, parsing do feed, etc.), cai para uma
-// consulta direta à API do GitHub antes de desistir — mesma fonte, caminho
-// mais simples, sem o overhead do provider do electron-updater. Só depois
-// dessa segunda tentativa falhar é que reporta "sem atualização".
+// bloqueando o formato de request dele, parsing do feed, etc. — ou em dev,
+// sem dev-app-update.yml), cai para uma consulta direta à API do GitHub antes
+// de desistir — mesma fonte, caminho mais simples, sem o overhead do
+// provider do electron-updater. Só depois dessa segunda tentativa falhar é
+// que reporta "sem atualização".
+//
+// _checkedViaGithub registra QUAL caminho respondeu por último — o download
+// (updater:download/install abaixo) precisa usar o MESMO mecanismo da
+// verificação: se foi o electron-updater que confirmou a versão nova, só ele
+// tem o estado interno pra baixar/instalar nativamente; se foi o fallback do
+// GitHub, o electron-updater nunca chegou a "ver" essa versão, então só o
+// download manual funciona. Mesmo padrão usado no fork mais avançado deste
+// app (ver PR — GITHUB_OWNER=louvorja/violin-app).
+let _checkedViaGithub = false;
+
+// true só durante autoUpdater.downloadUpdate() (ver updater:download) — o
+// evento nativo 'error' do autoUpdater dispara tanto numa falha de
+// VERIFICAÇÃO quanto numa falha de DOWNLOAD, mas só a segunda precisa virar
+// 'updater:error' pro renderer aqui; a primeira já tem seu próprio tratamento
+// em runUpdateCheck() (fallback pro GitHub antes de decidir o que reportar).
+let _downloadingNative = false;
+
 async function runUpdateCheck() {
   sendToRenderer('updater:checking');
+  _checkedViaGithub = false;
 
   try {
     const r = await autoUpdater.checkForUpdates();
-    // Em dev (app não empacotado, sem dev-app-update.yml), checkForUpdates()
-    // resolve com null SEM emitir nenhum evento (ver isUpdaterActive() no
-    // electron-updater) — sem isso o diálogo fica preso em "Verificando
-    // atualizações..." pra sempre em dev. Em produção o autoUpdater sempre
-    // emite 'update-available'/'update-not-available', então isso não
-    // duplica evento nenhum ali.
-    if (r == null) sendToRenderer('updater:not-available', {});
+    // Em dev (app não empacotado, sem dev-app-update.yml) ou em instalações
+    // sem config de update, checkForUpdates() resolve com null SEM emitir
+    // nenhum evento (ver isUpdaterActive() no electron-updater) — trata como
+    // falha e cai no fallback abaixo, em vez de reportar "sem atualização"
+    // sem nem checar de verdade (isso também é o que permite testar o fluxo
+    // completo em dev, contra a API real do GitHub).
+    if (r == null) throw new Error('electron-updater inativo (dev ou sem configuração de update)');
   } catch (e) {
     console.error('[updater] Falha ao verificar via electron-updater, tentando fallback GitHub API:', e.message || e);
     logUpdaterError('check (electron-updater)', e);
+    _checkedViaGithub = true;
     try {
       const info = await checkGithubReleaseDirect();
       if (info.updateAvailable) sendToRenderer('updater:available', { version: info.version });
@@ -902,26 +922,72 @@ async function downloadInstallerWithRetry(url, destPath, onProgress) {
 }
 
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = false; // download é feito manualmente (ver acima) — autoUpdater só verifica
+  // autoDownload continua false — baixar só quando o operador clicar em
+  // "Baixar agora" (ver updater:download abaixo), não assim que encontrar
+  // uma versão nova. A diferença agora é COMO baixa: nativamente pelo
+  // electron-updater (sem diálogo de "salvar como", instala sozinho) sempre
+  // que a própria verificação também tiver sido feita por ele — só cai pro
+  // download manual (GitHub API + escolher onde salvar) quando o
+  // electron-updater não estava realmente ativo na verificação (dev, ou
+  // checkForUpdates falhou) — ver _checkedViaGithub em runUpdateCheck().
+  autoUpdater.autoDownload = false;
   autoUpdater.logger = null; // silencia logs internos do electron-updater
 
   autoUpdater.on('checking-for-update',  ()       => sendToRenderer('updater:checking'));
   autoUpdater.on('update-available',     (info)   => sendToRenderer('updater:available', info));
   autoUpdater.on('update-not-available', (info)   => sendToRenderer('updater:not-available', info));
+  // Progresso/conclusão do download NATIVO (autoUpdater.downloadUpdate(),
+  // ver updater:download abaixo) — reaproveita os mesmos canais que o
+  // download manual já usava, então UpdateDialog.vue não precisa saber qual
+  // dos dois mecanismos está em uso.
+  autoUpdater.on('download-progress', (prog) => sendToRenderer('updater:progress', {
+    percent: Math.round(prog.percent || 0),
+    transferred: prog.transferred,
+    total: prog.total,
+    bytesPerSecond: prog.bytesPerSecond,
+  }));
+  autoUpdater.on('update-downloaded', (info) => sendToRenderer('updater:downloaded', { version: info.version }));
   autoUpdater.on('error', (err) => {
     const msg = err?.message || String(err);
     console.error('[updater] Erro do autoUpdater:', msg);
     logUpdaterError('autoUpdater error event', err);
-    // Só loga aqui — quem decide o que reportar ao renderer é o catch de
-    // runUpdateCheck (que também recebe esse mesmo erro via rejeição da
+    // Durante a VERIFICAÇÃO, quem decide o que reportar ao renderer é o catch
+    // de runUpdateCheck (que também recebe esse mesmo erro via rejeição da
     // promise de checkForUpdates() e tenta o fallback do GitHub antes de
-    // reportar "sem atualização"). Enviar 'updater:not-available' aqui
-    // também correria com o resultado do fallback.
+    // reportar "sem atualização") — não duplica aqui. Só durante o DOWNLOAD
+    // nativo (updater:download abaixo) é que esse é o único aviso que existe
+    // — sem isso, "Baixando..." ficava travado pra sempre se ele falhasse no meio.
+    if (_downloadingNative) {
+      sendToRenderer('updater:error', msg);
+    }
   });
 
   ipcMain.handle('updater:check', () => runUpdateCheck());
 
   ipcMain.handle('updater:download', async () => {
+    // Verificação foi feita pelo electron-updater de verdade → baixa e
+    // instala nativamente (cache próprio do electron-updater, fora da pasta
+    // de instalação do app — não conflita com músicas/capas/banco de dados
+    // do usuário, ver comentário histórico sobre getWritableBase() acima).
+    // Sem diálogo de "salvar como": o instalador some assim que o processo
+    // termina, igual ao fluxo padrão de qualquer app atualizado por essa lib.
+    if (!_checkedViaGithub) {
+      _downloadingNative = true;
+      try {
+        await autoUpdater.downloadUpdate();
+        return { ok: true, native: true };
+      } catch (e) {
+        logUpdaterError('download (electron-updater nativo)', e);
+        sendToRenderer('updater:error', e.message);
+        return { ok: false, error: e.message };
+      } finally {
+        _downloadingNative = false;
+      }
+    }
+
+    // Fallback manual (dev, ou checkForUpdates() do electron-updater falhou
+    // na verificação) — mesmo fluxo de sempre: GitHub API direto + o
+    // operador escolhe onde salvar o instalador.
     try {
       const { asset, version } = await findLatestReleaseAsset();
 
@@ -938,13 +1004,20 @@ function setupAutoUpdater() {
       sendToRenderer('updater:downloaded', { version });
       return { ok: true, path: chosen.filePath };
     } catch (e) {
-      logUpdaterError('download', e);
+      logUpdaterError('download (manual)', e);
       sendToRenderer('updater:error', e.message);
       return { ok: false, error: e.message };
     }
   });
 
   ipcMain.handle('updater:install', () => {
+    // Download nativo: electron-updater fecha e reabre o app sozinho,
+    // substituindo os arquivos — não precisa abrir instalador nenhum.
+    if (!_checkedViaGithub) {
+      autoUpdater.quitAndInstall();
+      return;
+    }
+    // Download manual: abre o instalador baixado (NSIS), que assume o resto.
     if (!downloadedInstallerPath) return;
     shell.openPath(downloadedInstallerPath).then((err) => {
       if (err) {

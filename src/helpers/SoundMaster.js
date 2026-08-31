@@ -8,12 +8,26 @@ import $modules from "@/helpers/Modules";
 // pendente" em appdata — o componente observa essa chave com watch
 // {immediate:true}, o que cobre tanto o caso em que ele já está montado
 // quanto o caso em que $modules.open() acabou de montá-lo agora.
+// O SoundMaster não tem mais janela própria — sua UI foi unificada na aba
+// "SoundMaster" de video_player (módulo "Mídia", ver
+// video_player/interface/components/SoundMasterPanel.vue). Chamar apenas
+// $modules.open("soundmaster") só grava a flag em appdata (mantida por
+// compatibilidade com Footer.vue/Player.vue, que ainda leem
+// modules.soundmaster.minimized/now_playing), mas não abre nenhuma janela de
+// verdade — o SoundMasterPanel só existe montado dentro da janela "Mídia".
+// Por isso, abrir/maximizar o SoundMaster precisa necessariamente abrir o
+// módulo "video_player" (dono da janela real) já na aba certa.
+function openMediaWindow() {
+  $appdata.set("modules.video_player.active_tab", "soundmaster");
+  $modules.open("video_player");
+}
+
 export default {
-  // Abre o SoundMaster (se necessário) e manda tocar o arquivo no primeiro
-  // pad livre (ou reaproveita o pad que já tiver esse mesmo arquivo).
+  // Abre a janela "Mídia" (aba SoundMaster) e manda tocar o arquivo no
+  // primeiro pad livre (ou reaproveita o pad que já tiver esse mesmo arquivo).
   play(fp, name) {
     if (!fp) return;
-    $modules.open("soundmaster");
+    openMediaWindow();
     $appdata.set("modules.soundmaster.pending_play", {
       path: fp,
       name: name || fp.split(/[\\/]/).pop(),
@@ -35,7 +49,7 @@ export default {
   },
 
   maximize() {
-    $modules.open("soundmaster");
+    openMediaWindow();
   },
 
   // Comandos vindos de fora (ex.: barra do rodapé) — o componente observa

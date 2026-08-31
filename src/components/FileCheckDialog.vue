@@ -201,7 +201,6 @@
             <v-avatar color="success" variant="tonal" size="72" class="mb-4">
               <v-icon size="40">mdi-check-circle-outline</v-icon>
             </v-avatar>
-            <div class="text-h6 font-weight-bold mb-1">Tudo em ordem!</div>
             <div class="text-body-2 text-medium-emphasis mb-6">Todos os arquivos da coletânea estão presentes.</div>
             <div class="d-flex gap-6">
               <div class="text-center">
@@ -235,7 +234,7 @@
             <div class="d-flex align-center gap-4 mb-5">
               <v-progress-circular size="38" width="3" indeterminate color="primary" />
               <div class="flex-grow-1 min-w-0">
-                <div class="text-body-2 font-weight-semibold mb-1">Baixando arquivos...</div>
+                <div class="text-body-2 font-weight-semibold mb-2">Baixando arquivos...</div>
                 <div class="text-caption text-medium-emphasis text-truncate">{{ dlMessage }}</div>
               </div>
               <div class="text-right flex-shrink-0">

@@ -1,6 +1,7 @@
 const { ipcMain, dialog, shell, app, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const Store = require('./store');
 const sqliteReader = require('./sqlite-reader');
 
@@ -683,14 +684,14 @@ function setupIpc(mainWindow) {
     return path.basename(clean).trim();
   };
 
-  // Converte caminho absoluto para URL file:// com encoding de caracteres especiais
-  const toLocalFileUrl = (absPath) => {
-    return 'file:///' + absPath
-      .replace(/\\/g, '/')
-      .split('/')
-      .map(seg => encodeURIComponent(seg).replace(/%3A/g, ':')) // preserva C: em Windows
-      .join('/');
-  };
+  // Converte caminho absoluto para URL file:// com encoding de caracteres
+  // especiais. Usa o pathToFileURL nativo do Node em vez de montar a string
+  // na mão — a versão anterior prefixava 'file:///' incondicionalmente, o
+  // que só dá certo no Windows (caminho não começa com "/"); em macOS/Linux
+  // (caminho absoluto já começa com "/") o resultado ficava com 4 barras
+  // ("file:////home/...", inválido) em vez de 3. pathToFileURL trata os dois
+  // formatos corretamente.
+  const toLocalFileUrl = (absPath) => pathToFileURL(absPath).href;
 
   // Busca recursiva por nome de arquivo em uma árvore de diretórios.
   // Usado para musicas que ficam em subpastas com nomes do SQLite
@@ -1304,11 +1305,12 @@ function setupIpc(mainWindow) {
     return { count: files.length };
   });
 
-  // Converte path absoluto em file:// URL.
-  // encodeURI preserva ':', '/' e outros separadores, mas codifica espaços e caracteres especiais.
-  const toFileUrl = (absPath) => {
-    return 'file:///' + encodeURI(absPath.replace(/\\/g, '/'));
-  };
+  // Converte path absoluto em file:// URL — mesmo motivo de toLocalFileUrl
+  // acima (pathToFileURL nativo em vez de montar a string na mão, que dava
+  // "file:////..." com 4 barras em macOS/Linux). Vira o src de <audio> pra
+  // tocar música local (ver src/helpers/Media.js), então um path errado
+  // aqui silenciosamente não tocava nada em vez de dar erro óbvio.
+  const toFileUrl = (absPath) => pathToFileURL(absPath).href;
 
   ipcMain.handle('media:resolve-file', (_, filename) => {
     if (!filename) return null;
@@ -2340,6 +2342,18 @@ document.getElementById('f').onsubmit=async(e)=>{
           const audioIndex = buildDirIndex([userMedia, getAutoMediaDir(null, true), getAutoMediaDir()]);
           const coverIndex = buildDirIndex([getAutoCapasDir(), getAutoCapasDir(true)]);
           const imageIndex = buildDirIndex([getAutoImagesDir(), getAutoImagesDir(true)]);
+          // Índice por nome (case-insensitive) do install/writable root, igual aos
+          // três acima — a checagem por caminho exato logo abaixo
+          // (fs.existsSync(path.join(installRoot, urlNorm))) compara contra o
+          // "URL" gravado no ARQUIVOS_SISTEMA do Delphi SEM normalizar
+          // maiúsculas/minúsculas, ao contrário de todo o resto desta função. Em
+          // Windows/macOS (filesystem case-insensitive) isso nunca dava
+          // problema; em Linux, uma diferença de caixa entre o nome gravado
+          // pelo app Delphi original e o nome real no disco fazia um arquivo
+          // que EXISTE ser reportado como "faltando" (e baixado de novo,
+          // duplicado, numa pasta diferente).
+          const installRootIndex  = installRoot  ? buildDirIndex([installRoot])  : null;
+          const writableRootIndex = writableRoot ? buildDirIndex([writableRoot]) : null;
 
           const getGroup = (key, name) => {
             if (!albumMap.has(key)) albumMap.set(key, { name, totalFiles: 0, foundFiles: 0, items: [] });
@@ -2381,8 +2395,8 @@ document.getElementById('f').onsubmit=async(e)=>{
             let exists = false;
             const fileName = row.ARQUIVO || path.basename(urlNorm);
             const fileNameLower = fileName.toLowerCase();
-            if (installRoot)  exists = fs.existsSync(path.join(installRoot, urlNorm));
-            if (!exists)      exists = fs.existsSync(path.join(writableRoot, urlNorm));
+            if (installRoot)  exists = fs.existsSync(path.join(installRoot, urlNorm)) || installRootIndex.has(fileNameLower);
+            if (!exists)      exists = fs.existsSync(path.join(writableRoot, urlNorm)) || (writableRootIndex?.has(fileNameLower) ?? false);
             if (!exists && type === 'audio')  exists = audioIndex.has(fileNameLower);
             if (!exists && type === 'cover')  exists = coverIndex.has(fileNameLower);
             if (!exists && type === 'image')  exists = imageIndex.has(fileNameLower);
