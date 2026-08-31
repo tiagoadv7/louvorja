@@ -366,16 +366,22 @@ export default {
       const tr = this.$appdata.get(`modules.${this.module_id}.manifest`)?.translations?.[locale];
       return tr?.[text] ?? text;
     },
+    // Mesmo fade suave do botão "Parar" (stopAll), mas aguardando o fade
+    // terminar antes de devolver — usado tanto por close() (fecha de vez)
+    // quanto por onMinimize() de video_player/interface/Index.vue (minimizar
+    // agora também encerra a reprodução, em vez de deixar tocando escondido).
+    async stopSmooth() {
+      const hasAudio = this._mainAudio || this.activeFxIds.size > 0;
+      if (hasAudio && this.fadeOutMs > 0) {
+        this.stopAll();
+        await new Promise(r => setTimeout(r, this.fadeOutMs + 60));
+      }
+    },
     // Chamado pelo close() de video_player/interface/Index.vue (via ref) ao
     // fechar a janela "Mídia" — faz o fade suave do áudio antes de encerrar o
     // módulo soundmaster de verdade, em vez de cortar tudo abruptamente.
     async close() {
-      const hasAudio = this._mainAudio || this.activeFxIds.size > 0;
-      if (hasAudio && this.fadeOutMs > 0) {
-        this.stopMain(true);
-        [...this.activeFxIds].forEach(id => this.stopFx(id, true));
-        await new Promise(r => setTimeout(r, this.fadeOutMs + 60));
-      }
+      await this.stopSmooth();
       this.$modules.close(this.module_id);
     },
     formatTime(s)  { return fmt(s); },
