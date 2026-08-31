@@ -405,11 +405,15 @@ export default {
     // vídeo/overlay, que projetam numa janela de saída separada) — fechar a
     // janela achando que o fade ainda ia rolar "por baixo" cortava o som na
     // hora em vez de baixar suave. Por isso o await do fade do SoundMaster
-    // vem PRIMEIRO, antes de fechar qualquer coisa (inclusive o próprio
-    // vídeo) — ver components/SoundMasterPanel.vue#close.
+    // vem antes de fechar o módulo — mas $videoPlayer.stop() dispara e
+    // retorna na hora (não bloqueia), e por isso vem ANTES desse await: com
+    // vídeo e SoundMaster tocando ao mesmo tempo, chamar stop() só depois do
+    // await do SoundMaster atrasava o início do fade do vídeo em até
+    // fadeOutMs (~2.5s) — os dois precisam começar a parar juntos, em
+    // paralelo — ver components/SoundMasterPanel.vue#close.
     async close() {
-      await this.$refs.soundMasterPanel?.close();
       this.$videoPlayer.stop();
+      await this.$refs.soundMasterPanel?.close();
       this.$modules.close(this.module_id);
       this.$modules.close('image_overlay');
     },
@@ -499,8 +503,15 @@ export default {
     // (é só uma imagem estática, não tem "reprodução" pra encerrar) — ver
     // isActive em image_overlay/interface/Popup.vue.
     async onMinimize() {
-      await this.$refs.soundMasterPanel?.stopSmooth();
+      // $videoPlayer.stop() dispara o fade do vídeo (~1.1s) e retorna na
+      // hora — chamar ANTES do await do SoundMaster (que pode levar até
+      // fadeOutMs, ~2.5s) garante que os dois fades rodem em paralelo. Na
+      // ordem antiga (SoundMaster primeiro), o vídeo só começava a parar
+      // DEPOIS do fade do SoundMaster terminar — com os dois tocando ao
+      // mesmo tempo, o vídeo parecia "não parar nunca" por ficar tocando
+      // normalmente durante todo aquele tempo de espera.
       this.$videoPlayer.stop();
+      await this.$refs.soundMasterPanel?.stopSmooth();
       this.$modules.minimize(this.module_id);
       this.$modules.minimize('image_overlay');
       this.$modules.minimize('soundmaster');
