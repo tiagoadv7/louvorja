@@ -1,6 +1,6 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || cronometroModuleActive || stopwatchModuleActive || videoPlayerActive }">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || timersModuleActive || videoPlayerActive }">
       <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
            junto com uma música realmente ativa; some com fade quando ela
            termina. -->
@@ -64,17 +64,14 @@
         </div>
       </transition>
 
-      <!-- Idem para o Cronômetro de Culto. -->
+      <!-- Idem para o módulo Cronômetros — Culto ou Avulso, conforme a aba
+           selecionada no painel do operador (ver
+           modules/cronometro_culto/interface/Index.vue#activeTab e
+           Popup.vue, mesmo mecanismo). -->
       <transition name="rs-fade">
-        <div v-if="cronometroModuleActive" class="rs-module-mirror">
-          <CronometroScreen />
-        </div>
-      </transition>
-
-      <!-- Idem para o Cronômetro (avulso/manual). -->
-      <transition name="rs-fade">
-        <div v-if="stopwatchModuleActive" class="rs-module-mirror">
-          <StopwatchScreen />
+        <div v-if="timersModuleActive" class="rs-module-mirror">
+          <StopwatchScreen v-if="timersActiveTab === 'avulso'" />
+          <CronometroScreen v-else />
         </div>
       </transition>
 
@@ -96,7 +93,7 @@
 <script>
 import ClockScreen from '@/modules/clock/components/Screen.vue';
 import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
-import StopwatchScreen from '@/modules/stopwatch/components/Screen.vue';
+import StopwatchScreen from '@/modules/cronometro_culto/components/StopwatchScreen.vue';
 import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
 
 const isElectron = () =>
@@ -141,13 +138,14 @@ export default {
       if (this.returnPopupModule) return this.returnPopupModule === 'clock';
       return this.popupModule === 'clock';
     },
-    cronometroModuleActive() {
+    timersModuleActive() {
       if (this.returnPopupModule) return this.returnPopupModule === 'cronometro_culto';
       return this.popupModule === 'cronometro_culto';
     },
-    stopwatchModuleActive() {
-      if (this.returnPopupModule) return this.returnPopupModule === 'stopwatch';
-      return this.popupModule === 'stopwatch';
+    // Qual aba do módulo mesclado mostrar no espelho — mesma leitura que
+    // Popup.vue faz de modules.cronometro_culto.active_tab.
+    timersActiveTab() {
+      return this.$appdata.get('modules.cronometro_culto.active_tab') || 'culto';
     },
     videoPlayerActive() {
       if (this.returnPopupModule) return this.returnPopupModule === 'video_player';

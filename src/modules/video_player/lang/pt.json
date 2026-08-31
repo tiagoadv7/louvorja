@@ -1,4 +1,7 @@
 {
-  "title": "Vídeo",
-  "description": "Reprodutor de vídeo para a tela de projeção, com fade de áudio e imagem"
+  "title": "Mídia",
+  "description": "Reprodutor de vídeo/imagem para a projeção (com fade de áudio), overlay de imagem e mesa de som SoundMaster, em abas separadas na mesma janela.",
+  "tab_video": "Vídeo",
+  "tab_overlay": "Overlay",
+  "tab_soundmaster": "SoundMaster"
 }

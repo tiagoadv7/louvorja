@@ -156,15 +156,18 @@ export default {
     isActive() {
       return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
+    // Aba "Avulso" do módulo mesclado (ver cronometro_culto/interface/Index.vue)
+    // — namespace próprio (modules.cronometro_culto.sw_*), sem colisão com os
+    // campos da aba "Culto" (modules.cronometro_culto.*, sem prefixo).
     userdata() {
       return new Proxy(
         {},
         {
           get: (_, key) => {
-            return this.$userdata.get(`modules.${this.module.id}.${key}`, null);
+            return this.$userdata.get(`modules.${this.module.id}.sw_${key}`, null);
           },
           set: (_, key, value) => {
-            this.$userdata.set(`modules.${this.module.id}.${key}`, value);
+            this.$userdata.set(`modules.${this.module.id}.sw_${key}`, value);
             return true;
           },
         },
@@ -175,10 +178,10 @@ export default {
         {},
         {
           get: (_, key) => {
-            return this.$appdata.get(`modules.${this.module.id}.${key}`, null);
+            return this.$appdata.get(`modules.${this.module.id}.sw_${key}`, null);
           },
           set: (_, key, value) => {
-            this.$appdata.set(`modules.${this.module.id}.${key}`, value);
+            this.$appdata.set(`modules.${this.module.id}.sw_${key}`, value);
             return true;
           },
         },
@@ -279,8 +282,8 @@ export default {
     },
 
     // Modo regressivo — mesmos campos do Cronômetro de Culto (ver
-    // cronometro_culto/components/Screen.vue), só que sob o namespace deste
-    // módulo (modules.stopwatch.*), sem colisão entre os dois.
+    // cronometro_culto/components/Screen.vue), só que sob o namespace desta
+    // aba (modules.cronometro_culto.sw_*), sem colisão entre as duas.
     targetEndAt() {
       const value = this.appdata.target_end_at;
       if (!value) return null;

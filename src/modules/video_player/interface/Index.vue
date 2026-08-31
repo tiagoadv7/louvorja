@@ -4,8 +4,8 @@
     :title="t('title')"
     :icon="module.icon"
     :index="module.show ? 1 : 0"
-    width="700"
-    height="720"
+    width="900"
+    height="780"
     closable
     minimizable
     compact
@@ -17,7 +17,41 @@
       <LReturnScreenBtn module="video_player" />
     </template>
 
-    <div class="vp-root">
+    <!-- Abas: Vídeo (substitui a projeção, como sempre), Overlay de Imagem
+         (fica por cima de QUALQUER coisa projetada, sem substituir nada — ver
+         views/Popup.vue#ImageOverlayPopup, montado incondicionalmente ali,
+         fora deste módulo) e SoundMaster (mesa de som, sem projeção nenhuma).
+         São três módulos independentes por baixo (ver watch/close/onMinimize
+         abaixo, que sincronizam abrir/fechar/minimizar dos três juntos) — só
+         a tela de edição foi unificada numa janela só. -->
+    <template v-slot:header>
+      <v-tabs v-model="activeTab" density="compact">
+        <v-tab value="video">
+          <v-icon start size="15">mdi-movie-open-outline</v-icon>
+          {{ t("tab_video") }}
+        </v-tab>
+        <v-tab value="overlay">
+          <v-icon start size="15">mdi-image-multiple-outline</v-icon>
+          {{ t("tab_overlay") }}
+        </v-tab>
+        <v-tab value="soundmaster">
+          <v-icon start size="15">mdi-tune-vertical</v-icon>
+          {{ t("tab_soundmaster") }}
+        </v-tab>
+      </v-tabs>
+    </template>
+
+    <template v-slot:customize>
+      <l-customization-tools
+        v-if="activeTab === 'overlay'"
+        :module="overlayModule"
+        :items="[
+          { name: to('customization.adjust'), items: [['image_opacity', 'image_fit']] },
+        ]"
+      />
+    </template>
+
+    <div class="vp-root" v-show="activeTab === 'video'">
 
       <!-- ── Procurar vídeos/imagens ──────────────────────────────────────── -->
       <button class="vp-search-btn" @click="pickVideos">
@@ -152,6 +186,63 @@
         <span class="vp-image-hint">Imagem exibida na tela de projeção</span>
       </div>
     </div>
+
+    <!-- ═══════════════ Aba "Overlay de Imagem" ═══════════════════════════
+         Ported de image_overlay/interface/Index.vue (agora um stub vazio —
+         ver aquele arquivo) — mesmo comportamento de arrastar/redimensionar,
+         só que gravando em modules.image_overlay.* via overlayUserdata, não
+         em modules.video_player.*, pra manter os dois com dados totalmente
+         independentes. -->
+    <div class="io-root" v-show="activeTab === 'overlay'">
+      <div ref="ioFrame" class="io-preview-frame">
+        <template v-if="overlayUserdata.image">
+          <div
+            class="io-box"
+            :style="overlayBoxStyle"
+            @pointerdown="startOverlayDrag"
+          >
+            <img :src="overlayUserdata.image" :style="overlayImageStyle" draggable="false" />
+            <span
+              v-for="h in OVERLAY_HANDLES"
+              :key="h"
+              class="io-handle"
+              :class="'io-handle--' + h"
+              @pointerdown.stop="startOverlayResize(h, $event)"
+            />
+          </div>
+        </template>
+        <button v-else class="io-empty" @click="importOverlayImage">
+          <v-icon size="28">mdi-image-plus-outline</v-icon>
+          <span>{{ to('labels.no_image') }}</span>
+        </button>
+      </div>
+
+      <div class="io-toolbar">
+        <button class="se-btn-outline" :disabled="importingOverlay" @click="importOverlayImage">
+          <v-icon size="16">mdi-folder-image</v-icon> {{ to('actions.import_image') }}
+        </button>
+        <button class="se-btn-outline" :disabled="!overlayUserdata.image" @click="removeOverlayImage">
+          <v-icon size="16">mdi-image-remove-outline</v-icon> {{ to('actions.remove_image') }}
+        </button>
+        <button class="se-btn-outline" :disabled="!overlayUserdata.image" @click="resetOverlayPosition">
+          <v-icon size="16">mdi-crop-free</v-icon> {{ to('actions.reset_position') }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══════════════ Aba "SoundMaster" ══════════════════════════════════
+         Componente próprio (não flattenado aqui como a aba Overlay) — o
+         SoundMaster tem estado/métodos demais com nomes que colidiriam com
+         os de video_player (module_id, module, t, close, togglePlay,
+         toggleTalkover, _focusHandler...), então um componente filho isola
+         tudo automaticamente, sem precisar renomear nada dele. Continua
+         sendo o módulo independente "soundmaster" por baixo (ver
+         components/SoundMasterPanel.vue). -->
+    <SoundMasterPanel
+      v-show="activeTab === 'soundmaster'"
+      ref="soundMasterPanel"
+      :active="activeTab === 'soundmaster'"
+    />
   </Window>
 </template>
 
@@ -160,16 +251,34 @@ import manifest from '../manifest.json';
 import Window from '@/components/Window.vue';
 import LScreenBtn from '@/components/buttons/Screen.vue';
 import LReturnScreenBtn from '@/components/buttons/ReturnScreen.vue';
+import LCustomizationTools from '@/components/CustomizationTools.vue';
+import SoundMasterPanel from '../components/SoundMasterPanel.vue';
 import $audioBus from '@/helpers/AudioBus';
+
+// Posição/tamanho padrão da aba "Overlay de Imagem" — mesmos valores de
+// image_overlay/interface/Index.vue (agora um stub; a UI de verdade vive
+// aqui, ver seção "Overlay de Imagem" abaixo).
+const OVERLAY_DEFAULT_POS = { pos_x: 25, pos_y: 25, pos_w: 50, pos_h: 50 };
+const OVERLAY_MIN_SIZE = 5;
+const OVERLAY_HANDLES = ["nw", "ne", "sw", "se"];
+const OVERLAY_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+const OVERLAY_STORAGE_DIR = "image_overlay";
 
 export default {
   name: 'VideoPlayerModule',
-  components: { Window, LScreenBtn, LReturnScreenBtn },
+  components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel },
 
   data: () => ({
+    activeTab: 'video',
+
     pipOpen: false,
     _pipHandlers: [],
     _focusHandler: null,
+
+    // ── Aba "Overlay de Imagem" (módulo independente image_overlay) ────────
+    OVERLAY_HANDLES,
+    overlayDrag: null,
+    importingOverlay: false,
   }),
 
   computed: {
@@ -188,6 +297,57 @@ export default {
       const rotation = this.config.rotation || 0;
       const flipScale = this.config.flip ? -1 : 1;
       return { transform: `rotate(${rotation}deg) scaleX(${flipScale})` };
+    },
+
+    // "Mídia" (video_player) e "Overlay de Imagem" (image_overlay) continuam
+    // sendo dois módulos registrados de verdade, cada um com seu próprio
+    // userdata/isActive/Popup.vue (o overlay é montado incondicionalmente em
+    // views/Popup.vue, fora do popup_module — ver comentário lá) — só a tela
+    // de edição foi unificada nesta janela. overlayModule é o que alimenta
+    // l-customization-tools da aba Overlay (precisa do .id certo pra montar
+    // o caminho modules.image_overlay.* em vez de modules.video_player.*).
+    overlayModule() { return this.$modules.get('image_overlay') || {}; },
+
+    overlayUserdata() {
+      return new Proxy(
+        {},
+        {
+          get: (_, key) => this.$userdata.get(`modules.image_overlay.${key}`, OVERLAY_DEFAULT_POS[key] ?? null),
+          set: (_, key, value) => {
+            this.$userdata.set(`modules.image_overlay.${key}`, value);
+            return true;
+          },
+        }
+      );
+    },
+    overlayBoxStyle() {
+      return {
+        left: `${this.overlayUserdata.pos_x}%`,
+        top: `${this.overlayUserdata.pos_y}%`,
+        width: `${this.overlayUserdata.pos_w}%`,
+        height: `${this.overlayUserdata.pos_h}%`,
+      };
+    },
+    overlayImageStyle() {
+      return {
+        objectFit: this.overlayUserdata.image_fit || "contain",
+        opacity: (this.overlayUserdata.image_opacity ?? 100) / 100,
+      };
+    },
+  },
+
+  watch: {
+    // Abrir a janela "Mídia" (tile clicado, ou reabertura pela bandeja) abre
+    // o Overlay de Imagem junto — o inverso do close()/onMinimize() acima.
+    // Só cobre o lado "abriu" (show virou true): fechar/minimizar de verdade
+    // são ações explícitas (botão X / minimizar), tratadas nos métodos acima,
+    // porque "show" também fica false ao minimizar e este watch não teria
+    // como distinguir os dois casos aqui.
+    'module.show'(val) {
+      if (val) {
+        this.$modules.open('image_overlay');
+        this.$modules.open('soundmaster');
+      }
     },
   },
 
@@ -208,12 +368,36 @@ export default {
       }
       return result;
     },
+    // Mesmo esquema do t() acima, fixo em "image_overlay" — os textos da aba
+    // Overlay vivem no namespace de tradução daquele módulo (ele continua
+    // registrado normalmente, só sem tela própria — ver seu manifest/Index.vue).
+    to(text) {
+      const key = `modules.image_overlay.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const stored = this.$appdata.get('modules.image_overlay.manifest');
+        const tr = stored?.translations?.[locale] || stored?.translations?.['pt'];
+        if (tr) {
+          const val = text.split('.').reduce((o, k) => o?.[k], tr);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
+    },
     // Fechar (diferente de minimizar, ver onMinimize) encerra a projeção
     // também — reaproveita o mesmo fade suave do botão "Parar" (stop()),
     // em vez de só esconder o painel e deixar o vídeo tocando escondido.
-    close() {
+    // Fecha também o Overlay de Imagem e o SoundMaster junto (mesma janela
+    // agora, ver watch/module.show acima pro sentido inverso, abrir). O
+    // SoundMaster fecha via ref (não $modules.close direto) porque seu
+    // close() próprio faz um fade suave do áudio antes de encerrar de
+    // verdade — ver components/SoundMasterPanel.vue#close.
+    async close() {
       this.$videoPlayer.stop();
       this.$modules.close(this.module_id);
+      this.$modules.close('image_overlay');
+      await this.$refs.soundMasterPanel?.close();
     },
 
     fmt(s) {
@@ -295,8 +479,144 @@ export default {
     // rodapé (ver Footer.vue/videoActive). O mini player flutuante (PIP) é
     // sempre uma ação manual e separada (botão dedicado) — nunca some/aparece
     // sozinho junto do minimizar, pra não nascer sem o operador ter pedido.
+    // Minimiza o Overlay de Imagem e o SoundMaster junto — mesma janela
+    // agora. Minimizado (ao contrário de fechado) mantém o overlay ativo na
+    // saída mesmo com o painel escondido (ver isActive em image_overlay/
+    // interface/Popup.vue), e mantém `modules.soundmaster.minimized=true`
+    // pra barra do rodapé continuar mostrando o mini-player enquanto toca
+    // (ver Footer.vue#soundmasterActive, que depende exatamente dessa flag).
     onMinimize() {
       this.$modules.minimize(this.module_id);
+      this.$modules.minimize('image_overlay');
+      this.$modules.minimize('soundmaster');
+    },
+
+    // ═══════════════ Aba "Overlay de Imagem" ═══════════════════════════════
+    // Importa uma imagem: copia o arquivo escolhido pra userData/image_overlay/
+    // em vez de só referenciar o caminho original, pra continuar funcionando
+    // mesmo se o arquivo for movido/renomeado/apagado depois de escolhido.
+    async importOverlayImage() {
+      if (!this.$electron || this.importingOverlay) return;
+      this.importingOverlay = true;
+      try {
+        const srcPath = await this.$electron.selectFile({
+          title: this.to('actions.import_image'),
+          filters: [{ name: 'Imagens', extensions: OVERLAY_IMAGE_EXTENSIONS }],
+        });
+        if (!srcPath) return;
+
+        const data = await this.$electron.readFile(srcPath, null);
+        if (!data) return;
+
+        const userDataDir = await this.$electron.getPath('userData');
+        const ext = (/\.([a-zA-Z0-9]+)$/.exec(srcPath) || [null, 'png'])[1].toLowerCase();
+        const destPath = `${userDataDir}/${OVERLAY_STORAGE_DIR}/${crypto.randomUUID()}.${ext}`.replace(/\\/g, '/');
+        await this.$electron.writeFile(destPath, data, null);
+
+        const prevPath = this.overlayUserdata.image_file_path;
+        if (prevPath) await this.$electron.deleteFile(prevPath);
+
+        this.overlayUserdata.image_file_path = destPath;
+        this.overlayUserdata.image = this._overlayToFileUrl(destPath);
+      } finally {
+        this.importingOverlay = false;
+      }
+    },
+
+    async removeOverlayImage() {
+      const prevPath = this.overlayUserdata.image_file_path;
+      if (prevPath) await this.$electron.deleteFile(prevPath);
+      this.overlayUserdata.image_file_path = '';
+      this.overlayUserdata.image = '';
+    },
+
+    _overlayToFileUrl(absPath) {
+      return (
+        'file:///' +
+        absPath
+          .replace(/\\/g, '/')
+          .split('/')
+          .map((seg) => encodeURIComponent(seg).replace(/%3A/g, ':'))
+          .join('/')
+      );
+    },
+
+    resetOverlayPosition() {
+      this.overlayUserdata.pos_x = OVERLAY_DEFAULT_POS.pos_x;
+      this.overlayUserdata.pos_y = OVERLAY_DEFAULT_POS.pos_y;
+      this.overlayUserdata.pos_w = OVERLAY_DEFAULT_POS.pos_w;
+      this.overlayUserdata.pos_h = OVERLAY_DEFAULT_POS.pos_h;
+    },
+
+    // Arrastar/redimensionar — mesma implementação de Pointer Events de
+    // image_overlay/interface/Index.vue (agora um stub), sobre o ref local
+    // "ioFrame" desta janela.
+    startOverlayDrag(e) {
+      if (e.target.closest('.io-handle')) return;
+      const frameRect = this.$refs.ioFrame.getBoundingClientRect();
+      this.overlayDrag = {
+        mode: 'move',
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startPos: { x: this.overlayUserdata.pos_x, y: this.overlayUserdata.pos_y, w: this.overlayUserdata.pos_w, h: this.overlayUserdata.pos_h },
+        frameRect,
+      };
+      this._bindOverlayDragListeners(e);
+    },
+    startOverlayResize(handle, e) {
+      const frameRect = this.$refs.ioFrame.getBoundingClientRect();
+      this.overlayDrag = {
+        mode: 'resize',
+        handle,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startPos: { x: this.overlayUserdata.pos_x, y: this.overlayUserdata.pos_y, w: this.overlayUserdata.pos_w, h: this.overlayUserdata.pos_h },
+        frameRect,
+      };
+      this._bindOverlayDragListeners(e);
+    },
+    _bindOverlayDragListeners(e) {
+      e.preventDefault();
+      window.addEventListener('pointermove', this._onOverlayPointerMove);
+      window.addEventListener('pointerup', this._onOverlayPointerUp, { once: true });
+    },
+    _onOverlayPointerMove(e) {
+      if (!this.overlayDrag) return;
+      const { frameRect, startClientX, startClientY, startPos } = this.overlayDrag;
+      const dxPct = ((e.clientX - startClientX) / frameRect.width) * 100;
+      const dyPct = ((e.clientY - startClientY) / frameRect.height) * 100;
+
+      if (this.overlayDrag.mode === 'move') {
+        this.overlayUserdata.pos_x = this._overlayClamp(startPos.x + dxPct, 0, 100 - startPos.w);
+        this.overlayUserdata.pos_y = this._overlayClamp(startPos.y + dyPct, 0, 100 - startPos.h);
+        return;
+      }
+
+      let { x, y, w, h } = startPos;
+      const handle = this.overlayDrag.handle;
+      if (handle.includes('e')) w = this._overlayClamp(startPos.w + dxPct, OVERLAY_MIN_SIZE, 100 - startPos.x);
+      if (handle.includes('s')) h = this._overlayClamp(startPos.h + dyPct, OVERLAY_MIN_SIZE, 100 - startPos.y);
+      if (handle.includes('w')) {
+        const newX = this._overlayClamp(startPos.x + dxPct, 0, startPos.x + startPos.w - OVERLAY_MIN_SIZE);
+        w = startPos.w + (startPos.x - newX);
+        x = newX;
+      }
+      if (handle.includes('n')) {
+        const newY = this._overlayClamp(startPos.y + dyPct, 0, startPos.y + startPos.h - OVERLAY_MIN_SIZE);
+        h = startPos.h + (startPos.y - newY);
+        y = newY;
+      }
+      this.overlayUserdata.pos_x = x;
+      this.overlayUserdata.pos_y = y;
+      this.overlayUserdata.pos_w = w;
+      this.overlayUserdata.pos_h = h;
+    },
+    _onOverlayPointerUp() {
+      this.overlayDrag = null;
+      window.removeEventListener('pointermove', this._onOverlayPointerMove);
+    },
+    _overlayClamp(v, min, max) {
+      return Math.min(Math.max(v, min), Math.max(min, max));
     },
   },
 
@@ -334,6 +654,7 @@ export default {
   },
 
   beforeUnmount() {
+    window.removeEventListener('pointermove', this._onOverlayPointerMove);
     this._pipHandlers.forEach(([channel, handler]) => this.$electron.off(channel, handler));
     $audioBus.unlisten(this._focusHandler);
   },
@@ -593,4 +914,95 @@ export default {
   white-space: nowrap;
 }
 .vp-repeat-btn--on { background: #43a047; color: #fff; }
+
+/* ── Aba "Overlay de Imagem" (ver image_overlay/interface/Index.vue, stub) ── */
+.io-root {
+  padding: 16px 20px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.io-preview-frame {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 220px;
+  border-radius: 8px;
+  background:
+    repeating-conic-gradient(rgba(128, 128, 128, 0.18) 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  overflow: hidden;
+  user-select: none;
+}
+.io-box {
+  position: absolute;
+  cursor: move;
+  outline: 1px dashed rgba(var(--v-theme-primary), 0.9);
+}
+.io-box img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.io-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgb(var(--v-theme-primary));
+  border: 2px solid #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.io-handle--nw { top: 0; left: 0; cursor: nwse-resize; }
+.io-handle--ne { top: 0; left: 100%; cursor: nesw-resize; }
+.io-handle--sw { top: 100%; left: 0; cursor: nesw-resize; }
+.io-handle--se { top: 100%; left: 100%; cursor: nwse-resize; }
+.io-empty {
+  margin: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  font-size: 12.5px;
+  opacity: 0.6;
+  max-width: 280px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.io-empty:hover {
+  opacity: 0.85;
+}
+.io-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.se-btn-outline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  transition: background 0.15s;
+  padding: 8px 14px;
+}
+.se-btn-outline:hover:not(:disabled) {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.se-btn-outline:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 </style>

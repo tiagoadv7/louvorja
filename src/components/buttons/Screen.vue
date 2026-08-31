@@ -32,7 +32,7 @@
 // está sendo exibido (ex.: uma música) só por um clique sem querer. Vídeo
 // fica de fora mesmo compartilhando a categoria "utilities" no manifest,
 // porque é conteúdo trocado com frequência durante o culto.
-const CONFIRM_BEFORE_REPLACE = ["bible", "clock", "stopwatch", "sorteio", "cronometro_culto"];
+const CONFIRM_BEFORE_REPLACE = ["bible", "clock", "sorteio", "cronometro_culto"];
 
 export default {
   name: "ButtonScreenComponent",

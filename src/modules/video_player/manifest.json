@@ -1,8 +1,8 @@
 {
   "id": "video_player",
-  "name": "Vídeo",
-  "description": "Reprodutor de vídeo para a tela de projeção, com fade de áudio e imagem",
+  "name": "Mídia",
+  "description": "Reprodutor de vídeo/imagem para a projeção (com fade de áudio), overlay de imagem e mesa de som SoundMaster, em abas separadas na mesma janela.",
   "category": "utilities",
-  "icon": "mdi-movie-open-outline",
+  "icon": "mdi-filmstrip",
   "showInMainMenu": false
 }

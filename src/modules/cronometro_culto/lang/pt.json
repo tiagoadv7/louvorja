@@ -1,11 +1,13 @@
 {
-    "title": "Cronômetro de Culto",
+    "title": "Cronômetros",
+    "tab_culto": "Culto",
+    "tab_avulso": "Avulso",
+
     "on": "Ligar",
     "off": "Desligar",
     "end_time": "Hora Término",
     "duration": "Duração (min.)",
     "end_time_label": "Horário término",
-    "add_subtract_time": "Adicionar/Subtrair Tempo",
     "audio_group": "Áudio Escola Sabatina",
     "audio_opening": "Abertura",
     "audio_5min": "5 minutos",
@@ -13,12 +15,28 @@
     "listen": "Ouvir",
     "stop_listening": "Parar",
     "options": "Opções",
-    "auto_stop_at_zero": "Desligar ao zerar tempo",
     "show_clock": "Mostrar Relógio",
     "hide_clock": "Ocultar Relógio",
     "format": "Formato",
     "hour_format": "Hora",
     "time_format": "Tempo",
+
+    "start": "Iniciar",
+    "pause": "Pausar",
+    "reset": "Reiniciar",
+    "save": "Salvar",
+    "saved_times": "Tempos Salvos",
+    "clear_all": "Limpar Todos",
+    "mode_normal": "Normal",
+    "mode_countdown": "Regressivo",
+    "duration_minutes": "Duração (min.)",
+    "duration_seconds": "Duração (seg.)",
+    "add_subtract_time": "Adicionar/Subtrair Tempo",
+    "auto_stop_at_zero": "Desligar ao zerar tempo",
+    "end_message": "Mensagem ao zerar",
+    "end_message_placeholder": "Tempo Acabou!",
+    "end_message_duration": "Duração da mensagem (seg., 0 = sempre)",
+
     "customization": {
         "background": "Fundo",
         "color": "Cor",
@@ -28,10 +46,12 @@
         "align": "Alinhamento",
         "font": "Fonte",
         "text": "Texto",
+        "alert": "Alerta",
         "window": "Janela",
         "vertical": "Vertical",
         "horizontal": "Horizontal",
         "border": "Borda",
-        "size": "Tamanho"
+        "size": "Tamanho",
+        "time_format": "Formato"
     }
 }

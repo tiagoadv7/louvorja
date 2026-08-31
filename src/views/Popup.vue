@@ -25,6 +25,16 @@
           <component :is="moduleComponent" style="width: 100%; height: 100%;" />
         </div>
       </transition>
+
+      <!-- Overlay de imagem (logo/aviso) — montado incondicionalmente, ao
+           contrário do <component :is="moduleComponent"> acima, que só exibe
+           UM módulo por vez (o popup_module selecionado). O overlay não é
+           selecionável como popup_module (sem LScreenBtn no seu Index.vue) —
+           ele se sobrepõe ao que estiver sendo projetado sem substituir nada,
+           igual ao overlay do FreeShow. A própria visibilidade dele já é
+           controlada internamente por modules.image_overlay.show/minimized
+           (ver isActive em image_overlay/interface/Popup.vue). -->
+      <ImageOverlayPopup />
     </div>
   </transition>
 </template>
@@ -32,6 +42,7 @@
 <script>
 import { defineAsyncComponent } from "vue";
 import WebLinkFrame from "@/components/WebLinkFrame.vue";
+import ImageOverlayPopup from "@/modules/image_overlay/interface/Popup.vue";
 
 const isElectron = () =>
   typeof window !== "undefined" &&
@@ -42,6 +53,9 @@ const FADE_MS = 400;
 
 export default {
   name: "PopupPage",
+  components: {
+    ImageOverlayPopup,
+  },
   data: () => ({
     module: null,
     visible: false,
