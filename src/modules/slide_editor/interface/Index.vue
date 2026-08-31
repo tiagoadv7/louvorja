@@ -164,7 +164,7 @@
         hidden
         @play="onAudioPlay"
         @pause="audioPlaying = false"
-        @ended="audioPlaying = false"
+        @ended="onAudioEnded"
         @timeupdate="onAudioTime"
         @loadedmetadata="onAudioLoad"
       />
@@ -307,6 +307,7 @@ import LSlide from "@/components/Slide.vue";
 import CustomSongs from "@/helpers/CustomSongs";
 import SljaConverter from "@/helpers/SljaConverter";
 import ImageConvert from "@/helpers/ImageConvert";
+import CustomSongsPlayback from "@/helpers/CustomSongsPlayback";
 
 export default {
   name: "SlideEditorModule",
@@ -439,7 +440,11 @@ export default {
     close() {
       // Fechar só o painel do operador — igual aos outros módulos (ex.:
       // cronômetro), a projeção continua até o operador clicar de novo no
-      // botão de tela pra encerrá-la explicitamente.
+      // botão de tela pra encerrá-la explicitamente. O áudio, porém, é
+      // encerrado suavemente aqui (fade, mesmo padrão do resto do sistema —
+      // ver Media.js#stopAudio): sem isso, fechar o painel deixava a música
+      // tocando escondida pra sempre, sem nenhum controle visível pra pará-la.
+      this.stopAudioSmooth();
       this.$modules.close(this.module_id);
     },
     /* METHODS OBRIGATÓRIAS - FIM */
@@ -511,7 +516,30 @@ export default {
       const names = this.slides.map((s) => s.imagem).filter(Boolean);
       for (const name of names) await this.ensureImageResolved(name);
     },
+    // Encerra suavemente o áudio da música atual (se estiver tocando) antes de
+    // trocar/limpar "audioUrl" — mesmo padrão de fade usado pelo resto do
+    // sistema (ver Media.js#stopAudio/fadeOutAudio) ao fechar ou trocar de
+    // música. Sem isso, trocar de música (ou fechar/limpar o áudio) cortava o
+    // som na hora: o <audio> é o MESMO elemento (só troca de "src"), então a
+    // troca de "audioUrl" cortava a reprodução em andamento sem fade nenhum.
+    stopAudioSmooth() {
+      return new Promise((resolve) => {
+        const el = this.$refs.audioEl;
+        if (!el || el.paused) {
+          resolve();
+          return;
+        }
+        const savedVolume = el.volume;
+        this.fadeVolume(el, savedVolume, 0, 250, () => {
+          el.pause();
+          el.volume = savedVolume;
+          this.audioPlaying = false;
+          resolve();
+        });
+      });
+    },
     async rebuildAudioUrl() {
+      await this.stopAudioSmooth();
       if (!this.song.audio_name) {
         this.audioUrl = "";
         this.audioCurrentTime = 0;
@@ -843,14 +871,23 @@ export default {
     },
     async actAudioRemove() {
       await CustomSongs.removeAudio(this.song.id);
+      // Não zera "audioUrl"/"audioPlaying" na mão aqui — o watcher de
+      // "song.audio_name" já chama rebuildAudioUrl(), que agora encerra o
+      // áudio suavemente antes de limpar (ver stopAudioSmooth).
       this.song.audio_name = "";
-      this.audioUrl = "";
-      this.audioPlaying = false;
       this.markDirty();
     },
     onAudioPlay() {
       this.audioPlaying = true;
       this._lastSyncTime = this.$refs.audioEl?.currentTime ?? -1;
+    },
+    // Fim natural do áudio: além de soltar o botão de play, avisa quem
+    // estiver tocando uma fila de várias músicas (ver custom_collections
+    // "Reproduzir tudo") pra avançar pra próxima — mesmo papel do
+    // "_autoCloseCallback" do $media, só que pro lado das músicas próprias.
+    onAudioEnded() {
+      this.audioPlaying = false;
+      CustomSongsPlayback.autoAdvance?.();
     },
     onAudioTime() {
       const el = this.$refs.audioEl;
@@ -982,15 +1019,26 @@ export default {
     await this.ensureAllImagesResolved();
     this.broadcastCurrentSlide();
 
-    // Atalhos de teclado: seta direita avança o slide, espaço toca/pausa o
-    // áudio. Os botões de gravação (recordAdvance/Start/Retroactive/Clear)
-    // ficam só nos botões do editor mesmo, sem atalho.
+    // Permite que quem estiver tocando uma fila (custom_collections) pause o
+    // áudio da música própria em andamento antes de trocar pra uma música do
+    // catálogo oficial — sem fade, é só uma troca de contexto, não um "parar".
+    CustomSongsPlayback.stopCurrent = () => {
+      const el = this.$refs.audioEl;
+      if (el && !el.paused) el.pause();
+    };
+
+    // Atalhos de teclado: seta direita avança o slide, seta esquerda volta,
+    // espaço toca/pausa o áudio. Os botões de gravação (recordAdvance/Start/
+    // Retroactive/Clear) ficam só nos botões do editor mesmo, sem atalho.
     this._keyHandler = (e) => {
       if (!this.module?.show) return;
       if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(e.target?.tagName)) return;
       if (e.key === "ArrowRight") {
         e.preventDefault();
         this.goSlide(this.current + 1);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        this.goSlide(this.current - 1);
       } else if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
         this.togglePlay();

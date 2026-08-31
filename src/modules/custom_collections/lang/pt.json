@@ -14,13 +14,22 @@
     "rename": "Renomear",
     "present": "Apresentar",
     "remove_from_collection": "Remover da coletânea",
-    "add_to_collection": "Adicionar música"
+    "add_to_collection": "Adicionar música",
+    "search_placeholder": "Buscar música...",
+    "play_all": "Reproduzir tudo",
+    "stop_all": "Parar",
+    "previous": "Música anterior",
+    "next": "Próxima música",
+    "change_cover": "Alterar capa",
+    "remove_cover": "Remover capa"
   },
   "labels": {
     "name": "Nome",
     "songs_count": "música(s)",
     "audio": "com áudio",
-    "slides": "slide(s)"
+    "slides": "slide(s)",
+    "my_songs": "Minhas músicas",
+    "official_catalog": "Catálogo oficial"
   },
   "data": {
     "empty_songs": "Nenhuma música pessoal. Crie no Editor de Músicas ou importe um .slja.",
@@ -29,6 +38,7 @@
     "select_collection": "Selecione uma coletânea na lista ao lado",
     "confirm_delete_song": "Excluir esta música? Esta ação não pode ser desfeita.",
     "confirm_delete_collection": "Excluir esta coletânea? As músicas continuam disponíveis em \"Minhas Músicas\".",
-    "name_placeholder": "Nome da coletânea"
+    "name_placeholder": "Nome da coletânea",
+    "empty_search_results": "Nenhuma música encontrada"
   }
 }

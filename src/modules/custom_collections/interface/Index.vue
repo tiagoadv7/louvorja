@@ -88,10 +88,13 @@
           :class="{ 'is-active': selectedCollectionId === c.id }"
           @click="selectedCollectionId = c.id"
         >
-          <span class="cc-color-dot" :style="{ background: c.cor }" />
+          <span
+            class="cc-color-dot"
+            :style="collectionCovers[c.id] ? { backgroundImage: `url(${collectionCovers[c.id]})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: c.cor }"
+          />
           <div class="cc-collection-info">
             <div class="cc-collection-name" :title="c.nome">{{ c.nome }}</div>
-            <div class="cc-collection-count">{{ c.song_ids.length }} {{ t('labels.songs_count') }}</div>
+            <div class="cc-collection-count">{{ c.items.length }} {{ t('labels.songs_count') }}</div>
           </div>
           <v-menu>
             <template #activator="{ props }">
@@ -111,18 +114,45 @@
         <div v-if="!selectedCollection" class="cc-empty">{{ t('data.select_collection') }}</div>
         <template v-else>
           <div class="cc-collection-body-head">
+            <div
+              class="cc-collection-cover"
+              :style="collectionCovers[selectedCollection.id] ? { backgroundImage: `url(${collectionCovers[selectedCollection.id]})` } : { background: selectedCollection.cor }"
+              :title="t('actions.change_cover')"
+              @click="actSetCollectionCover"
+            >
+              <div class="cc-collection-cover-overlay">
+                <v-icon size="15">mdi-camera-outline</v-icon>
+              </div>
+              <button
+                v-if="selectedCollection.capa"
+                class="cc-icon-btn cc-collection-cover-remove"
+                :title="t('actions.remove_cover')"
+                @click.stop="actRemoveCollectionCover"
+              >
+                <v-icon size="12">mdi-close</v-icon>
+              </button>
+            </div>
             <h3 class="cc-collection-title" :title="selectedCollection.nome">{{ selectedCollection.nome }}</h3>
-            <v-menu>
-              <template #activator="{ props }">
-                <button class="cc-btn cc-btn-outline" v-bind="props">
-                  <v-icon size="15">mdi-plus</v-icon> {{ t('actions.add_to_collection') }}
-                </button>
-              </template>
-              <v-list density="compact" max-height="360" style="overflow-y:auto">
-                <v-list-item v-for="s in songsNotInSelected" :key="s.id" :title="s.nome" @click="addSongToCollection(s.id)" />
-                <v-list-item v-if="!songsNotInSelected.length" :title="t('data.empty_songs')" disabled />
-              </v-list>
-            </v-menu>
+            <template v-if="playingCollection">
+              <button class="cc-icon-btn cc-icon-btn-static" :title="t('actions.previous')" @click="queuePrev">
+                <v-icon size="14">mdi-skip-previous</v-icon>
+              </button>
+              <button class="cc-icon-btn cc-icon-btn-static" :title="t('actions.next')" @click="queueNext">
+                <v-icon size="14">mdi-skip-next</v-icon>
+              </button>
+            </template>
+            <button
+              class="cc-btn cc-btn-outline"
+              :class="{ 'cc-btn-danger-outline': playingCollection }"
+              :disabled="!selectedCollectionSongs.length"
+              @click="togglePlayAll"
+            >
+              <v-icon size="15">{{ playingCollection ? 'mdi-stop' : 'mdi-play' }}</v-icon>
+              {{ playingCollection ? t('actions.stop_all') : t('actions.play_all') }}
+            </button>
+            <button class="cc-btn cc-btn-outline" @click="openAddSongDialog">
+              <v-icon size="15">mdi-plus</v-icon> {{ t('actions.add_to_collection') }}
+            </button>
           </div>
 
           <div v-if="!selectedCollectionSongs.length" class="cc-empty">{{ t('data.empty_collection_songs') }}</div>
@@ -133,16 +163,46 @@
             handle=".cc-drag-handle"
             @end="persistCollectionOrder"
           >
-            <template #item="{ element }">
-              <div class="cc-collection-song-row">
+            <template #item="{ element, index }">
+              <div class="cc-collection-song-row" :class="{ 'is-playing': playingCollection && index === _queueIdx }">
                 <v-icon size="16" class="cc-drag-handle">mdi-drag-vertical</v-icon>
-                <div class="cc-collection-song-name" :title="t('actions.present')" @click="apresentar(element)">
+                <v-icon
+                  size="13"
+                  class="cc-song-type-icon"
+                  :title="element.type === 'official' ? t('labels.official_catalog') : t('labels.my_songs')"
+                >
+                  {{ element.type === 'official' ? 'mdi-cloud-outline' : 'mdi-account-music-outline' }}
+                </v-icon>
+                <div class="cc-collection-song-name" :title="element.nome">
                   {{ element.nome }}
                 </div>
-                <button class="cc-icon-btn" :title="t('actions.edit')" @click="editar(element)">
-                  <v-icon size="14">mdi-pencil</v-icon>
-                </button>
-                <button class="cc-icon-btn" :title="t('actions.remove_from_collection')" @click="removeSongFromCollection(element.id)">
+
+                <!-- Música do catálogo oficial: mesmo menu usado nos Álbuns (cantado/
+                     playback/sem áudio/letra) — reaproveitado tal e qual. -->
+                <MusicMenuTable
+                  v-if="element.type === 'official'"
+                  :id_music="element.id"
+                  :has_instrumental_music="element.has_instrumental_music"
+                />
+                <!-- Música própria: mesmo estilo (botões rápidos + menu "...") mas
+                     com as ações que fazem sentido pra ela. -->
+                <div v-else class="d-flex flex-nowrap">
+                  <v-btn variant="text" icon="mdi-play-box-multiple" density="compact" class="mx-1" :title="t('actions.present')" @click="apresentar(element)" />
+                  <v-btn variant="text" icon="mdi-pencil" density="compact" class="mx-1" :title="t('actions.edit')" @click="editar(element)" />
+                  <v-menu location="start">
+                    <template #activator="{ props }">
+                      <v-btn variant="text" icon="mdi-menu" density="compact" class="mx-1" v-bind="props" />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item prepend-icon="mdi-rename-box" :title="t('actions.rename')" @click="renameSong(element)" />
+                      <v-list-item prepend-icon="mdi-download" :title="t('actions.export')" @click="exportSong(element)" />
+                      <v-divider />
+                      <v-list-item prepend-icon="mdi-close" :title="t('actions.remove_from_collection')" base-color="error" @click="removeSongFromCollection(element)" />
+                    </v-list>
+                  </v-menu>
+                </div>
+
+                <button v-if="element.type === 'official'" class="cc-icon-btn" :title="t('actions.remove_from_collection')" @click="removeSongFromCollection(element)">
                   <v-icon size="14">mdi-close</v-icon>
                 </button>
               </div>
@@ -152,7 +212,61 @@
       </div>
     </div>
 
+    <!-- ── Diálogo: Adicionar música (própria ou do catálogo oficial) ────── -->
+    <v-dialog v-model="addSongDialog" max-width="480" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-icon start size="18">mdi-music-note-plus</v-icon>
+          {{ t('actions.add_to_collection') }}
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="addSongDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <input v-model="addSongSearch" class="cc-input" :placeholder="t('actions.search_placeholder')" autofocus />
+
+          <button class="cc-btn cc-btn-outline" style="width:100%; justify-content:center; margin-bottom:14px" @click="actImportSljaToCollection">
+            <v-icon size="15">mdi-import</v-icon> {{ t('actions.import') }}
+          </button>
+
+          <div class="cc-add-section-lbl">{{ t('labels.my_songs') }}</div>
+          <div class="cc-add-list">
+            <div
+              v-for="s in addSongCustomResults" :key="`c-${s.id}`"
+              class="cc-add-row"
+              @click="addSongToCollection({ type: 'custom', id: s.id })"
+            >
+              <span class="cc-add-row-name">{{ s.nome }}</span>
+            </div>
+            <div v-if="!addSongCustomResults.length" class="cc-add-row-empty">{{ t('data.empty_search_results') }}</div>
+          </div>
+
+          <div class="cc-add-section-lbl">{{ t('labels.official_catalog') }}</div>
+          <div class="cc-add-list">
+            <div v-if="officialMusicsLoading" class="d-flex justify-center pa-4">
+              <v-progress-circular indeterminate size="24" color="primary" />
+            </div>
+            <template v-else>
+              <div
+                v-for="m in addSongOfficialResults" :key="`o-${m.id_music}`"
+                class="cc-add-row"
+                @click="addSongToCollection({ type: 'official', id: m.id_music, nome: m.name })"
+              >
+                <span class="cc-add-row-name">{{ m.name }}</span>
+                <span class="cc-add-row-sub">{{ m.albums_names }}</span>
+              </div>
+              <div v-if="!addSongOfficialResults.length" class="cc-add-row-empty">{{ t('data.empty_search_results') }}</div>
+            </template>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <input ref="fileSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSlja" />
+    <input ref="fileCollectionCover" type="file" accept="image/*,.heic,.heif" hidden @change="onPickCollectionCover" />
+    <input ref="fileCollectionSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSljaToCollection" />
   </l-window>
 </template>
 
@@ -160,12 +274,15 @@
 import manifest from '../manifest.json';
 import Draggable from 'vuedraggable';
 import LWindow from '@/components/Window.vue';
+import MusicMenuTable from '@/components/MusicMenuTable.vue';
 import CustomSongs from '@/helpers/CustomSongs';
 import SljaConverter from '@/helpers/SljaConverter';
+import CustomSongsPlayback from '@/helpers/CustomSongsPlayback';
+import ImageConvert from '@/helpers/ImageConvert';
 
 export default {
   name: 'CustomCollectionsModule',
-  components: { LWindow, Draggable },
+  components: { LWindow, Draggable, MusicMenuTable },
 
   data: () => ({
     tab: 'songs',
@@ -175,6 +292,19 @@ export default {
     // Cache de URL (file://) da imagem do 1º slide de cada música — preview
     // do card em "Minhas Músicas".
     previewImages: {},
+    // Catálogo oficial (paridade Delphi: coletânea pode misturar músicas
+    // próprias com músicas do catálogo, não só as criadas no Editor).
+    officialMusics: [],
+    officialMusicsLoading: false,
+    addSongDialog: false,
+    addSongSearch: '',
+    // Cache de URL (file://) da capa de cada coletânea (ver
+    // resolveCollectionCovers) — mesmo padrão de "previewImages" acima.
+    collectionCovers: {},
+    // "Reproduzir tudo" — fila sequencial pela coletânea selecionada.
+    playingCollection: false,
+    _queueItems: [],
+    _queueIdx: -1,
   }),
 
   computed: {
@@ -194,32 +324,53 @@ export default {
     selectedCollection() {
       return this.collections.find((c) => c.id === this.selectedCollectionId) || null;
     },
+    officialMusicsById() {
+      return new Map(this.officialMusics.map((m) => [Number(m.id_music), m]));
+    },
     // get/set pro v-model do <draggable> — reordenar já persiste a nova
     // ordem (ver @end="persistCollectionOrder" no template, redundante mas
-    // inofensivo com esse set também salvando).
+    // inofensivo com esse set também salvando). Cada item pode ser uma
+    // música própria ou do catálogo oficial (ver resolveCollectionItem).
     selectedCollectionSongs: {
       get() {
         if (!this.selectedCollection) return [];
-        return this.selectedCollection.song_ids
-          .map((id) => this.songs.find((s) => s.id === id))
+        return this.selectedCollection.items
+          .map((item) => this.resolveCollectionItem(item))
           .filter(Boolean);
       },
       set(val) {
         if (!this.selectedCollection) return;
-        this.selectedCollection.song_ids = val.map((s) => s.id);
+        this.selectedCollection.items = val.map((s) => (
+          s.type === 'official' ? { type: 'official', id: s.id, nome: s.nome } : { type: 'custom', id: s.id }
+        ));
         CustomSongs.saveCollection(this.selectedCollection);
       },
     },
-    songsNotInSelected() {
-      if (!this.selectedCollection) return this.songs;
-      const has = new Set(this.selectedCollection.song_ids);
-      return this.songs.filter((s) => !has.has(s.id));
+    addSongCustomResults() {
+      const has = new Set((this.selectedCollection?.items || []).filter((i) => i.type === 'custom').map((i) => i.id));
+      const q = this.$string.clean((this.addSongSearch || '').trim());
+      return this.songs
+        .filter((s) => !has.has(s.id))
+        .filter((s) => !q || this.$string.clean(s.nome).includes(q));
+    },
+    addSongOfficialResults() {
+      const has = new Set((this.selectedCollection?.items || []).filter((i) => i.type === 'official').map((i) => Number(i.id)));
+      const q = this.$string.clean((this.addSongSearch || '').trim());
+      return this.officialMusics
+        .filter((m) => !has.has(Number(m.id_music)))
+        .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
+        .slice(0, 60);
     },
   },
 
   watch: {
     show(open) {
       if (open) this.loadAll();
+    },
+    // Trocar de coletânea no meio de "Reproduzir tudo" pararia de fazer
+    // sentido (a fila era da coletânea anterior) — encerra a sequência.
+    selectedCollectionId() {
+      if (this.playingCollection) this._stopPlayAllCollection();
     },
   },
 
@@ -274,8 +425,55 @@ export default {
       this.songs = await CustomSongs.listSongs();
       this.collections = await CustomSongs.listCollections();
       this.resolvePreviewImages(this.songs);
+      this.resolveCollectionCovers(this.collections);
+      if (!this.officialMusics.length) this.loadOfficialMusics();
       if (!this.selectedCollectionId && this.collections.length) {
         this.selectedCollectionId = this.collections[0].id;
+      }
+    },
+    async resolveCollectionCovers(list) {
+      const map = {};
+      for (const c of list) {
+        if (!c.capa) continue;
+        const url = await CustomSongs.resolveCollectionCoverUrl(c.id, c.capa);
+        if (url) map[c.id] = url;
+      }
+      this.collectionCovers = map;
+    },
+
+    // Resolve um item de coletânea { type, id, nome? } pro objeto exibido na
+    // lista — próprias vêm de "songs" (nome sempre atual); oficiais resolvem
+    // pelo catálogo carregado e caem pro nome salvo no item se o catálogo
+    // ainda não carregou (ex.: sem internet na primeira abertura).
+    resolveCollectionItem(item) {
+      if (item.type === 'official') {
+        const m = this.officialMusicsById.get(Number(item.id));
+        return {
+          type: 'official',
+          id: Number(item.id),
+          nome: m?.name || item.nome || '?',
+          albums_names: m?.albums_names || '',
+        };
+      }
+      const s = this.songs.find((song) => song.id === item.id);
+      return s ? { ...s, type: 'custom' } : null;
+    },
+    async loadOfficialMusics() {
+      this.officialMusicsLoading = true;
+      try {
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const data = await this.$database.get(`${locale}_musics`);
+        const arr = Array.isArray(data) ? data : Object.values(data || {});
+        arr.sort((a, b) => this.$string.sort(a.name, b.name));
+        this.officialMusics = arr.map((m) => ({
+          ...m,
+          _nc: this.$string.clean(m.name),
+          _ac: this.$string.clean(m.albums_names || ''),
+        }));
+      } catch {
+        this.officialMusics = [];
+      } finally {
+        this.officialMusicsLoading = false;
       }
     },
 
@@ -297,9 +495,16 @@ export default {
       this.$modules.open('slide_editor');
     },
     // Mesmo clique já seleciona E projeta (sem estado intermediário) — mesmo
-    // padrão do módulo oficial Álbum/MusicMenuTable.vue.
-    async apresentar(song) {
-      this.$appdata.set('modules.slide_editor.pending_song_id', song.id);
+    // padrão do módulo oficial Álbum/MusicMenuTable.vue. Item pode ser uma
+    // música própria (abre no slide_editor) ou do catálogo oficial (abre no
+    // $media, igual a clicar numa música dentro de um Álbum).
+    async apresentar(item) {
+      if (item.type === 'official') {
+        await this.$media.open({ id_music: item.id, mode: 'audio' });
+        await this.$popup.open('media');
+        return;
+      }
+      this.$appdata.set('modules.slide_editor.pending_song_id', item.id);
       this.$appdata.set('modules.slide_editor.pending_autoplay', true);
       this.$modules.open('slide_editor');
       await this.$popup.open('slide_editor');
@@ -407,17 +612,75 @@ export default {
       if (this.selectedCollectionId === c.id) this.selectedCollectionId = null;
       await this.loadAll();
     },
-    async addSongToCollection(songId) {
+    actSetCollectionCover() {
+      this.$refs.fileCollectionCover?.click();
+    },
+    async onPickCollectionCover(e) {
+      const file = e.target.files[0];
+      e.target.value = '';
+      const c = this.selectedCollection;
+      if (!file || !c) return;
+      try {
+        const { blob, name } = await ImageConvert.ensureRenderableImage(file.name, file);
+        const stored = await CustomSongs.importCollectionCover(c.id, blob, name);
+        c.capa = stored;
+        await CustomSongs.saveCollection(c);
+        await this.loadAll();
+      } catch (err) {
+        this.$alert.error({ title: 'Erro ao adicionar capa', text: String(err?.message || err), translate: false });
+      }
+    },
+    async actRemoveCollectionCover() {
       const c = this.selectedCollection;
       if (!c) return;
-      if (!c.song_ids.includes(songId)) c.song_ids.push(songId);
+      await CustomSongs.removeCollectionCover(c.id);
+      c.capa = '';
       await CustomSongs.saveCollection(c);
       await this.loadAll();
     },
-    async removeSongFromCollection(songId) {
+    openAddSongDialog() {
+      this.addSongSearch = '';
+      this.addSongDialog = true;
+      if (!this.officialMusics.length) this.loadOfficialMusics();
+    },
+    actImportSljaToCollection() {
+      this.$refs.fileCollectionSlja?.click();
+    },
+    // Importa .slja direto pra dentro da coletânea (sem passar por "Minhas
+    // Músicas" antes) — a música importada entra pra biblioteca (igual
+    // onImportSlja) E já é adicionada na coletânea selecionada num só passo.
+    async onImportSljaToCollection(e) {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (!files.length || !this.selectedCollection) return;
+
+      let ok = 0;
+      let fail = 0;
+      for (const f of files) {
+        try {
+          const song = await CustomSongs.parseSljaToSong(f);
+          await CustomSongs.saveSong(song);
+          await this.addSongToCollection({ type: 'custom', id: song.id });
+          ok++;
+        } catch {
+          fail++;
+        }
+      }
+      this.$alert.info({ text: `${ok} importada(s)${fail ? `, ${fail} falha(s)` : ''}`, translate: false });
+    },
+    // entry: { type: 'custom', id } ou { type: 'official', id, nome }
+    async addSongToCollection(entry) {
       const c = this.selectedCollection;
       if (!c) return;
-      c.song_ids = c.song_ids.filter((id) => id !== songId);
+      const exists = c.items.some((i) => i.type === entry.type && String(i.id) === String(entry.id));
+      if (!exists) c.items.push(entry);
+      await CustomSongs.saveCollection(c);
+      await this.loadAll();
+    },
+    async removeSongFromCollection(item) {
+      const c = this.selectedCollection;
+      if (!c) return;
+      c.items = c.items.filter((i) => !(i.type === item.type && String(i.id) === String(item.id)));
       await CustomSongs.saveCollection(c);
       await this.loadAll();
     },
@@ -425,10 +688,74 @@ export default {
       if (!this.selectedCollection) return;
       await CustomSongs.saveCollection(this.selectedCollection);
     },
+
+    // ===== "Reproduzir tudo" — fila sequencial pela coletânea =====
+    // Mistura músicas próprias (slide_editor) e do catálogo oficial ($media):
+    // cada uma tem seu próprio mecanismo de "avançar automaticamente no fim"
+    // (CustomSongsPlayback.autoAdvance / $media._autoCloseCallback) — aqui só
+    // decide qual usar a cada passo e desliga o do lado que não está ativo.
+    togglePlayAll() {
+      if (this.playingCollection) this._stopPlayAllCollection();
+      else this._startPlayAllCollection();
+    },
+    _startPlayAllCollection() {
+      const items = this.selectedCollectionSongs;
+      if (!items.length) return;
+      this.playingCollection = true;
+      this._queueItems = items;
+      this._playQueueAt(0);
+    },
+    _playQueueAt(idx) {
+      const items = this._queueItems;
+      if (idx < 0) idx = 0;
+      if (idx >= items.length) {
+        this._stopPlayAllCollection();
+        return;
+      }
+      this._queueIdx = idx;
+      const item = items[idx];
+      const advance = () => this._playQueueAt(idx + 1);
+
+      if (item.type === 'official') {
+        CustomSongsPlayback.autoAdvance = null;
+        CustomSongsPlayback.stopCurrent?.();
+        this.$media._autoCloseCallback = advance;
+        this.$media.open({ id_music: item.id, mode: 'audio' });
+        this.$popup.open('media');
+      } else {
+        this.$media._autoCloseCallback = null;
+        // Troca vindo de uma música oficial tocando: silencia antes de trocar
+        // pro slide_editor, senão o áudio oficial continuaria tocando por cima.
+        if (this.$appdata.get('modules.media.show') || this.$appdata.get('modules.media.minimized')) {
+          this.$media.endSong();
+        }
+        CustomSongsPlayback.autoAdvance = advance;
+        this.$appdata.set('modules.slide_editor.pending_song_id', item.id);
+        this.$appdata.set('modules.slide_editor.pending_autoplay', true);
+        this.$modules.open('slide_editor');
+        this.$popup.open('slide_editor');
+      }
+    },
+    _stopPlayAllCollection() {
+      this.playingCollection = false;
+      this._queueIdx = -1;
+      this._queueItems = [];
+      if (this.$media) this.$media._autoCloseCallback = null;
+      CustomSongsPlayback.autoAdvance = null;
+    },
+    queueNext() {
+      if (this.playingCollection) this._playQueueAt(this._queueIdx + 1);
+    },
+    queuePrev() {
+      if (this.playingCollection) this._playQueueAt(this._queueIdx - 1);
+    },
   },
 
   mounted() {
     this.loadAll();
+  },
+  beforeUnmount() {
+    if (this.playingCollection) this._stopPlayAllCollection();
   },
 };
 </script>
@@ -463,6 +790,18 @@ export default {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 .cc-btn-outline:hover { background: rgba(var(--v-theme-on-surface), 0.06); }
+.cc-btn:disabled { opacity: 0.5; cursor: default; pointer-events: none; }
+.cc-btn-danger-outline {
+  color: rgb(var(--v-theme-error));
+  border-color: rgba(var(--v-theme-error), 0.5);
+}
+.cc-btn-danger-outline:hover { background: rgba(var(--v-theme-error), 0.08); }
+
+.cc-icon-btn-static {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
+}
+.cc-icon-btn-static:hover { background: rgba(var(--v-theme-on-surface), 0.16); }
 
 .cc-icon-btn {
   width: 26px;
@@ -568,11 +907,13 @@ export default {
 .cc-collection-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
 .cc-collection-item.is-active { background: rgba(var(--v-theme-primary), 0.12); }
 .cc-color-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.15);
+  background-size: cover;
+  background-position: center;
 }
 .cc-collection-info { flex: 1; min-width: 0; }
 .cc-collection-name {
@@ -599,6 +940,37 @@ export default {
   gap: 10px;
   margin-bottom: 10px;
 }
+.cc-collection-cover {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  overflow: hidden;
+}
+.cc-collection-cover-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.cc-collection-cover:hover .cc-collection-cover-overlay { opacity: 1; }
+.cc-collection-cover-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+}
 .cc-collection-title {
   flex: 1;
   min-width: 0;
@@ -616,19 +988,70 @@ export default {
   padding: 8px 6px;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
 }
+.cc-collection-song-row.is-playing {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-radius: 6px;
+}
 .cc-drag-handle {
   cursor: grab;
   opacity: 0.5;
+  flex-shrink: 0;
+}
+.cc-song-type-icon {
+  opacity: 0.55;
   flex-shrink: 0;
 }
 .cc-collection-song-name {
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
-  cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cc-collection-song-name:hover { text-decoration: underline; }
+
+/* ── Diálogo: adicionar música ───────────────────────────────────────── */
+.cc-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.cc-add-section-lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+.cc-add-section-lbl:first-of-type { margin-top: 0; }
+.cc-add-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.6));
+  border-radius: 6px;
+}
+.cc-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
+}
+.cc-add-row:last-child { border-bottom: none; }
+.cc-add-row:hover { background: rgba(var(--v-theme-on-surface), 0.06); }
+.cc-add-row-name { font-size: 13px; }
+.cc-add-row-sub { font-size: 11px; opacity: 0.6; }
+.cc-add-row-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.5;
+}
 </style>

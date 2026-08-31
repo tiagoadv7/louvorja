@@ -232,8 +232,13 @@ async function resolveImageUrl(songId, imageName) {
 }
 
 // ── Coletâneas personalizadas ────────────────────────────────────────────
-// Agrupam músicas (por id) numa ordem própria — CRUD simples, tudo num único
-// JSON (mesma pasta raiz das músicas), sem IPC novo.
+// Agrupam músicas — próprias OU do catálogo oficial (paridade Delphi: lá a
+// coletânea podia misturar qualquer música do banco) — numa ordem própria.
+// Cada item é { type: 'custom'|'official', id, nome? }: "custom" referencia
+// uma música própria (id = uuid de CustomSongs); "official" referencia uma
+// música do catálogo (id = id_music) e guarda o nome no próprio item (não dá
+// pra resolver do disco como as próprias — o catálogo é remoto/baixável).
+// CRUD simples, tudo num único JSON (mesma pasta raiz das músicas), sem IPC novo.
 
 function newCollection(nome = "Nova coletânea") {
   const now = new Date().toISOString();
@@ -241,10 +246,25 @@ function newCollection(nome = "Nova coletânea") {
     id: crypto.randomUUID(),
     nome,
     cor: "#385F73",
-    song_ids: [],
+    // Nome do arquivo da capa (ver COLLECTION_COVERS_FOLDER) — paridade
+    // Delphi: lá a coletânea tinha uma imagem de capa própria, exibida na
+    // lista, além da cor.
+    capa: "",
+    items: [],
     createdAt: now,
     updatedAt: now,
   };
+}
+
+// Coletâneas salvas antes da mistura com o catálogo oficial só tinham
+// "song_ids" (sempre músicas próprias) — converte pro formato novo na leitura,
+// sem precisar migrar o arquivo no disco. Também garante "capa" (coletâneas
+// salvas antes da capa existir não têm o campo).
+function normalizeCollection(c) {
+  const withItems = Array.isArray(c.items)
+    ? c
+    : { ...c, items: (Array.isArray(c.song_ids) ? c.song_ids : []).map((id) => ({ type: "custom", id })) };
+  return withItems.capa === undefined ? { ...withItems, capa: "" } : withItems;
 }
 
 async function collectionsFilePath() {
@@ -258,7 +278,7 @@ async function listCollections() {
   if (!raw) return [];
   try {
     const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list) ? list.map(normalizeCollection) : [];
   } catch {
     return [];
   }
@@ -281,6 +301,47 @@ async function saveCollection(collection) {
 async function deleteCollection(id) {
   const list = await listCollections();
   await saveCollectionsList(list.filter((c) => c.id !== id));
+  await removeCollectionCover(id);
+}
+
+// ── Capa da coletânea ────────────────────────────────────────────────────
+// Uma pasta só (não uma por coletânea, como músicas) — é sempre no máximo um
+// arquivo por coletânea, nomeado pelo próprio id da coletânea.
+const COLLECTION_COVERS_FOLDER = "_collection_covers";
+
+async function collectionCoversDir() {
+  return joinPath(await rootDir(), COLLECTION_COVERS_FOLDER);
+}
+
+/** Remove qualquer capa anterior da coletânea (extensão pode ter mudado). */
+async function clearCollectionCoverFiles(collectionId) {
+  const dir = await collectionCoversDir();
+  const entries = (await $electron.readDir(dir)) || [];
+  for (const entry of entries) {
+    if (!entry.isDirectory && entry.name.startsWith(`${collectionId}.`)) {
+      await $electron.deleteFile(entry.path);
+    }
+  }
+}
+
+async function importCollectionCover(collectionId, blob, fileName) {
+  await clearCollectionCoverFiles(collectionId);
+  const ext = extOf(fileName, "png");
+  const name = `${collectionId}.${ext}`;
+  const buffer = new Uint8Array(await blob.arrayBuffer());
+  await $electron.writeFile(joinPath(await collectionCoversDir(), name), buffer, null);
+  return name;
+}
+
+async function removeCollectionCover(collectionId) {
+  await clearCollectionCoverFiles(collectionId);
+}
+
+async function resolveCollectionCoverUrl(collectionId, coverName) {
+  if (!coverName) return "";
+  const filePath = joinPath(await collectionCoversDir(), coverName);
+  if (!(await $electron.fileExists(filePath))) return "";
+  return toFileUrl(filePath);
 }
 
 // ── Import de .slja → objeto "song" ──────────────────────────────────────
@@ -354,5 +415,8 @@ export default {
   listCollections,
   saveCollection,
   deleteCollection,
+  importCollectionCover,
+  removeCollectionCover,
+  resolveCollectionCoverUrl,
   parseSljaToSong,
 };
