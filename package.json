@@ -24,7 +24,7 @@
     "host": "vite --host",
     "files": "node node/server.js",
     "git:tag": "git tag -a -f v%npm_package_version% -m \"Versão %npm_package_version%\" && git push origin -f v%npm_package_version% && git push -u origin main",
-    "electron:dev": "concurrently -n VITE,ELECTRON -c yellow,blue \"vite --port 5002 --strictPort\" \"wait-on http://localhost:5002 && node electron/dev.js\"",
+    "electron:dev": "concurrently -n VITE,ELECTRON -c yellow,blue \"cross-env VITE_DISABLE_PWA=true vite --port 5002 --strictPort\" \"wait-on http://localhost:5002 && node electron/dev.js\"",
     "electron:build": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder",
     "electron:build:linux": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder --linux",
     "electron:build:linux:wsl": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-wsl.ps1",

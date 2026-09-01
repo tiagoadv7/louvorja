@@ -11,6 +11,15 @@ export default ({ mode }) => {
   process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
 
   const isElectronBuild = process.env.ELECTRON_BUILD === "true";
+  // ELECTRON_BUILD só é setado nos scripts de BUILD (electron:build/publish/
+  // pack/preview) — o dev normal (electron:dev) sobe o Vite sem essa flag,
+  // então o plugin de PWA ficava ativo mesmo rodando dentro do Electron o
+  // tempo todo, registrando um Service Worker que o Electron não sabe lidar
+  // direito (erro "Failed to register a ServiceWorker: The document is in
+  // an invalid state" no console, toda vez que abria o app em dev). Flag
+  // própria pra não mexer em ELECTRON_BUILD (que também troca "base" pra
+  // caminho relativo — não queremos isso no dev server, só no build real).
+  const disablePwa = isElectronBuild || process.env.VITE_DISABLE_PWA === "true";
 
   return defineConfig({
     // Em builds para Electron, usa caminhos relativos (file://)
@@ -21,8 +30,10 @@ export default ({ mode }) => {
       vuetify({
         autoImport: true,
       }),
-      // PWA desativado em builds Electron (service workers não funcionam com file://)
-      !isElectronBuild && VitePWA({
+      // PWA desativado dentro do Electron, dev ou build (service workers não
+      // funcionam com file:// nem fazem sentido num app desktop) — ver
+      // comentário de disablePwa acima.
+      !disablePwa && VitePWA({
         registerType: "autoUpdate",
         devOptions: {
           enabled: true,
