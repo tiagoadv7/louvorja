@@ -53,6 +53,12 @@
           <button class="lt-btn-outline" @click="exportJaFile">
             <v-icon size="15">mdi-file-export-outline</v-icon> Exportar
           </button>
+          <button class="lt-btn-outline" @click="openSaveLiturgia">
+            <v-icon size="15">mdi-content-save-outline</v-icon> Salvar
+          </button>
+          <button class="lt-btn-outline" @click="openLoadLiturgia">
+            <v-icon size="15">mdi-folder-open-outline</v-icon> Carregar
+          </button>
           <button class="lt-btn-outline lt-btn-outline--danger" :disabled="!dayItems.length" @click="confirmClearAll">
             <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Tudo
           </button>
@@ -82,9 +88,6 @@
           </button>
           <button class="lt-btn-icon" title="Copiar p/ Outros Dias" :disabled="!hasSelected" @click="openCopyToDays()">
             <v-icon size="18">mdi-content-copy</v-icon>
-          </button>
-          <button class="lt-btn-icon" title="Exibir Painel de Apres." @click="showPresentation">
-            <v-icon size="18">mdi-monitor-screenshot</v-icon>
           </button>
         </div>
       </div>
@@ -123,10 +126,15 @@
               <div
                 :class="['lt-item', {
                   'lt-item--selected': item.selected,
-                  'lt-item--done':     item.done,
+                  'lt-item--done':     isItemDone(item),
                   'lt-item--locked':   item.locked,
+                  'lt-item--categoria': item.type === 'categoria',
                 }]"
-                :style="{ border: `2px solid ${item.color}`, background: item.type === 'categoria' ? item.color : undefined }"
+                :style="{
+                  border: `2px solid ${item.color}`,
+                  background: item.type === 'categoria' ? item.color : undefined,
+                  '--lt-cat-fg': item.type === 'categoria' ? categoriaContrastColor(item.color) : undefined,
+                }"
                 @click="onItemRowClick(item, idx)"
               >
 
@@ -138,9 +146,11 @@
 
                 <div
                   class="lt-item-icon-badge"
-                  :style="{ background: item.color + '22', color: item.color }"
+                  :style="item.type === 'categoria'
+                    ? { background: categoriaContrastColor(item.color) + '22', color: categoriaContrastColor(item.color) }
+                    : { background: item.color + '22', color: item.color }"
                 >
-                  <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
+                  <v-icon size="15" :color="item.type === 'categoria' ? categoriaContrastColor(item.color) : item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
                 <div class="lt-item-info">
                   <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
@@ -149,6 +159,17 @@
                 <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
                 <div class="lt-item-actions" @click.stop>
+                  <!-- Categoria: inicia o cronômetro dessa seção (com base na
+                       Duração configurada no item) e marca a categoria como
+                       concluída — marcação só desta sessão, ver isItemDone(). -->
+                  <button
+                    v-if="item.type === 'categoria'"
+                    class="lt-row-btn"
+                    :title="activeTimer && activeTimer.itemId === item.id ? 'Reiniciar Cronômetro' : 'Iniciar'"
+                    @click="startCategoryTimer(item)"
+                  >
+                    <v-icon size="15">{{ activeTimer && activeTimer.itemId === item.id ? 'mdi-timer-sand' : 'mdi-play-circle-outline' }}</v-icon>
+                  </button>
                   <!-- Link do YouTube: controles de reprodução (play/pause/parar,
                        com fade — ver $webLink/WebLinkFrame.vue) iguais aos do
                        video_player, em vez do botão de play genérico abaixo. -->
@@ -230,7 +251,8 @@
         </div>
 
         <!-- Right panel: Anotações -->
-        <div class="lt-notes">
+        <div class="lt-notes-resizer" @mousedown="startNotesResize"></div>
+        <div class="lt-notes" :style="{ width: (notesDragWidth ?? notesWidth) + 'px' }">
           <div class="lt-notes-head">
             <v-icon size="14" class="me-1">mdi-note-text-outline</v-icon>
             <span>Anotações</span>
@@ -294,6 +316,17 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- ── BARRA DE CRONÔMETRO DA CATEGORIA ATIVA ────────────────── -->
+      <div v-if="activeTimer" class="lt-timer-bar">
+        <v-icon size="15" class="me-1">mdi-timer-outline</v-icon>
+        <span class="lt-timer-name">{{ activeTimer.name }}</span>
+        <span class="lt-timer-time" :class="{ 'lt-timer-time--over': activeTimerOver }">{{ activeTimerLabel }}</span>
+        <v-spacer />
+        <button class="lt-btn-icon" title="Parar Cronômetro" @click="stopCategoryTimer">
+          <v-icon size="16">mdi-stop-circle-outline</v-icon>
+        </button>
       </div>
     </div>
 
@@ -635,6 +668,102 @@
       </v-card>
     </v-dialog>
 
+    <!-- ── SALVAR LITURGIA ──────────────────────────────────────────────── -->
+    <v-dialog v-model="saveLiturgiaDialog" max-width="380">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-icon start size="16">mdi-content-save-outline</v-icon>
+          Salvar Liturgia
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="saveLiturgiaDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <v-text-field
+            v-model="saveLiturgiaName"
+            label="Nome da liturgia salva"
+            density="comfortable"
+            variant="outlined"
+            autofocus
+            @keyup.enter="confirmSaveLiturgia"
+          />
+          <div class="lt-copy-days">
+            <label class="lt-copy-day-row">
+              <input type="radio" value="dia" v-model="saveLiturgiaScope" />
+              Somente {{ currentTabLabel }} (este dia)
+            </label>
+            <label class="lt-copy-day-row">
+              <input type="radio" value="completa" v-model="saveLiturgiaScope" />
+              Liturgia completa (todos os dias)
+            </label>
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="saveLiturgiaDialog = false">Cancelar</v-btn>
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-content-save-outline"
+            :disabled="!saveLiturgiaName.trim()"
+            @click="confirmSaveLiturgia"
+          >
+            Salvar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── CARREGAR / GERENCIAR LITURGIAS SALVAS ───────────────────────────── -->
+    <v-dialog v-model="loadLiturgiaDialog" max-width="460">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-3 text-body-1 font-weight-medium">
+          <v-icon start size="16">mdi-folder-open-outline</v-icon>
+          Liturgias Salvas
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="loadLiturgiaDialog = false">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <div v-if="!savedLiturgiasSorted.length" class="lt-saved-empty">
+            Nenhuma liturgia salva ainda.
+          </div>
+          <div v-else class="lt-saved-list">
+            <div v-for="s in savedLiturgiasSorted" :key="s.id" class="lt-saved-row">
+              <div class="lt-saved-info">
+                <div class="lt-saved-name">{{ s.name }}</div>
+                <div class="lt-saved-meta">
+                  {{ s.scope === 'dia' ? `Dia: ${s.dayLabel}` : 'Liturgia completa' }} · {{ formatSavedDate(s.savedAt) }}
+                </div>
+              </div>
+              <template v-if="loadLiturgiaConfirmId === s.id">
+                <span class="lt-saved-confirm-label">Sobrescrever?</span>
+                <v-btn size="small" variant="text" @click="cancelLoadLiturgia">Cancelar</v-btn>
+                <v-btn size="small" color="primary" @click="applyLoadLiturgia(s.id)">Confirmar</v-btn>
+              </template>
+              <template v-else>
+                <v-btn icon size="small" variant="text" title="Carregar" @click="askLoadLiturgia(s.id)">
+                  <v-icon size="18">mdi-tray-arrow-down</v-icon>
+                </v-btn>
+                <v-btn icon size="small" variant="text" color="error" title="Excluir" @click="deleteSavedLiturgia(s.id)">
+                  <v-icon size="18">mdi-delete-outline</v-icon>
+                </v-btn>
+              </template>
+            </div>
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="loadLiturgiaDialog = false">Fechar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
   </Window>
 </template>
 
@@ -657,6 +786,10 @@ const DAYS = [
 // Date.prototype.getDay() já retorna 0=domingo...6=sábado — mesma ordem do
 // array DAYS acima, então o índice bate direto, sem precisar de mapa.
 const todayDayKey = () => DAYS[new Date().getDay()].key;
+
+// Todas as "abas" de dia que existem na liturgia, incluindo a avulsa —
+// usado ao salvar/carregar a liturgia completa (todos os dias de uma vez).
+const ALL_DAY_KEYS = [...DAYS.map(d => d.key), 'avulsa'];
 
 // Data local (não UTC, pra não pular de dia perto da meia-noite) no formato
 // AAAA-MM-DD — usada só pra saber se hoje já foi sincronizado, não pra exibir.
@@ -949,10 +1082,25 @@ export default {
     editingIndex:  null,
     clearAllDialog: false,
     listDragOver:  false,
+    notesDragWidth: null,
+
+    // Cronômetro de categoria + marcação "concluído" transitória — não
+    // persistidos em $userdata de propósito: devem voltar ao normal se a
+    // liturgia for fechada e reaberta, mesmo no mesmo dia.
+    sessionDone:    {},
+    activeTimer:    null,   // { itemId, name, budgetMin, startedAt }
+    timerNow:       Date.now(),
+    timerInterval:  null,
     copyDaysDialog:    false,
     copyDaysTargets:   [],
     copyDaysOverwrite: false,
     copyClipboard:     [],
+
+    saveLiturgiaDialog:  false,
+    saveLiturgiaName:    '',
+    saveLiturgiaScope:   'dia',
+    loadLiturgiaDialog:  false,
+    loadLiturgiaConfirmId: null,
     form:          emptyForm(),
     musicSearch:   '',
     musicLoading:  false,
@@ -1000,10 +1148,22 @@ export default {
       get() { return this.$userdata.get(`modules.liturgia.days.${this.currentDay}.notes`) || ''; },
       set(v) { this.$userdata.set(`modules.liturgia.days.${this.currentDay}.notes`, v); },
     },
+    notesWidth: {
+      get() { return this.$userdata.get('modules.liturgia.notesWidth', 240); },
+      set(v) { this.$userdata.set('modules.liturgia.notesWidth', Math.min(480, Math.max(180, v))); },
+    },
 
     hasSelected() { return this.dayItems.some(i => i.selected); },
     copyDaysOptions() {
       return [...DAYS, { key: 'avulsa', label: 'Avulsa' }].filter(d => d.key !== this.currentDay);
+    },
+
+    savedLiturgias: {
+      get() { return this.$userdata.get('modules.liturgia.saved') || []; },
+      set(v) { this.$userdata.set('modules.liturgia.saved', v); },
+    },
+    savedLiturgiasSorted() {
+      return [...this.savedLiturgias].sort((a, b) => b.savedAt - a.savedAt);
     },
 
     totalTime() {
@@ -1013,6 +1173,21 @@ export default {
       const m = this.totalTime;
       if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}min`;
       return `${m}min`;
+    },
+
+    activeTimerElapsedSec() {
+      if (!this.activeTimer) return 0;
+      return Math.floor((this.timerNow - this.activeTimer.startedAt) / 1000);
+    },
+    activeTimerOver() {
+      if (!this.activeTimer || !this.activeTimer.budgetMin) return false;
+      return this.activeTimerElapsedSec >= this.activeTimer.budgetMin * 60;
+    },
+    activeTimerLabel() {
+      if (!this.activeTimer) return '';
+      const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      const budgetSec = this.activeTimer.budgetMin * 60;
+      return budgetSec > 0 ? `${fmt(this.activeTimerElapsedSec)} / ${fmt(budgetSec)}` : fmt(this.activeTimerElapsedSec);
     },
 
     notesTextStyle() {
@@ -1155,6 +1330,8 @@ export default {
     // seleção sobrevive normalmente a um minimizar/restaurar.
     close() {
       this.clearAllSelections();
+      this.stopCategoryTimer();
+      this.sessionDone = {};
       this.$modules.close(this.module_id);
     },
 
@@ -1180,6 +1357,33 @@ export default {
     },
     formatDur(m) {
       return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}min` : ''}` : `${m}min`;
+    },
+    startNotesResize(e) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = this.notesWidth;
+      this.notesDragWidth = startWidth;
+      const onMove = (ev) => {
+        this.notesDragWidth = Math.min(480, Math.max(180, startWidth - (ev.clientX - startX)));
+      };
+      const onUp = () => {
+        this.notesWidth = this.notesDragWidth;
+        this.notesDragWidth = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    categoriaContrastColor(hex) {
+      const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex || '');
+      if (!m) return '#ffffff';
+      const full = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1];
+      const r = parseInt(full.substring(0, 2), 16);
+      const g = parseInt(full.substring(2, 4), 16);
+      const b = parseInt(full.substring(4, 6), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.55 ? '#000000' : '#ffffff';
     },
 
     /* ── music loader ── */
@@ -1603,11 +1807,23 @@ export default {
     deleteSelected() { this.dayItems = this.dayItems.filter(i => !i.selected); },
     markDone()       { this.dayItems = this.dayItems.map(i => i.selected && i.type !== 'categoria' ? { ...i, done: !i.done } : i); },
     toggleLock()     { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, locked: !i.locked } : i); },
-    showPresentation() {
-      const item = this.dayItems.find(i => i.selected && i.type === 'musica' && i.id_music) ||
-                   this.dayItems.find(i => i.type === 'musica' && i.id_music);
-      if (item) this.$media.open({ id_music: item.id_music, mode: 'audio' });
+
+    /* ── cronômetro de categoria (transitório, ver sessionDone acima) ── */
+    isItemDone(item) {
+      return item.type === 'categoria' ? !!this.sessionDone[item.id] : item.done;
     },
+    startCategoryTimer(item) {
+      if (this.timerInterval) clearInterval(this.timerInterval);
+      this.sessionDone = { ...this.sessionDone, [item.id]: true };
+      this.timerNow = Date.now();
+      this.activeTimer = { itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
+      this.timerInterval = setInterval(() => { this.timerNow = Date.now(); }, 1000);
+    },
+    stopCategoryTimer() {
+      if (this.timerInterval) { clearInterval(this.timerInterval); this.timerInterval = null; }
+      this.activeTimer = null;
+    },
+
     confirmClearAll() {
       if (!this.dayItems.length) return;
       this.clearAllDialog = true;
@@ -1763,6 +1979,69 @@ export default {
       this.copyDaysDialog = false;
     },
 
+    /* ── salvar / carregar / gerenciar liturgias nomeadas ── */
+    openSaveLiturgia() {
+      this.saveLiturgiaName = '';
+      this.saveLiturgiaScope = 'dia';
+      this.saveLiturgiaDialog = true;
+    },
+    confirmSaveLiturgia() {
+      const name = this.saveLiturgiaName.trim();
+      if (!name) return;
+      const entry = {
+        id: newId(),
+        name,
+        scope: this.saveLiturgiaScope,
+        dayLabel: this.saveLiturgiaScope === 'dia' ? this.currentTabLabel : null,
+        savedAt: Date.now(),
+      };
+      if (this.saveLiturgiaScope === 'dia') {
+        entry.payload = { items: this.dayItems, notes: this.dayNotes };
+      } else {
+        const days = {};
+        ALL_DAY_KEYS.forEach(k => {
+          days[k] = {
+            items: this.$userdata.get(`modules.liturgia.days.${k}.items`) || [],
+            notes: this.$userdata.get(`modules.liturgia.days.${k}.notes`) || '',
+          };
+        });
+        entry.payload = { days };
+      }
+      this.savedLiturgias = [...this.savedLiturgias, entry];
+      this.saveLiturgiaDialog = false;
+    },
+
+    openLoadLiturgia() {
+      this.loadLiturgiaConfirmId = null;
+      this.loadLiturgiaDialog = true;
+    },
+    askLoadLiturgia(id) { this.loadLiturgiaConfirmId = id; },
+    cancelLoadLiturgia() { this.loadLiturgiaConfirmId = null; },
+    applyLoadLiturgia(id) {
+      const entry = this.savedLiturgias.find(s => s.id === id);
+      if (!entry) return;
+      if (entry.scope === 'dia') {
+        this.dayItems = entry.payload.items;
+        this.dayNotes = entry.payload.notes;
+      } else {
+        Object.entries(entry.payload.days).forEach(([k, v]) => {
+          this.$userdata.set(`modules.liturgia.days.${k}.items`, v.items || []);
+          this.$userdata.set(`modules.liturgia.days.${k}.notes`, v.notes || '');
+        });
+      }
+      this.loadLiturgiaConfirmId = null;
+      this.loadLiturgiaDialog = false;
+    },
+    deleteSavedLiturgia(id) {
+      this.savedLiturgias = this.savedLiturgias.filter(s => s.id !== id);
+      if (this.loadLiturgiaConfirmId === id) this.loadLiturgiaConfirmId = null;
+    },
+    formatSavedDate(ts) {
+      return new Date(ts).toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+    },
+
     // Sincroniza a aba com o dia da semana de hoje só na primeira vez que o
     // painel abre em cada dia (compara com a última data sincronizada,
     // salva em $userdata) — reaberturas seguintes no MESMO dia preservam
@@ -1780,6 +2059,10 @@ export default {
     // estado restaurado do início do app) — o watch de "module.show" só
     // reage a mudanças depois de montado, não ao valor já vigente.
     if (this.module.show) this._syncDayIfNewDay();
+  },
+
+  unmounted() {
+    if (this.timerInterval) clearInterval(this.timerInterval);
   },
 };
 </script>
@@ -2023,6 +2306,27 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 .lt-item-name--categoria { text-align: center; font-weight: 700; }
+
+/* Linhas de categoria têm cor de fundo sólida escolhida pelo usuário —
+   texto/ícones fixos na cor do tema (on-surface) podem ficar ilegíveis
+   contra ela (ex: fundo escuro padrão + tema claro = texto escuro sobre
+   escuro). --lt-cat-fg é calculada por categoriaContrastColor() (preto ou
+   branco, conforme a luminância da cor escolhida) e sobrepõe as cores fixas
+   só nessas linhas. */
+.lt-item--categoria .lt-item-name,
+.lt-item--categoria .lt-drag-handle {
+  color: var(--lt-cat-fg);
+}
+.lt-item--categoria .lt-row-btn,
+.lt-item--categoria .lt-row-btn--del {
+  color: var(--lt-cat-fg);
+  opacity: 0.75;
+}
+.lt-item--categoria .lt-row-btn:hover:not(:disabled) {
+  color: var(--lt-cat-fg);
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.25);
+}
 .lt-item-sub  { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); }
 .lt-item-dur  { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); padding: 0 8px; white-space: nowrap; }
 .lt-item-lock { opacity: 0.4; margin-right: 4px; }
@@ -2062,8 +2366,19 @@ export default {
 .lt-item-music-menu :deep(.v-btn:hover) { color: rgb(var(--v-theme-on-surface)) !important; }
 
 /* ── Notes panel ── */
+.lt-notes-resizer {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+}
+.lt-notes-resizer:hover,
+.lt-notes-resizer:active {
+  background: rgba(var(--v-theme-primary), 0.4);
+}
+
 .lt-notes {
-  width: 240px;
   border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   flex-direction: column;
@@ -2174,6 +2489,23 @@ export default {
   align-items: center;
   flex-shrink: 0;
 }
+
+.lt-timer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: rgb(var(--v-theme-on-primary));
+  background: rgb(var(--v-theme-primary));
+}
+.lt-timer-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-timer-time { font-variant-numeric: tabular-nums; opacity: 0.9; }
+.lt-timer-time--over { color: #ffee58; }
+.lt-timer-bar .lt-btn-icon { color: inherit; }
+.lt-timer-bar .lt-btn-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); }
 
 /* ── Dialog form ── */
 /*
@@ -2445,5 +2777,43 @@ export default {
 .lt-copy-overwrite input {
   accent-color: rgb(var(--v-theme-primary));
   cursor: pointer;
+}
+
+/* Salvar/Carregar liturgias nomeadas */
+.lt-saved-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.lt-saved-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.lt-saved-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+.lt-saved-row:last-child { border-bottom: none; }
+.lt-saved-info { flex: 1; overflow: hidden; }
+.lt-saved-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgb(var(--v-theme-on-surface));
+}
+.lt-saved-meta {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.lt-saved-confirm-label {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  white-space: nowrap;
 }
 </style>
