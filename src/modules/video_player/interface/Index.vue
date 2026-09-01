@@ -9,6 +9,7 @@
     closable
     minimizable
     compact
+    eager
     @close="close()"
     @minimize="onMinimize()"
   >

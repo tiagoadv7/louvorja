@@ -3,6 +3,7 @@
     v-model="visible"
     scrollable
     persistent
+    :eager="eager"
     @click:outside="minimize"
     @keydown.esc="minimize"
     :width="w_width"
@@ -139,6 +140,19 @@ export default {
     titleClass: String,
     dark: Boolean,
     index: [Boolean, Number, String],
+    // Vuetify (VOverlay/useLazy) destrói o CONTEÚDO do v-dialog de novo toda
+    // vez que ele fecha (inclusive ao minimizar — Window.vue usa
+    // v-model="module.show" direto, e minimizar também vira show:false),
+    // não só antes da primeira abertura — ver node_modules/vuetify/lib/
+    // composables/lazy.js#onAfterLeave. Isso corta na hora qualquer estado
+    // que more DENTRO do componente (ex.: o <audio> do SoundMasterPanel,
+    // dentro da janela "Mídia"), mesmo com minimizar não devendo interromper
+    // nada — ao contrário de mídia/coletâneas, cujo áudio real vive fora
+    // dessa janela. eager=true mantém o conteúdo sempre montado (como os
+    // álbuns/coletâneas do sistema), em vez de recriar do zero a cada
+    // reabertura — só deve ser usado pelos poucos módulos que realmente
+    // guardam estado de reprodução dentro do próprio componente.
+    eager: Boolean,
     size: String,
     width: [String, Number],
     height: [String, Number],
