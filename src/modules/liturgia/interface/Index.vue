@@ -126,7 +126,7 @@
               <div
                 :class="['lt-item', {
                   'lt-item--selected': item.selected,
-                  'lt-item--done':     isItemDone(item),
+                  'lt-item--done':     item.done,
                   'lt-item--locked':   item.locked,
                   'lt-item--categoria': item.type === 'categoria',
                 }]"
@@ -161,17 +161,6 @@
                 </div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
                 <div class="lt-item-actions" @click.stop>
-                  <!-- Categoria: inicia o cronômetro dessa seção (com base na
-                       Duração configurada no item) e marca a categoria como
-                       concluída — marcação só desta sessão, ver isItemDone(). -->
-                  <button
-                    v-if="item.type === 'categoria'"
-                    class="lt-row-btn"
-                    :title="activeTimer && activeTimer.itemId === item.id ? 'Reiniciar Cronômetro' : 'Iniciar'"
-                    @click="startCategoryTimer(item)"
-                  >
-                    <v-icon size="15">{{ activeTimer && activeTimer.itemId === item.id ? 'mdi-timer-sand' : 'mdi-play-circle-outline' }}</v-icon>
-                  </button>
                   <!-- Link do YouTube: controles de reprodução (play/pause/parar,
                        com fade — ver $webLink/WebLinkFrame.vue) iguais aos do
                        video_player, em vez do botão de play genérico abaixo. -->
@@ -320,7 +309,7 @@
 
       </div>
 
-      <!-- ── BARRA DE CRONÔMETRO ATIVO (categoria ou item em execução) ── -->
+      <!-- ── BARRA DE CRONÔMETRO DO ITEM EM EXECUÇÃO ── -->
       <div v-if="activeTimer" class="lt-timer-bar">
         <v-icon size="15" class="me-1">mdi-timer-outline</v-icon>
         <span class="lt-timer-name">{{ activeTimer.name }}</span>
@@ -1089,13 +1078,11 @@ export default {
     listDragOver:  false,
     notesDragWidth: null,
 
-    // Cronômetro ativo (categoria OU item em execução, ver kind) + marcação
-    // "concluído" transitória da categoria — sessionDone/activeTimer não são
-    // persistidos em $userdata de propósito: devem voltar ao normal se a
-    // liturgia for fechada e reaberta, mesmo no mesmo dia. O "concluído" de
-    // item de verdade (kind:'item') usa markItemDone, que é persistido normalmente.
-    sessionDone:    {},
-    activeTimer:    null,   // { kind: 'categoria'|'item', itemId, name, budgetMin, startedAt }
+    // Cronômetro de execução do item que está tocando (música/mídia/áudio/
+    // apresentação) — não persistido de propósito: se a liturgia for fechada
+    // e reaberta, qualquer cronômetro em andamento é descartado (ver close()).
+    // Categorias não têm cronômetro/contador.
+    activeTimer:    null,   // { itemId, name, budgetMin, startedAt }
     timerNow:       Date.now(),
     timerInterval:  null,
     copyDaysDialog:    false,
@@ -1338,7 +1325,6 @@ export default {
     close() {
       this.clearAllSelections();
       this.stopActiveTimer();
-      this.sessionDone = {};
       this.$modules.close(this.module_id);
     },
 
@@ -1829,30 +1815,18 @@ export default {
     markDone()       { this.dayItems = this.dayItems.map(i => i.selected && i.type !== 'categoria' ? { ...i, done: !i.done } : i); },
     toggleLock()     { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, locked: !i.locked } : i); },
 
-    /* ── cronômetro de categoria e de item (música/mídia/áudio/apresentação) ── */
-    isItemDone(item) {
-      return item.type === 'categoria' ? !!this.sessionDone[item.id] : item.done;
-    },
-    // Categoria: "Iniciar" marca concluída na hora (transitório, ver
-    // sessionDone acima) e só usa o cronômetro pra mostrar o tempo decorrido.
-    startCategoryTimer(item) {
-      if (this.timerInterval) clearInterval(this.timerInterval);
-      this.sessionDone = { ...this.sessionDone, [item.id]: true };
-      this.timerNow = Date.now();
-      this.activeTimer = { kind: 'categoria', itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
-      this.timerInterval = setInterval(() => { this.timerNow = Date.now(); }, 1000);
-    },
-    // Música/mídia/áudio/apresentação: só marca concluído (de verdade, ver
-    // markItemDone) quando o tempo configurado no item realmente se esgota —
-    // ao contrário da categoria, aqui a barra representa o andamento real da
-    // execução, não uma marcação instantânea ao clicar em tocar.
+    /* ── cronômetro de execução (música/mídia/áudio/apresentação) ── */
+    // Só marca concluído (de verdade, ver markItemDone) quando o tempo
+    // configurado no item realmente se esgota — a barra representa o
+    // andamento real da execução, não uma marcação instantânea ao clicar em
+    // tocar. Categorias não têm cronômetro/contador.
     startItemTimer(item, idx) {
       if (this.timerInterval) clearInterval(this.timerInterval);
       this.timerNow = Date.now();
-      this.activeTimer = { kind: 'item', itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
+      this.activeTimer = { itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
       this.timerInterval = setInterval(() => {
         this.timerNow = Date.now();
-        if (this.activeTimer?.kind === 'item' && this.activeTimerOver) this.completeActiveItemTimer();
+        if (this.activeTimerOver) this.completeActiveItemTimer();
       }, 1000);
     },
     // Chamado ao tocar um item: se ele tem uma Duração configurada (manual ou
