@@ -83,6 +83,11 @@
           class="vp-preview-video"
           :style="previewImageStyle"
         />
+        <canvas
+          v-else-if="config.mediaType === 'pdf'"
+          ref="previewPdfCanvas"
+          class="vp-preview-video"
+        />
         <video v-else :key="config.src" :src="config.src" class="vp-preview-video" muted preload="metadata" />
         <div v-if="config.isFading" class="vp-preview-fading">
           <v-icon size="14">mdi-volume-low</v-icon> Efeito de fade em andamento…
@@ -126,9 +131,9 @@
             :class="['vp-playlist-item', { 'vp-playlist-item--active': config.currentId === item.id }]"
             @click="selectItem(item)"
           >
-            <v-icon size="16" class="vp-playlist-icon">{{ item.mediaType === 'image' ? 'mdi-image-outline' : 'mdi-filmstrip-box' }}</v-icon>
+            <v-icon size="16" class="vp-playlist-icon">{{ item.mediaType === 'image' ? 'mdi-image-outline' : item.mediaType === 'pdf' ? 'mdi-file-pdf-box' : 'mdi-filmstrip-box' }}</v-icon>
             <div class="vp-playlist-name" :title="item.path">{{ item.name }}</div>
-            <div class="vp-playlist-dur">{{ item.mediaType === 'image' ? '' : (item.duration ? fmt(item.duration) : '…') }}</div>
+            <div class="vp-playlist-dur">{{ item.mediaType === 'video' ? (item.duration ? fmt(item.duration) : '…') : '' }}</div>
             <button class="vp-playlist-del" @click.stop="removeFromPlaylist(item)">
               <v-icon size="13">mdi-close</v-icon>
             </button>
@@ -137,7 +142,7 @@
       </div>
 
       <!-- ── Transporte (vídeo: play/volume/talkover/loop) ─────────────────── -->
-      <div class="vp-transport" v-if="config.mediaType !== 'image'">
+      <div class="vp-transport" v-if="config.mediaType !== 'image' && config.mediaType !== 'pdf'">
         <button class="vp-tp-btn vp-tp-btn--play" :disabled="!config.src" @click="togglePlay">
           <v-icon size="20">{{ config.isPlaying ? 'mdi-pause' : 'mdi-play' }}</v-icon>
         </button>
@@ -176,6 +181,20 @@
 
         <button class="vp-repeat-btn" :class="{ 'vp-repeat-btn--on': config.loop }" @click="toggleLoop">
           <v-icon size="15">mdi-repeat</v-icon> Repetir
+        </button>
+      </div>
+
+      <!-- ── Transporte (PDF: navegação de página, igual FreeShow) ─────────── -->
+      <div class="vp-transport" v-else-if="config.mediaType === 'pdf'">
+        <button class="vp-tp-btn vp-tp-btn--stop" :disabled="!config.src" @click="stop" title="Parar exibição">
+          <v-icon size="18">mdi-stop</v-icon>
+        </button>
+        <button class="vp-tp-btn" :disabled="!config.src || config.pdfPage <= 1" title="Página anterior" @click="$videoPlayer.prevPdfPage()">
+          <v-icon size="20">mdi-chevron-left</v-icon>
+        </button>
+        <span class="vp-image-hint">Página {{ config.pdfPage }} / {{ config.pdfPageCount || '…' }}</span>
+        <button class="vp-tp-btn" :disabled="!config.src || config.pdfPage >= config.pdfPageCount" title="Próxima página" @click="$videoPlayer.nextPdfPage()">
+          <v-icon size="20">mdi-chevron-right</v-icon>
         </button>
       </div>
 
@@ -255,6 +274,7 @@ import LReturnScreenBtn from '@/components/buttons/ReturnScreen.vue';
 import LCustomizationTools from '@/components/CustomizationTools.vue';
 import SoundMasterPanel from '../components/SoundMasterPanel.vue';
 import $audioBus from '@/helpers/AudioBus';
+import $pdfRenderer from '@/helpers/PdfRenderer';
 
 // Posição/tamanho padrão da aba "Overlay de Imagem" — mesmos valores de
 // image_overlay/interface/Index.vue (agora um stub; a UI de verdade vive
@@ -357,6 +377,15 @@ export default {
         this.$modules.open('soundmaster');
       }
     },
+    // Prévia de PDF no painel do operador — mesmo canvas, escala menor que a
+    // da projeção (ver Popup.vue). Também precisa reagir a troca de página,
+    // não só de arquivo.
+    'config.src'(src) {
+      if (this.config.mediaType === 'pdf' && src) this.$nextTick(() => this._renderPreviewPdf());
+    },
+    'config.pdfPage'() {
+      if (this.config.mediaType === 'pdf' && this.config.src) this._renderPreviewPdf();
+    },
   },
 
   methods: {
@@ -434,12 +463,13 @@ export default {
 
     async pickVideos() {
       const fps = await this.$electron.selectFile({
-        title: 'Selecionar vídeos ou imagens',
+        title: 'Selecionar vídeos, imagens ou PDF',
         multiple: true,
         filters: [
-          { name: 'Vídeo ou Imagem', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          { name: 'Vídeo, Imagem ou PDF', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'] },
           { name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] },
           { name: 'Imagem', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          { name: 'PDF', extensions: ['pdf'] },
         ],
       });
       const list = Array.isArray(fps) ? fps : (fps ? [fps] : []);
@@ -449,6 +479,19 @@ export default {
     rotateLeft()  { this.$videoPlayer.rotateBy(-90); },
     rotateRight() { this.$videoPlayer.rotateBy(90); },
     toggleFlip()  { this.$videoPlayer.toggleFlip(); },
+
+    // Prévia de PDF no painel do operador — mesma renderização da projeção
+    // (ver PdfRenderer/Popup.vue), só que numa escala menor (é só uma
+    // miniatura de referência, igual ao <video muted> ao lado pro vídeo).
+    async _renderPreviewPdf() {
+      const canvas = this.$refs.previewPdfCanvas;
+      if (!canvas || !this.config.path) return;
+      try {
+        await $pdfRenderer.renderPage(this.config.path, this.config.pdfPage || 1, canvas, 1.5);
+      } catch (e) {
+        console.error('[video_player] Falha ao renderizar prévia do PDF:', e);
+      }
+    },
 
     onDropFiles(e) {
       const files = [...(e.dataTransfer?.files || [])];
@@ -644,6 +687,7 @@ export default {
   },
 
   async mounted() {
+    if (this.config.mediaType === 'pdf' && this.config.src) this.$nextTick(() => this._renderPreviewPdf());
     // Outro dono de áudio (SoundMaster/Media) pediu foco: o Popup.vue (janela
     // de saída) já reage sozinho e para na hora — mas escritas feitas por ele
     // (is_popup=true) nunca voltam pra esta janela (ver AppData.js). Sem este

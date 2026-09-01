@@ -32,6 +32,10 @@ function isImageFile(fp) {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
+function isPdfFile(fp) {
+  return (fp || "").split(".").pop()?.toLowerCase() === "pdf";
+}
+
 // Cria um <video> descartável só para ler a duração do arquivo.
 function probeDuration(src) {
   return new Promise((resolve) => {
@@ -53,17 +57,29 @@ function emptyConfig() {
     volume: 100, talkover: false, talkoverLevel: 20,
     currentTime: 0, duration: 0, isFading: false,
     stopToken: 0,
-    // "video" (padrão) ou "image" — imagem não usa play/pause/volume/talkover,
-    // só rotation/flip para corrigir orientação na tela de projeção.
+    // "video" (padrão), "image" ou "pdf" — imagem/pdf não usam
+    // play/pause/volume/talkover; imagem só rotation/flip, pdf só
+    // pdfPage/pdfPageCount (navegação de página, igual ao FreeShow).
     mediaType: "video",
     rotation: 0,
     flip: false,
+    pdfPage: 1,
+    pdfPageCount: 0,
   };
+}
+
+// "video" (padrão), "image" ou "pdf" — usado em todo lugar que decide o
+// mediaType a partir só do caminho do arquivo.
+function resolveMediaType(fp) {
+  if (isImageFile(fp)) return "image";
+  if (isPdfFile(fp)) return "pdf";
+  return "video";
 }
 
 export default {
   toFileUrl,
   isImageFile,
+  isPdfFile,
 
   getConfig() {
     return { ...emptyConfig(), ...($appdata.get("modules.video_player.config") || {}) };
@@ -101,20 +117,30 @@ export default {
 
     const id = Date.now() + Math.random();
     const src = toFileUrl(fp);
-    const image = isImageFile(fp);
+    const mediaType = resolveMediaType(fp);
     const item = {
       id, path: fp, src, name: name || fp.split(/[\\/]/).pop(),
-      duration: image ? 0 : null,
-      mediaType: image ? "image" : "video",
+      duration: mediaType === "video" ? null : 0,
+      mediaType,
       rotation: 0,
       flip: false,
     };
     this.setPlaylist([...this.getPlaylist(), item]);
 
-    if (!image) {
+    if (mediaType === "video") {
       probeDuration(src).then((duration) => {
         this.setPlaylist(this.getPlaylist().map((p) => (p.id === id ? { ...p, duration } : p)));
       });
+    } else if (mediaType === "pdf") {
+      // Igual à duração do vídeo acima: descobre a contagem de páginas de
+      // forma assíncrona e completa o item na fila depois — sem isso,
+      // selectPlaylistItem() nunca saberia até onde ir (pdfPageCount ficaria
+      // sempre 0, travando os botões de próxima/anterior página).
+      import("@/helpers/PdfRenderer").then(({ default: PdfRenderer }) =>
+        PdfRenderer.getPageCount(fp).then((pdfPageCount) => {
+          this.setPlaylist(this.getPlaylist().map((p) => (p.id === id ? { ...p, pdfPageCount } : p)));
+        })
+      ).catch((e) => console.error("[VideoPlayer] Falha ao contar páginas do PDF:", e));
     }
 
     return item;
@@ -184,15 +210,17 @@ export default {
   // já aparece sozinha (Popup.vue não depende de isPlaying pra exibi-la); aqui
   // só falta o vídeo também tocar automaticamente pra ter o mesmo comportamento.
   selectPlaylistItem(item) {
-    const image = item.mediaType === "image" || isImageFile(item.path);
+    const mediaType = item.mediaType || resolveMediaType(item.path);
     const isProjecting = $appdata.get("popup") && $appdata.get("popup_module") === "video_player";
     this.setConfig({
       src: item.src, path: item.path, name: item.name, currentId: item.id,
-      mediaType: image ? "image" : "video",
+      mediaType,
       rotation: item.rotation || 0,
       flip: !!item.flip,
-      isPlaying: isProjecting && !image, currentTime: 0, duration: item.duration || 0,
+      isPlaying: isProjecting && mediaType === "video", currentTime: 0, duration: item.duration || 0,
       loop: false,
+      pdfPage: 1,
+      pdfPageCount: mediaType === "pdf" ? (item.pdfPageCount || 0) : 0,
     });
   },
 
@@ -201,41 +229,76 @@ export default {
   // sem que ele apareça na playlist do módulo Vídeo.
   _buildTransientItem(fp, name) {
     const src = toFileUrl(fp);
-    const image = isImageFile(fp);
     return {
       id: Date.now() + Math.random(),
       path: fp, src, name: name || fp.split(/[\\/]/).pop(),
-      mediaType: image ? "image" : "video",
+      mediaType: resolveMediaType(fp),
       rotation: 0,
       flip: false,
     };
   },
 
   // Abre (adiciona se necessário) e já manda tocar — usado por outros módulos
-  // (ex. Liturgia) para reproduzir um vídeo ou exibir uma imagem local direto
-  // no player/projeção. addToPlaylist:false (padrão true) toca sem gravar o
-  // arquivo na fila do módulo Vídeo — reprodução avulsa, ex. item da Liturgia.
-  open(fp, name, { addToPlaylist = true } = {}) {
+  // (ex. Liturgia) para reproduzir um vídeo, exibir uma imagem ou projetar um
+  // PDF (página a página, igual ao FreeShow) local direto no player/projeção.
+  // addToPlaylist:false (padrão true) toca sem gravar o arquivo na fila do
+  // módulo Vídeo — reprodução avulsa, ex. item da Liturgia.
+  async open(fp, name, { addToPlaylist = true } = {}) {
     if (!fp) return;
     const item = addToPlaylist ? this.addToPlaylist(fp, name) : this._buildTransientItem(fp, name);
     // Sem isso, "modules.video_player.show" nunca vira true e o Popup.vue da
     // tela de saída nunca considera o módulo ativo (fica sem renderizar nada).
     $modules.open("video_player");
     this.ensureOutputShowing();
-    const image = item.mediaType === "image";
+    const isVideo = item.mediaType === "video";
     // Avisa media/soundmaster JÁ AQUI (não só quando o <video> da janela de
     // saída montar) — sem isso, se a janela de saída ainda não estava aberta,
     // o pedido de foco só chegava depois que ela terminasse de carregar, e a
     // música do álbum continuava tocando por cima durante esse intervalo.
-    if (!image) $audioBus.requestFocus("video_player");
+    // Imagem e PDF não têm áudio próprio — não fazem sentido disputar foco.
+    if (isVideo) $audioBus.requestFocus("video_player");
+
+    // PDF precisa saber o total de páginas ANTES de abrir (senão os botões de
+    // próxima/anterior não sabem até onde ir) — o helper já mantém o
+    // documento em cache, então isso não recarrega o arquivo de novo quando
+    // Popup.vue/a prévia do operador forem renderizar a primeira página.
+    let pdfPageCount = 0;
+    if (item.mediaType === "pdf") {
+      try {
+        const PdfRenderer = (await import("@/helpers/PdfRenderer")).default;
+        pdfPageCount = await PdfRenderer.getPageCount(item.path);
+      } catch (e) {
+        console.error("[VideoPlayer] Falha ao abrir PDF:", e);
+        return;
+      }
+    }
+
     this.setConfig({
       src: item.src, path: item.path, name: item.name, currentId: item.id,
-      mediaType: image ? "image" : "video",
+      mediaType: item.mediaType,
       rotation: item.rotation || 0,
       flip: !!item.flip,
-      isPlaying: !image, currentTime: 0,
+      isPlaying: isVideo, currentTime: 0,
       loop: false,
+      pdfPage: 1,
+      pdfPageCount,
     });
+  },
+
+  // Navegação de página do PDF — igual ao botão de próxima/anterior slide do
+  // FreeShow. Sem áudio/tempo pra falar, só o número da página em si.
+  setPdfPage(page) {
+    const config = this.getConfig();
+    if (config.mediaType !== "pdf" || !config.pdfPageCount) return;
+    this.setConfig({ pdfPage: Math.max(1, Math.min(page, config.pdfPageCount)) });
+  },
+  nextPdfPage() {
+    const config = this.getConfig();
+    this.setPdfPage((config.pdfPage || 1) + 1);
+  },
+  prevPdfPage() {
+    const config = this.getConfig();
+    this.setPdfPage((config.pdfPage || 1) - 1);
   },
 
   // Gira a imagem atual em incrementos de 90° (normalizado para 0-270) e

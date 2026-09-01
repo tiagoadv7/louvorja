@@ -7,6 +7,12 @@
       :class="{ 'vp-image--fading': imageFading }"
       :style="imageStyle"
     />
+    <canvas
+      v-else-if="config.mediaType === 'pdf'"
+      ref="pdfCanvas"
+      class="vp-pdf"
+      :class="{ 'vp-pdf--fading': pdfFading }"
+    />
     <video
       v-else
       ref="video"
@@ -24,6 +30,7 @@
 <script>
 import manifest from '../manifest.json';
 import $audioBus from '@/helpers/AudioBus';
+import $pdfRenderer from '@/helpers/PdfRenderer';
 
 // Mesmos números do player de referência (github.com/tiagoadv7/Player-Video):
 // fade-in em passos de 0.05 a cada 100ms, fade-out em passos de 0.05 a cada 50ms,
@@ -37,6 +44,7 @@ export default {
     closingHold:   false, // mantém o <video> montado durante o fade de fechamento
     visualFading:  true,  // começa transparente — só fica visível ao dar play (fade-in)
     imageFading:   true,  // idem, para o modo imagem (sem áudio pra sincronizar)
+    pdfFading:     true,  // idem, para o modo PDF (mesma lógica da imagem, uma página por vez)
     // Src de fato ligado no <video> (ver watch de "config.src" abaixo) — não é
     // um alias direto de config.src porque, ao trocar de vídeo com áudio
     // tocando, precisamos esmaecer o volume do vídeo ANTIGO antes de soltar o
@@ -80,6 +88,7 @@ export default {
     },
     'config.stopToken'() {
       if (this.config.mediaType === 'image') { this._closeImageWithFade(true); return; }
+      if (this.config.mediaType === 'pdf') { this._closePdfWithFade(true); return; }
       this._stopWithFade();
     },
     'config.volume'(v) {
@@ -99,6 +108,10 @@ export default {
         if (src) this._fadeImageIn();
         return;
       }
+      if (this.config.mediaType === 'pdf') {
+        if (src) this._fadePdfIn();
+        return;
+      }
       const el = this.$refs.video;
       // Troca de vídeo com áudio tocando (ex.: próximo item da playlist) —
       // esmaece o volume do vídeo atual antes de soltar o elemento pro
@@ -114,6 +127,13 @@ export default {
         this.renderedSrc = src;
         this.$nextTick(() => this.$refs.video?.load());
       }
+    },
+    // Botão de próxima/anterior página (Index.vue) — só re-renderiza a
+    // página nova no MESMO canvas, sem fade nenhum (troca de página dentro
+    // do mesmo PDF é instantânea, igual a virar slide no FreeShow; o fade só
+    // acontece ao abrir um PDF novo ou encerrar, ver config.src/stopToken).
+    'config.pdfPage'() {
+      if (this.config.mediaType === 'pdf' && this.config.src) this._renderPdfPage();
     },
     'config.currentTime'(t) {
       // Seek vindo do controle remoto (Index.vue) — só aplica se a diferença for
@@ -211,6 +231,16 @@ export default {
         requestAnimationFrame(() => { this.imageFading = false; });
       });
     },
+    // PDF: renderiza a primeira página e só então esmaece pra dentro — sem
+    // isso, o fade rodaria sobre o canvas ainda em branco (renderPage é
+    // assíncrono) e a página apareceria de repente já com opacidade 1.
+    async _fadePdfIn() {
+      this.pdfFading = true;
+      await this._renderPdfPage();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { this.pdfFading = false; });
+      });
+    },
     // clearSrc=true (usado pelo botão "Parar exibição"/stopToken): depois do
     // fade, limpa o src para a imagem não reaparecer sozinha se o módulo for
     // reaberto. clearSrc=false (módulo fechado/minimizado): só sai da tela,
@@ -219,6 +249,29 @@ export default {
     _closeImageWithFade(clearSrc = false) {
       this.closingHold = true;
       this.imageFading = true;
+      setTimeout(() => {
+        this.closingHold = false;
+        if (clearSrc) this.$appdata.set('modules.video_player.config.src', '');
+      }, 1000);
+    },
+
+    // Renderiza a página atual do PDF no canvas — pdfjs-dist mantém o
+    // documento em cache (ver helpers/PdfRenderer), então trocar de página
+    // não relê o arquivo do disco de novo, só a página em si.
+    async _renderPdfPage() {
+      const canvas = this.$refs.pdfCanvas;
+      if (!canvas || !this.config.path) return;
+      try {
+        await $pdfRenderer.renderPage(this.config.path, this.config.pdfPage || 1, canvas);
+      } catch (e) {
+        console.error('[video_player] Falha ao renderizar PDF:', e);
+      }
+    },
+    // Mesma lógica de _closeImageWithFade — PDF também não tem áudio pra
+    // sincronizar, só o fade visual do canvas.
+    _closePdfWithFade(clearSrc = false) {
+      this.closingHold = true;
+      this.pdfFading = true;
       setTimeout(() => {
         this.closingHold = false;
         if (clearSrc) this.$appdata.set('modules.video_player.config.src', '');
@@ -293,8 +346,9 @@ export default {
 
   mounted() {
     if (this.config.mediaType === 'image' && this.config.src) this._fadeImageIn();
+    if (this.config.mediaType === 'pdf' && this.config.src) this._fadePdfIn();
     // Primeira montagem: nada tocando ainda pra esmaecer — liga direto.
-    if (this.config.mediaType !== 'image' && this.config.src) this.renderedSrc = this.config.src;
+    if (this.config.mediaType !== 'image' && this.config.mediaType !== 'pdf' && this.config.src) this.renderedSrc = this.config.src;
 
     // Outro dono (ex: SoundMaster tocando uma música da coletânea, ou o Media)
     // pediu foco — para de verdade (não só pausa): o vídeo some da projeção
@@ -314,6 +368,7 @@ export default {
     // sobra pro fade (a janela só é destruída ~450ms depois deste evento).
     this._closingHandler = this.$electron.on('output-closing', () => {
       if (this.config.mediaType === 'image') this._closeImageWithFade();
+      else if (this.config.mediaType === 'pdf') this._closePdfWithFade();
       else this._closeWithFade();
     });
     // ESC aqui tem o MESMO efeito do botão "Parar" (fade completo, sem prazo
@@ -324,6 +379,7 @@ export default {
     this._escHandler = (e) => {
       if (e.key !== 'Escape') return;
       if (this.config.mediaType === 'image') this._closeImageWithFade(true);
+      else if (this.config.mediaType === 'pdf') this._closePdfWithFade(true);
       else this._stopWithFade();
     };
     document.addEventListener('keydown', this._escHandler);
@@ -370,4 +426,13 @@ export default {
   transition: opacity 1s ease-out, transform 0.25s ease;
 }
 .vp-image--fading { opacity: 0; }
+
+.vp-pdf {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 1;
+  transition: opacity 1s ease-out;
+}
+.vp-pdf--fading { opacity: 0; }
 </style>

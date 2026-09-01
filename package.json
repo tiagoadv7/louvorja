@@ -45,6 +45,7 @@
     "fs-extra": "^11.2.0",
     "heic2any": "^0.0.4",
     "jszip": "^3.10.1",
+    "pdfjs-dist": "^6.3.289",
     "qrcode": "^1.5.4",
     "roboto-fontface": "*",
     "sql.js": "^1.14.1",

@@ -730,6 +730,16 @@ function isVideoFile(path) {
   return VIDEO_EXTENSIONS.has(ext);
 }
 
+const POWERPOINT_EXTENSIONS = new Set(['ppt', 'pptx']);
+function isPowerPointFile(path) {
+  const ext = (path || '').split('.').pop()?.toLowerCase();
+  return POWERPOINT_EXTENSIONS.has(ext);
+}
+
+function isPdfFile(path) {
+  return (path || '').split('.').pop()?.toLowerCase() === 'pdf';
+}
+
 // Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
 // com os campos do item, e uma seção [Geral] cujas chaves numéricas (1-7)
 // listam, em ordem e separados por ";", os ids dos itens de cada dia.
@@ -1155,13 +1165,17 @@ export default {
     // precisar de um tipo de item separado para cada mídia.
     itemIcon(item) {
       if (item.type === 'midia' && isImageFile(item.url)) return 'mdi-image-outline';
+      if (item.type === 'midia' && isPdfFile(item.url)) return 'mdi-file-pdf-box';
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'mdi-music-note';
+      if (item.type === 'arquivo' && isPowerPointFile(item.url)) return 'mdi-microsoft-powerpoint';
       return this.typeIcon(item.type);
     },
     itemTypeLabel(item) {
       if (item.type === 'musica' && !item.id_music) return 'Clique para escolher a música';
       if (item.type === 'midia' && isImageFile(item.url)) return 'Imagem';
+      if (item.type === 'midia' && isPdfFile(item.url)) return 'PDF';
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'Áudio';
+      if (item.type === 'arquivo' && isPowerPointFile(item.url)) return 'Apresentação (PowerPoint)';
       return this.typeLabel(item.type);
     },
     formatDur(m) {
@@ -1288,17 +1302,20 @@ export default {
         title: 'Selecionar arquivo',
         filters: [
           {
-            name: 'Vídeo, Imagem ou Áudio',
-            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
+            name: 'Vídeo, Imagem, PDF, PowerPoint ou Áudio',
+            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf', 'ppt', 'pptx', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
           },
           { name: 'Vídeo', extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'] },
           { name: 'Imagem', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+          { name: 'PDF', extensions: ['pdf'] },
+          { name: 'PowerPoint', extensions: ['ppt', 'pptx'] },
           { name: 'Áudio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'] },
           { name: 'Todos os arquivos', extensions: ['*'] },
         ],
       });
       if (fp) {
         this.form.url = fp;
+        this.form.type = this.resolvedType('midia', fp);
         if (!this.form.name.trim()) {
           this.form.name = fp.split(/[\\/]/).pop() || '';
         }
@@ -1430,7 +1447,6 @@ export default {
       this.dayItems = l;
     },
     toggleSelect(idx) {
-      if (this.dayItems[idx]?.type === 'categoria') return;
       const l = [...this.dayItems];
       l[idx] = { ...l[idx], selected: !l[idx].selected };
       this.dayItems = l;
@@ -1482,7 +1498,7 @@ export default {
     // type:'arquivo' e playItem() tentava tocar o vídeo no SoundMaster.
     resolvedType(type, url) {
       if (type !== 'midia' && type !== 'arquivo') return type;
-      return (isImageFile(url) || isVideoFile(url)) ? 'midia' : 'arquivo';
+      return (isImageFile(url) || isVideoFile(url) || isPdfFile(url)) ? 'midia' : 'arquivo';
     },
     // "midia"/"arquivo" guardam um caminho absoluto do disco — ao importar uma
     // liturgia (.ja) exportada de outro computador, esse caminho quase sempre
@@ -1501,6 +1517,13 @@ export default {
       // Projeta em tela cheia na janela de saída (Canva, YouTube, qualquer
       // link) em vez de abrir no navegador externo do Windows.
       else if (item.type === 'link' && item.url) this.$webLink.open(item.url);
+      // PowerPoint não é projetado (ao contrário de vídeo/imagem/PDF) — abre
+      // direto no PowerPoint/aplicativo nativo instalado no computador, igual
+      // a dar duplo-clique no arquivo pelo Explorer (shell.openPath cuida de
+      // achar o programa certo). Precisa vir ANTES do ramo genérico de
+      // "arquivo" abaixo, senão tentaria tocar o .pptx como áudio no
+      // SoundMaster.
+      else if (item.type === 'arquivo' && item.url && isPowerPointFile(item.url)) this.$electron.shellOpenFolder(item.url);
       else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
       if (idx != null) this.markItemDone(idx);
     },
@@ -1537,8 +1560,8 @@ export default {
         title: 'Selecionar arquivo',
         filters: [
           {
-            name: 'Vídeo, Imagem ou Áudio',
-            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
+            name: 'Vídeo, Imagem, PDF, PowerPoint ou Áudio',
+            extensions: ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf', 'ppt', 'pptx', 'mp3', 'wav', 'flac', 'm4a', 'aac'],
           },
           { name: 'Todos os arquivos', extensions: ['*'] },
         ],
@@ -1568,13 +1591,15 @@ export default {
     },
 
     /* ── toolbar ── */
+    // Categorias (separadores) agora contam como itens normais pra seleção —
+    // sem isso, "Copiar p/ Outros Dias" nunca incluía os separadores, e uma
+    // liturgia colada em outro dia vinha sem nenhuma seção organizada.
     toggleSelectAll() {
-      const selectable = this.dayItems.filter(i => i.type !== 'categoria');
-      const allSelected = selectable.length > 0 && selectable.every(i => i.selected);
-      this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: !allSelected });
+      const allSelected = this.dayItems.length > 0 && this.dayItems.every(i => i.selected);
+      this.dayItems = this.dayItems.map(i => ({ ...i, selected: !allSelected }));
     },
-    deselectAll()    { this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: false }); },
-    invertSel()      { this.dayItems = this.dayItems.map(i => i.type === 'categoria' ? i : { ...i, selected: !i.selected }); },
+    deselectAll()    { this.dayItems = this.dayItems.map(i => ({ ...i, selected: false })); },
+    invertSel()      { this.dayItems = this.dayItems.map(i => ({ ...i, selected: !i.selected })); },
     deleteSelected() { this.dayItems = this.dayItems.filter(i => !i.selected); },
     markDone()       { this.dayItems = this.dayItems.map(i => i.selected && i.type !== 'categoria' ? { ...i, done: !i.done } : i); },
     toggleLock()     { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, locked: !i.locked } : i); },
@@ -1693,7 +1718,7 @@ export default {
         const fp = this.$electron.getPathForFile(f);
         if (!fp) return null;
         const name = f.name.replace(/\.[^./\\]+$/, '') || f.name;
-        const visual = isImageFile(fp) || isVideoFile(fp);
+        const visual = isImageFile(fp) || isVideoFile(fp) || isPdfFile(fp);
         return {
           id: newId(),
           type: visual ? 'midia' : 'arquivo',
