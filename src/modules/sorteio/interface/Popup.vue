@@ -22,7 +22,7 @@
     </div>
 
     <!-- Centro: roda -->
-    <div class="rp-wheel-area">
+    <div class="rp-wheel-area" ref="wheelAreaEl">
       <div class="rp-wheel-wrap">
         <RouletteWheel
           ref="rouletteWheel"
@@ -90,6 +90,11 @@ export default {
     _lastSpinId:   0,
     _spinTimer:    null,
     _winnerTimer:  null,
+    // Tamanho medido do container da roda — mesma técnica de Screen.vue
+    // (fontSizePx), pra "Tamanho do Texto" também escalar o nome do
+    // vencedor projetado no modo roleta, e não só no modo números/nomes.
+    rp_width:      0,
+    rp_height:     0,
   }),
 
   computed: {
@@ -131,8 +136,19 @@ export default {
       return { background: color };
     },
 
+    // Mesma fórmula de Screen.vue#fontSizePx (porcentagem do menor lado do
+    // container) — antes o modo roleta ignorava "Tamanho do Texto" (font_size)
+    // por completo, sempre usando o clamp() fixo do CSS.
+    fontSizePx() {
+      const pc = this.userdata.font_size || 30;
+      const v = Math.min(this.rp_width, this.rp_height);
+      if (v <= 0) return 60;
+      return (pc * v) / 100 / 2;
+    },
+    panelFontSizePx() { return this.userdata.panel_font_size || 14; },
+
     winnerNameStyle() {
-      return { color: this.fontColor };
+      return { color: this.fontColor, fontSize: `${this.fontSizePx}px` };
     },
 
     panelBorderStyle() {
@@ -144,11 +160,11 @@ export default {
     },
 
     chipStyle() {
-      return { background: `${this.fontColor}18`, color: this.fontColor };
+      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px` };
     },
 
     chipDrawnStyle() {
-      return { background: `${this.fontColor}0a`, color: this.fontColor, opacity: 0.4, textDecoration: 'line-through' };
+      return { background: `${this.fontColor}0a`, color: this.fontColor, opacity: 0.4, textDecoration: 'line-through', fontSize: `${this.panelFontSizePx}px` };
     },
 
     showParticipants() {
@@ -217,6 +233,14 @@ export default {
         });
       }, 120);
     },
+
+    // "isActive && isRoulette" no template é v-if — o .rp-wheel-area só passa
+    // a existir no DOM quando entra no modo roleta, então precisa remedir
+    // toda vez que isso acontece (mounted() não roda de novo pra esse
+    // subtree, só pro componente inteiro).
+    isRoulette(val) {
+      if (val) this.$nextTick(() => this.rpWindowResize());
+    },
   },
 
   methods: {
@@ -241,9 +265,27 @@ export default {
         '--delay': delay + 's',
       };
     },
+
+    // Mesma técnica de Screen.vue#windowResize.
+    rpWindowResize() {
+      const el = this.$refs.wheelAreaEl;
+      if (el) {
+        this.rp_width = el.offsetWidth;
+        this.rp_height = el.offsetHeight;
+        if (this.rp_width <= 0 || this.rp_height <= 0) {
+          setTimeout(() => this.rpWindowResize(), 100);
+        }
+      }
+    },
+  },
+
+  mounted() {
+    if (this.isRoulette) this.rpWindowResize();
+    window.addEventListener('resize', this.rpWindowResize);
   },
 
   beforeUnmount() {
+    window.removeEventListener('resize', this.rpWindowResize);
     if (this._spinTimer)  clearTimeout(this._spinTimer);
     if (this._winnerTimer) clearTimeout(this._winnerTimer);
   },

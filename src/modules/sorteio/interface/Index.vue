@@ -360,7 +360,7 @@
             class="roulette-item-row"
             :class="{ 'roulette-item-drawn': rouletteDrawn.includes(item) }"
           >
-            <span class="roulette-item-text">{{ item }}</span>
+            <span class="roulette-item-text" :style="roulettePanelTextStyle">{{ item }}</span>
             <v-btn icon size="x-small" variant="text" color="error" @click="rouletteRemoveItem(idx)">
               <v-icon size="14">mdi-close</v-icon>
             </v-btn>
@@ -400,7 +400,7 @@
       </div>
 
       <!-- Centro: roleta -->
-      <div class="roulette-center">
+      <div class="roulette-center" ref="rouletteCenterEl">
         <div class="roulette-wheel-wrap">
           <RouletteWheel
             ref="rouletteWheel"
@@ -431,7 +431,7 @@
             class="roulette-item-row roulette-item-history"
           >
             <span class="roulette-item-num">{{ idx + 1 }}.</span>
-            <span class="roulette-item-text">{{ item }}</span>
+            <span class="roulette-item-text" :style="roulettePanelTextStyle">{{ item }}</span>
           </div>
           <div v-if="rouletteDrawn.length === 0" class="roulette-panel__empty">-</div>
         </div>
@@ -622,6 +622,11 @@ export default {
     rouletteSpinning:     false,
     rouletteCurrentWinner: null,
     _winnerTimer:         null,
+    // Tamanho medido do container da roleta, pra escalar o nome do vencedor
+    // igual ao modo números/nomes (ver Screen.vue#fontSizePx) — sem isso,
+    // "Tamanho do Texto" (font_size) não tinha efeito nenhum no modo roleta.
+    rw_width:             0,
+    rw_height:            0,
     // Google Forms
     showFormsDialog:    false,
     formsCsvText:       "",
@@ -749,8 +754,31 @@ export default {
       return `${this.rouletteColor}33`;
     },
 
+    // Mesma fórmula de Screen.vue#fontSizePx (porcentagem do menor lado do
+    // container) — aplicada aqui ao container da roleta em vez do container
+    // do modo números/nomes.
+    rouletteFontSizePx() {
+      const pc = this.userdata.font_size || 30;
+      const v = Math.min(this.rw_width, this.rw_height);
+      // Container ainda não medido (aba recém-trocada, ver watch de
+      // activeTab) — fallback fixo em vez de "0px" por um instante.
+      if (v <= 0) return 28;
+      return (pc * v) / 100 / 2;
+    },
+    roulettePanelFontSizePx() { return this.userdata.panel_font_size || 14; },
     winnerTopStyle() {
-      return { color: this.rouletteColor };
+      return { color: this.rouletteColor, fontSize: `${this.rouletteFontSizePx}px` };
+    },
+    roulettePanelTextStyle() {
+      return { fontSize: `${this.roulettePanelFontSizePx}px` };
+    },
+  },
+  watch: {
+    // A aba roleta usa v-show (fica no DOM, só escondida via CSS) — enquanto
+    // escondida, o container mede largura/altura 0, então o tamanho do nome
+    // do vencedor precisa ser remedido assim que a aba for exibida de verdade.
+    activeTab(val) {
+      if (val === "roulette") this.$nextTick(() => this.rouletteWindowResize());
     },
   },
   methods: {
@@ -988,6 +1016,20 @@ export default {
       if (this.$refs.rouletteWheel) this.$refs.rouletteWheel.spin();
     },
 
+    // Mesma técnica de Screen.vue#windowResize — mede o container de verdade
+    // em vez de assumir vw/vh, então o nome do vencedor escala certo tanto
+    // aqui (painel pequeno do operador) quanto na projeção (Popup.vue).
+    rouletteWindowResize() {
+      const el = this.$refs.rouletteCenterEl;
+      if (el) {
+        this.rw_width = el.offsetWidth;
+        this.rw_height = el.offsetHeight;
+        if (this.rw_width <= 0 || this.rw_height <= 0) {
+          setTimeout(() => this.rouletteWindowResize(), 100);
+        }
+      }
+    },
+
     onRouletteWinner(winner) {
       this.rouletteSpinning      = false;
       this.rouletteCurrentWinner = winner;
@@ -1140,6 +1182,8 @@ export default {
   },
   mounted() {
     window.addEventListener("keydown", this.handleKeydown);
+    this.rouletteWindowResize();
+    window.addEventListener("resize", this.rouletteWindowResize);
     // Migração: limpa cores hardcoded antigas para que o tema da aplicação seja usado
     if (this.userdata.background_color === "#0d1b2a") this.userdata.background_color = null;
     if (this.userdata.font_color === "#FFFFFF") this.userdata.font_color = null;
@@ -1164,6 +1208,7 @@ export default {
   },
   unmounted() {
     window.removeEventListener("keydown", this.handleKeydown);
+    window.removeEventListener("resize", this.rouletteWindowResize);
     this._stopAnimation();
     if (this._winnerTimer) clearTimeout(this._winnerTimer);
     if (this.regRunning) this.$electron.regserverStop();
