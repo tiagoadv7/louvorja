@@ -13,7 +13,7 @@
     <div class="lt-root">
 
       <!-- ── DAY TABS ───────────────────────────────────────────── -->
-      <div class="lt-days">
+      <div class="lt-days" :class="{ 'lt-days--dark': isDarkTheme }">
         <button
           v-for="day in DAYS"
           :key="day.key"
@@ -1126,6 +1126,13 @@ export default {
     /* ── obrigatórias ── */
     module_id() { return manifest.id; },
     module()    { return this.$modules.get(this.module_id) || {}; },
+    // Window.vue passa `:theme="dark ? 'dark' : ''"` pro <v-dialog> — como
+    // esse componente nunca recebe a prop `dark`, o diálogo sempre renderiza
+    // com um nome de tema vazio, então o seletor `.v-theme--dark` nunca bate
+    // dentro dele (as variáveis --v-theme-* ainda funcionam, herdadas do
+    // tema real lá de cima — só a CLASSE fica errada). Lê o tema atual direto
+    // aqui pra decidir visualmente, sem depender dessa classe.
+    isDarkTheme() { return !!this.$vuetify.theme.global.current.dark; },
 
     currentDay: {
       get() { return this.$userdata.get('modules.liturgia.currentDay', 'segunda'); },
@@ -2142,22 +2149,34 @@ export default {
   font-weight: 600;
 }
 
+/* No tema escuro, o fundo/texto padrão (5% / 60%) ficava quase invisível
+   contra o fundo escuro do painel — aumenta o contraste das abas de dia
+   não selecionadas (Segunda/Quinta/Sexta/Avulsa; Sábado/Domingo/Quarta já
+   têm cor própria abaixo, que continua valendo). */
+.lt-days--dark .lt-day:not(.lt-day--active) {
+  background: rgba(var(--v-theme-on-surface), 0.14);
+  color: rgba(var(--v-theme-on-surface), 0.85);
+}
+.lt-days--dark .lt-day:hover:not(.lt-day--active) {
+  background: rgba(var(--v-theme-on-surface), 0.22);
+}
+
 /* Sábado — destaque especial */
 .lt-day--sabado:not(.lt-day--active) { color: #b8860b; }
-.v-theme--dark .lt-day--sabado:not(.lt-day--active) { color: #ffd54f; }
+.lt-days--dark .lt-day--sabado:not(.lt-day--active) { color: #ffd54f; }
 .lt-day--sabado.lt-day--active { background: #d4af37; color: #3a2c00; }
-.v-theme--dark .lt-day--sabado.lt-day--active { background: #ffd54f; color: #1a1a2e; }
+.lt-days--dark .lt-day--sabado.lt-day--active { background: #ffd54f; color: #1a1a2e; }
 
 /* Domingo e Quarta — dias de culto principal, cada um com sua cor própria */
 .lt-day--domingo:not(.lt-day--active) { color: #1565c0; }
-.v-theme--dark .lt-day--domingo:not(.lt-day--active) { color: #64b5f6; }
+.lt-days--dark .lt-day--domingo:not(.lt-day--active) { color: #64b5f6; }
 .lt-day--domingo.lt-day--active { background: #1565c0; color: #fff; }
-.v-theme--dark .lt-day--domingo.lt-day--active { background: #64b5f6; color: #0d1b2a; }
+.lt-days--dark .lt-day--domingo.lt-day--active { background: #64b5f6; color: #0d1b2a; }
 
 .lt-day--quarta:not(.lt-day--active) { color: #00695c; }
-.v-theme--dark .lt-day--quarta:not(.lt-day--active) { color: #4db6ac; }
+.lt-days--dark .lt-day--quarta:not(.lt-day--active) { color: #4db6ac; }
 .lt-day--quarta.lt-day--active { background: #00695c; color: #fff; }
-.v-theme--dark .lt-day--quarta.lt-day--active { background: #4db6ac; color: #0a2420; }
+.lt-days--dark .lt-day--quarta.lt-day--active { background: #4db6ac; color: #0a2420; }
 
 .lt-days-sep {
   width: 1px;
