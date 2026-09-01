@@ -1296,6 +1296,7 @@ function setupIpc(mainWindow) {
 
   ipcMain.handle('media:set-base-folder', (_, folderPath) => {
     Store.set('media_base_folder', folderPath || null);
+    resolveFileCache.clear();
     return true;
   });
 
@@ -1312,8 +1313,18 @@ function setupIpc(mainWindow) {
   // aqui silenciosamente não tocava nada em vez de dar erro óbvio.
   const toFileUrl = (absPath) => pathToFileURL(absPath).href;
 
+  // Cacheia só resolucões que ACHARAM o arquivo — nunca "não encontrado", pra
+  // um download que termina no meio da sessão continuar sendo resolvido
+  // certo na próxima chamada, sem precisar invalidar o cache manualmente.
+  // Sem isso, tocar a mesma música de novo (comum numa liturgia, indo e
+  // voltando entre itens) repetia a varredura recursiva de pastas inteira
+  // a cada play — no modo offline, sem stream pra "esconder" essa demora
+  // atrás do carregamento de rede, ficava bem perceptível.
+  const resolveFileCache = new Map();
+
   ipcMain.handle('media:resolve-file', (_, filename) => {
     if (!filename) return null;
+    if (resolveFileCache.has(filename)) return resolveFileCache.get(filename);
 
     // Se já chegou um file:// resolvido (ex: sqlite-reader.js já achou o arquivo
     // certo, dentro da subpasta certa do álbum) e ele realmente existe, usa direto
@@ -1366,33 +1377,39 @@ function setupIpc(mainWindow) {
       return search(baseDir, 0);
     };
 
+    const cacheAndReturn = (absPath) => {
+      const url = toFileUrl(absPath);
+      resolveFileCache.set(filename, url);
+      return url;
+    };
+
     // 1. Pasta configurada pelo usuário
     const userFolder = Store.get('media_base_folder');
     if (userFolder) {
       const found = searchScoped(userFolder);
-      if (found) return toFileUrl(found);
+      if (found) return cacheAndReturn(found);
     }
 
     // 2. Pasta gravável (getWritableBase()/config/musicas/) — downloads do app
     const writableFound = searchScoped(getAutoMediaDir(null, true));
-    if (writableFound) return toFileUrl(writableFound);
+    if (writableFound) return cacheAndReturn(writableFound);
 
     // 3. userData/config/musicas/ — fallback para downloads feitos em dev ou build anterior
     const userDataMusicDir = path.join(app.getPath('userData'), 'config', 'musicas');
     if (userDataMusicDir !== getAutoMediaDir(null, true)) {
       const userDataFound = searchScoped(userDataMusicDir);
-      if (userDataFound) return toFileUrl(userDataFound);
+      if (userDataFound) return cacheAndReturn(userDataFound);
     }
 
     // 4. Pasta da instalação original (config/musicas/ com subpastas do Delphi)
     const installFound = searchScoped(getAutoMediaDir());
-    if (installFound) return toFileUrl(installFound);
+    if (installFound) return cacheAndReturn(installFound);
 
     // 5. Pasta config/ da instalação Delphi (config\musicas\ com subpastas por álbum)
     const delphiCfg = getSqliteConfigDir();
     if (delphiCfg) {
       const delphiFound = searchScoped(path.join(delphiCfg, 'musicas'));
-      if (delphiFound) return toFileUrl(delphiFound);
+      if (delphiFound) return cacheAndReturn(delphiFound);
     }
 
     return null;
