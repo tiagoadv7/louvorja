@@ -93,10 +93,22 @@ export default {
   // desatualizados (ex. currentTime parado no que era antes) de volta para a
   // janela de saída, fazendo o vídeo "pular" para trás sempre que o operador
   // clicasse em play/pause/volume/etc.
+  //
+  // setMultiple (não vários set() em sequência): manda TODOS os campos do
+  // patch numa ÚNICA mensagem IPC pra janela de saída, aplicados juntos no
+  // mesmo ciclo síncrono lá (ver state-update-batch em views/Popup.vue). Com
+  // set() em sequência, "src" e "mediaType" (por ex.) chegavam como DUAS
+  // mensagens separadas — se "src" chegasse primeiro, o watch de
+  // "config.src" de video_player/interface/Popup.vue rodava com
+  // "mediaType" ainda no valor ANTIGO (ex. "image"), entrava no ramo errado
+  // (ex. _fadeImageIn() num <img> que nem existe mais) e a mídia nova
+  // (ex. um PDF trocando por um vídeo/imagem já em exibição) nunca aparecia
+  // na projeção.
   setConfig(patch) {
-    Object.entries(toPlain(patch)).forEach(([key, value]) => {
-      $appdata.set(`modules.video_player.config.${key}`, value);
-    });
+    const plain = toPlain(patch);
+    $appdata.setMultiple(
+      Object.entries(plain).map(([key, value]) => [`modules.video_player.config.${key}`, value])
+    );
   },
 
   getPlaylist() {

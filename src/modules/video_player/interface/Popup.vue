@@ -109,7 +109,13 @@ export default {
         return;
       }
       if (this.config.mediaType === 'pdf') {
-        if (src) this._fadePdfIn();
+        // $nextTick: ao trocar de vídeo/imagem PARA pdf, o <canvas> (v-else-if
+        // no template) só existe no DOM depois que o Vue processar essa
+        // troca de mediaType — chamar _fadePdfIn() direto aqui (watcher roda
+        // ANTES do re-render, flush "pre" padrão) pegava $refs.pdfCanvas
+        // ainda undefined, então a renderização não fazia nada e a projeção
+        // continuava mostrando o vídeo/imagem anterior por cima.
+        if (src) this.$nextTick(() => this._fadePdfIn());
         return;
       }
       const el = this.$refs.video;
