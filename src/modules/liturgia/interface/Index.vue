@@ -105,7 +105,7 @@
         >
           <!-- Empty state -->
           <div v-if="dayItems.length === 0" class="lt-empty">
-            <v-icon size="60" color="grey-lighten-1">mdi-script-text-outline</v-icon>
+            <v-icon size="60" color="grey-lighten-1">{{ module.icon }}</v-icon>
             <div class="lt-empty-title">Liturgia vazia</div>
             <div class="lt-empty-sub">
               Adicione músicas, anotações, mídias e categorias para montar seu culto,
