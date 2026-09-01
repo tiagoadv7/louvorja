@@ -5,6 +5,7 @@
     :icon="module.icon"
     closable
     minimizable
+    eager
     :index="show ? 1 : 0"
     slot-left-style="width:190px"
     slot-right-style="width:300px"

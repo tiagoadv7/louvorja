@@ -14,6 +14,15 @@
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
 
+// Import estático (não dinâmico): um `await import("jszip")` dentro de
+// loadSlja/writeSlja só é resolvido na hora que o usuário importa/exporta um
+// .slja — se o cache de dependências pré-otimizadas do Vite (dev) ficar
+// desatualizado nesse meio-tempo (comum após qualquer reload/HMR maior), o
+// import dinâmico falha com 404/504 "Outdated Optimize Dep", e esse erro
+// aparecia pro usuário como "Arquivo inválido" em vez do problema real.
+// Import estático entra no grafo normal do bundle, sem essa fragilidade.
+import JSZip from "jszip";
+
 function parseIniWithSections(text) {
   const sections = {};
   let currentSection = "_default";
@@ -223,8 +232,6 @@ function buildIniFromSlides({ meta = {}, slides = [], audioPath = "" }) {
 }
 
 async function loadSlja(file) {
-  const jszipMod = await import("jszip");
-  const JSZip = jszipMod.default?.default ?? jszipMod.default ?? jszipMod;
   const zip = await JSZip.loadAsync(file);
 
   const ljaFile = zip.file("slides.lja");
@@ -293,8 +300,6 @@ async function writeSlja({
   audioName = "audio.mp3",
   images = null,
 } = {}) {
-  const jszipMod = await import("jszip");
-  const JSZip = jszipMod.default?.default ?? jszipMod.default ?? jszipMod;
   const zip = new JSZip();
 
   let audioPath = "";
