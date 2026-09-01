@@ -60,7 +60,7 @@
             <v-icon size="15">mdi-folder-open-outline</v-icon> Carregar
           </button>
           <button class="lt-btn-outline lt-btn-outline--danger" :disabled="!dayItems.length" @click="confirmClearAll">
-            <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Tudo
+            <v-icon size="15">mdi-delete-sweep-outline</v-icon> Limpar Dia
           </button>
           <button class="lt-btn-primary" @click="openAdd">
             <v-icon size="16">mdi-plus</v-icon> Adicionar Item
@@ -598,7 +598,7 @@
     <v-dialog v-model="clearAllDialog" max-width="380" content-class="lt-confirm-dialog">
       <v-card class="lt-confirm-card">
         <div class="lt-confirm-header">
-          <span>Limpar Tudo</span>
+          <span>Limpar Dia</span>
           <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" color="white" @click="clearAllDialog = false" />
         </div>
         <div class="lt-confirm-body">
@@ -608,13 +608,16 @@
             </v-avatar>
             <div class="lt-confirm-title">Apagar todos os itens de {{ currentTabLabel }}?</div>
           </div>
-          <div class="lt-confirm-sub">Essa ação não pode ser desfeita.</div>
+          <div class="lt-confirm-sub">
+            Só os itens deste dia são apagados — os outros dias e as liturgias salvas não são afetados.
+            Essa ação não pode ser desfeita.
+          </div>
           <div class="lt-confirm-actions">
             <button class="lt-confirm-link" @click="clearAllDialog = false">
               <v-icon size="16">mdi-close</v-icon> Cancelar
             </button>
             <button class="lt-confirm-link lt-confirm-link--danger" @click="doClearAll">
-              <v-icon size="16">mdi-delete-sweep-outline</v-icon> Apagar Tudo
+              <v-icon size="16">mdi-delete-sweep-outline</v-icon> Apagar Itens do Dia
             </button>
           </div>
         </div>
