@@ -1308,6 +1308,7 @@ export default {
       // apertar Enter (reabrindo o seletor), independente de type="button".
       // Devolve o foco pro campo de arquivo pra Enter adicionar o item.
       this.$nextTick(() => this.$refs.mediaUrlInput?.focus());
+      return fp;
     },
     pickFromVideoPlaylist(v) {
       this.form.url = v.path;
@@ -1341,8 +1342,20 @@ export default {
       this.dialogStep = 'form';
       this.addDialog = true;
     },
-    chooseType(value) {
+    // "Mídia" já abre o seletor de arquivo direto (em vez de mostrar o
+    // formulário vazio primeiro, esperando o clique em "Selecionar") — o
+    // nome do item só aparece pra edição DEPOIS que o arquivo é escolhido
+    // (pickMediaFile já preenche form.name com o nome do arquivo). Se o
+    // operador cancelar o seletor, volta pra escolha de tipo em vez de
+    // entrar num formulário sem arquivo nenhum.
+    async chooseType(value) {
       this.form.type = value;
+      if (value === 'midia') {
+        const fp = await this.pickMediaFile();
+        if (!fp) { this.form.type = ''; return; }
+        this.dialogStep = 'form';
+        return;
+      }
       this.dialogStep = 'form';
       if (value === 'musica' && !this.allMusics.length) this.loadMusics();
       if (value === 'versiculo') this.loadBibleMeta();
