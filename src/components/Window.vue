@@ -208,7 +208,7 @@ export default {
     },
     index() {
       this.checkScroll();
-      this.windowResize();
+      this.windowResizeDeferred();
     },
     scrollPos(value) {
       const container = this.$refs.main_container;
@@ -258,13 +258,22 @@ export default {
       this.container_height = el.clientHeight;
       this.$emit("resize", data);
     },
+    // O diálogo pode aparecer (visible/index mudando) antes do navegador
+    // terminar o layout dele — medir clientHeight nesse exato instante às
+    // vezes pega 0 (mesmo com o container já no DOM), e nada mais dispara
+    // uma remedida depois, deixando slot-left/slot-right com altura 0 pra
+    // sempre (conteúdo existe mas fica cortado/invisível). nextTick +
+    // requestAnimationFrame garante que o layout já assentou antes de medir.
+    windowResizeDeferred() {
+      this.$nextTick(() => requestAnimationFrame(() => this.windowResize()));
+    },
 
     listenerResize(active) {
       if (active && this.visible) {
         if (this.$refs.container) {
           this.resizeObserver.observe(this.$refs.container.$el);
           window.addEventListener("resize", this.windowResize);
-          this.windowResize();
+          this.windowResizeDeferred();
         } else {
           const self = this;
           setTimeout(function () {

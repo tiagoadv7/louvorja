@@ -7,8 +7,8 @@
     minimizable
     eager
     :index="show ? 1 : 0"
-    slot-left-style="width:190px"
-    slot-right-style="width:300px"
+    slot-left-style="width:300px"
+    slot-right-style="width:260px"
     @close="close()"
     @minimize="$modules.minimize(module_id)"
   >
@@ -50,15 +50,17 @@
       </div>
     </template>
 
-    <!-- ── Coluna esquerda: lista de slides ─────────────────────────────── -->
-    <template v-slot:left>
+    <!-- ── Coluna direita: lista de slides (mesmo lugar/estilo da lista
+         numerada do player padrão — ver core/media/interface/Index.vue —
+         só que aqui cada linha é editável direto, por ser um editor) ── -->
+    <template v-slot:right>
       <div class="se-slide-list">
         <div class="se-slide-list-header">
           <span class="se-slide-list-title">{{ t("labels.slides") }}</span>
           <span class="se-slide-list-count">{{ slides.length }}</span>
         </div>
         <div class="se-slide-list-body">
-          <draggable v-model="song.slides" item-key="id" handle=".se-thumb" @end="onReorder">
+          <draggable v-model="song.slides" item-key="id" handle=".se-thumb-grip" @end="onReorder">
             <template #item="{ element, index }">
               <div
                 class="se-thumb"
@@ -66,14 +68,22 @@
                 :style="thumbStyle(element)"
                 @click="goSlide(index)"
               >
+                <v-icon size="14" class="se-thumb-grip">mdi-drag-vertical</v-icon>
                 <span class="se-thumb-num">{{ index + 1 }}</span>
                 <span v-if="element.tempo_seconds > 0" class="se-thumb-time">
                   <v-icon size="9">mdi-clock-outline</v-icon>
                   {{ formatTime(element.tempo_seconds) }}
                 </span>
-                <div class="se-thumb-text" :style="{ color: element.cor_letra, textAlign: element.text_align || 'center' }">
-                  {{ truncate(element.letra) || `(${element.tipo})` }}
-                </div>
+                <textarea
+                  class="se-thumb-text se-thumb-text-editable"
+                  :style="{ color: element.cor_letra, textAlign: element.text_align || 'center' }"
+                  :placeholder="`(${element.tipo})`"
+                  v-model="element.letra"
+                  rows="2"
+                  @mousedown.stop
+                  @click.stop="goSlide(index)"
+                  @input="markDirty"
+                />
               </div>
             </template>
           </draggable>
@@ -185,12 +195,13 @@
       </div>
     </div>
 
-    <!-- ── Coluna direita: painel de propriedades ───────────────────────── -->
-    <template v-slot:right>
-      <v-expansion-panels multiple variant="accordion" v-model="openPanels">
-        <v-expansion-panel value="text">
-          <v-expansion-panel-title>{{ t("labels.main_text") }}</v-expansion-panel-title>
-          <v-expansion-panel-text>
+    <!-- ── Coluna esquerda: formatação do slide atual — sempre visível, sem
+         precisar abrir/fechar pra achar cada opção. -->
+    <template v-slot:left>
+      <div class="se-props">
+        <div class="se-props-section">
+          <div class="se-props-title">{{ t("labels.main_text") }}</div>
+          <div class="se-props-body">
             <v-textarea
               v-model="activeSlide.letra"
               :label="t('labels.main_text')"
@@ -223,12 +234,12 @@
                 <v-icon size="16">{{ `mdi-format-align-${opt}` }}</v-icon>
               </button>
             </div>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
+          </div>
+        </div>
 
-        <v-expansion-panel value="style">
-          <v-expansion-panel-title>{{ t("labels.color_typography") }}</v-expansion-panel-title>
-          <v-expansion-panel-text>
+        <div class="se-props-section">
+          <div class="se-props-title">{{ t("labels.color_typography") }}</div>
+          <div class="se-props-body">
             <div class="se-row-inline">
               <label class="se-field-label">{{ t("labels.main_text") }}</label>
               <input type="color" v-model="activeSlide.cor_letra" class="se-color-input" @change="markDirty" />
@@ -246,12 +257,12 @@
               hide-details
               class="mt-1"
             />
-          </v-expansion-panel-text>
-        </v-expansion-panel>
+          </div>
+        </div>
 
-        <v-expansion-panel value="image">
-          <v-expansion-panel-title>{{ t("labels.background_image") }}</v-expansion-panel-title>
-          <v-expansion-panel-text>
+        <div class="se-props-section">
+          <div class="se-props-title">{{ t("labels.background_image") }}</div>
+          <div class="se-props-body">
             <div v-if="activeImageUrl" class="se-img-preview-row">
               <div class="se-img-thumb" :style="{ backgroundImage: `url(${activeImageUrl})` }" />
               <div class="se-img-actions">
@@ -274,12 +285,12 @@
               class="mt-2"
               @update:model-value="markDirty"
             />
-          </v-expansion-panel-text>
-        </v-expansion-panel>
+          </div>
+        </div>
 
-        <v-expansion-panel value="replicate">
-          <v-expansion-panel-title>{{ t("labels.replicate") }}</v-expansion-panel-title>
-          <v-expansion-panel-text>
+        <div class="se-props-section">
+          <div class="se-props-title">{{ t("labels.replicate") }}</div>
+          <div class="se-props-body">
             <div class="se-field-label">{{ t("labels.replicate_bg") }}</div>
             <div class="se-actions-row mb-2">
               <v-btn size="x-small" variant="tonal" @click="replicateBg('next')">{{ t("actions.replicate_bg_next") }}</v-btn>
@@ -292,9 +303,9 @@
               <v-btn size="x-small" variant="tonal" @click="replicateText('after')">{{ t("actions.replicate_text_after") }}</v-btn>
               <v-btn size="x-small" variant="tonal" @click="replicateText('all')">{{ t("actions.replicate_text_all") }}</v-btn>
             </div>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
-      </v-expansion-panels>
+          </div>
+        </div>
+      </div>
     </template>
   </l-window>
 </template>
@@ -323,7 +334,6 @@ export default {
     current: 0,
     dirty: false,
     aspectRatio: "16-9",
-    openPanels: ["text", "style"],
     audioUrl: "",
     audioPlaying: false,
     audioCurrentTime: 0,
@@ -489,10 +499,6 @@ export default {
       }
     },
 
-    truncate(text) {
-      if (!text) return "";
-      return text.length > 60 ? text.slice(0, 57) + "…" : text;
-    },
     formatTime(s) {
       return SljaConverter.secondsToHms(s || 0);
     },
@@ -1127,7 +1133,7 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 .se-slide-list-header {
   display: flex;
@@ -1188,6 +1194,15 @@ export default {
   padding: 1px 5px;
   border-radius: 8px;
 }
+.se-thumb-grip {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: grab;
+  z-index: 1;
+}
+.se-thumb-grip:active { cursor: grabbing; }
 .se-thumb-time {
   position: absolute;
   bottom: 4px;
@@ -1210,6 +1225,21 @@ export default {
   line-height: 1.1;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   color: #fff;
+}
+.se-thumb-text-editable {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  cursor: text;
+  padding: 16px 4px 4px;
+}
+.se-thumb-text-editable::placeholder {
+  color: rgba(255, 255, 255, 0.55);
 }
 .se-slide-list-add {
   width: 100%;
@@ -1354,6 +1384,25 @@ export default {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.se-props {
+  height: 100%;
+  overflow-y: auto;
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+.se-props-section {
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  padding: 10px 12px;
+}
+.se-props-section:last-child { border-bottom: none; }
+.se-props-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin-bottom: 8px;
 }
 
 .se-field-label {
