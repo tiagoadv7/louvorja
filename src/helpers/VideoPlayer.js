@@ -80,6 +80,12 @@ export default {
   toFileUrl,
   isImageFile,
   isPdfFile,
+  // Duração real do arquivo (em segundos) — usado pela Liturgia para
+  // preencher a Duração automaticamente ao anexar um vídeo/áudio, sem
+  // duplicar aqui a conversão de caminho local pra file:// (ver toFileUrl).
+  probeDuration(fp) {
+    return probeDuration(toFileUrl(fp));
+  },
 
   getConfig() {
     return { ...emptyConfig(), ...($appdata.get("modules.video_player.config") || {}) };

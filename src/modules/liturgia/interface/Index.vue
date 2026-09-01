@@ -156,7 +156,9 @@
                   <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
                   <div v-if="item.type !== 'categoria'" class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
-                <div class="lt-item-dur" v-if="item.duration">{{ formatDur(item.duration) }}</div>
+                <div class="lt-item-dur" v-if="item.duration">
+                  {{ activeTimer && activeTimer.itemId === item.id ? activeTimerLabel : formatDur(item.duration) }}
+                </div>
                 <v-icon v-if="item.locked" size="13" class="lt-item-lock">mdi-lock</v-icon>
                 <div class="lt-item-actions" @click.stop>
                   <!-- Categoria: inicia o cronômetro dessa seção (com base na
@@ -198,14 +200,14 @@
                     class="lt-row-btn lt-row-btn--play"
                     @click="playItem(item, idx)"
                   >
-                    <v-icon size="17">mdi-play-circle-outline</v-icon>
+                    <v-icon size="17">{{ activeTimer && activeTimer.itemId === item.id ? 'mdi-timer-sand' : 'mdi-play-circle-outline' }}</v-icon>
                   </button>
                   <MusicMenuTable
                     v-if="item.type === 'musica' && item.id_music"
                     :id_music="item.id_music"
                     :has_instrumental_music="item.has_instrumental_music"
                     class="lt-item-music-menu"
-                    @action="markItemDone(idx)"
+                    @action="startOrMarkItemTimer(idx)"
                   />
                   <template v-else-if="item.type === 'musica' && !item.id_music">
                     <button class="lt-row-btn" title="Cantado" @click="openPendingPicker(idx, 'audio')">
@@ -318,13 +320,13 @@
 
       </div>
 
-      <!-- ── BARRA DE CRONÔMETRO DA CATEGORIA ATIVA ────────────────── -->
+      <!-- ── BARRA DE CRONÔMETRO ATIVO (categoria ou item em execução) ── -->
       <div v-if="activeTimer" class="lt-timer-bar">
         <v-icon size="15" class="me-1">mdi-timer-outline</v-icon>
         <span class="lt-timer-name">{{ activeTimer.name }}</span>
         <span class="lt-timer-time" :class="{ 'lt-timer-time--over': activeTimerOver }">{{ activeTimerLabel }}</span>
         <v-spacer />
-        <button class="lt-btn-icon" title="Parar Cronômetro" @click="stopCategoryTimer">
+        <button class="lt-btn-icon" title="Parar Cronômetro" @click="stopActiveTimer">
           <v-icon size="16">mdi-stop-circle-outline</v-icon>
         </button>
       </div>
@@ -1087,11 +1089,13 @@ export default {
     listDragOver:  false,
     notesDragWidth: null,
 
-    // Cronômetro de categoria + marcação "concluído" transitória — não
+    // Cronômetro ativo (categoria OU item em execução, ver kind) + marcação
+    // "concluído" transitória da categoria — sessionDone/activeTimer não são
     // persistidos em $userdata de propósito: devem voltar ao normal se a
-    // liturgia for fechada e reaberta, mesmo no mesmo dia.
+    // liturgia for fechada e reaberta, mesmo no mesmo dia. O "concluído" de
+    // item de verdade (kind:'item') usa markItemDone, que é persistido normalmente.
     sessionDone:    {},
-    activeTimer:    null,   // { itemId, name, budgetMin, startedAt }
+    activeTimer:    null,   // { kind: 'categoria'|'item', itemId, name, budgetMin, startedAt }
     timerNow:       Date.now(),
     timerInterval:  null,
     copyDaysDialog:    false,
@@ -1333,7 +1337,7 @@ export default {
     // seleção sobrevive normalmente a um minimizar/restaurar.
     close() {
       this.clearAllSelections();
-      this.stopCategoryTimer();
+      this.stopActiveTimer();
       this.sessionDone = {};
       this.$modules.close(this.module_id);
     },
@@ -1525,6 +1529,14 @@ export default {
         this.form.type = this.resolvedType('midia', fp);
         if (!this.form.name.trim()) {
           this.form.name = fp.split(/[\\/]/).pop() || '';
+        }
+        // Vídeo/áudio: puxa a duração real do arquivo em vez de deixar o
+        // usuário digitar — imagem/PDF/PowerPoint não têm duração própria,
+        // continuam com o campo manual (0 por padrão).
+        if (isVideoFile(fp) || isAudioFile(fp)) {
+          this.$videoPlayer.probeDuration(fp).then((sec) => {
+            if (sec && this.form.url === fp) this.form.duration = Math.ceil(sec / 60);
+          });
         }
       }
       // O botão "Selecionar" continua focado depois que o diálogo nativo
@@ -1732,7 +1744,13 @@ export default {
       // SoundMaster.
       else if (item.type === 'arquivo' && item.url && isPowerPointFile(item.url)) this.$electron.shellOpenFolder(item.url);
       else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
-      if (idx != null) this.markItemDone(idx);
+      // Link (YouTube/Canva/etc.) continua marcando concluído na hora do
+      // clique — sem duração conhecida do vídeo, não daria pra cronometrar.
+      // Música/mídia/áudio/apresentação usam o cronômetro (ver startOrMarkItemTimer).
+      if (idx != null) {
+        if (item.type === 'link') this.markItemDone(idx);
+        else this.startOrMarkItemTimer(idx);
+      }
     },
 
     // Mesmo padrão de modal usado em Media.js (alerts.not_loaded_offline) pra
@@ -1811,18 +1829,49 @@ export default {
     markDone()       { this.dayItems = this.dayItems.map(i => i.selected && i.type !== 'categoria' ? { ...i, done: !i.done } : i); },
     toggleLock()     { this.dayItems = this.dayItems.map(i => i.selected ? { ...i, locked: !i.locked } : i); },
 
-    /* ── cronômetro de categoria (transitório, ver sessionDone acima) ── */
+    /* ── cronômetro de categoria e de item (música/mídia/áudio/apresentação) ── */
     isItemDone(item) {
       return item.type === 'categoria' ? !!this.sessionDone[item.id] : item.done;
     },
+    // Categoria: "Iniciar" marca concluída na hora (transitório, ver
+    // sessionDone acima) e só usa o cronômetro pra mostrar o tempo decorrido.
     startCategoryTimer(item) {
       if (this.timerInterval) clearInterval(this.timerInterval);
       this.sessionDone = { ...this.sessionDone, [item.id]: true };
       this.timerNow = Date.now();
-      this.activeTimer = { itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
+      this.activeTimer = { kind: 'categoria', itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
       this.timerInterval = setInterval(() => { this.timerNow = Date.now(); }, 1000);
     },
-    stopCategoryTimer() {
+    // Música/mídia/áudio/apresentação: só marca concluído (de verdade, ver
+    // markItemDone) quando o tempo configurado no item realmente se esgota —
+    // ao contrário da categoria, aqui a barra representa o andamento real da
+    // execução, não uma marcação instantânea ao clicar em tocar.
+    startItemTimer(item, idx) {
+      if (this.timerInterval) clearInterval(this.timerInterval);
+      this.timerNow = Date.now();
+      this.activeTimer = { kind: 'item', itemId: item.id, name: item.name, budgetMin: Number(item.duration) || 0, startedAt: this.timerNow };
+      this.timerInterval = setInterval(() => {
+        this.timerNow = Date.now();
+        if (this.activeTimer?.kind === 'item' && this.activeTimerOver) this.completeActiveItemTimer();
+      }, 1000);
+    },
+    // Chamado ao tocar um item: se ele tem uma Duração configurada (manual ou
+    // já preenchida automaticamente, ver pickMediaFile/pickMusic), conta o
+    // tempo até concluir sozinho; sem duração conhecida, mantém o
+    // comportamento antigo de marcar concluído na hora do clique.
+    startOrMarkItemTimer(idx) {
+      const item = this.dayItems[idx];
+      if (!item) return;
+      if (Number(item.duration) > 0) this.startItemTimer(item, idx);
+      else this.markItemDone(idx);
+    },
+    completeActiveItemTimer() {
+      const itemId = this.activeTimer?.itemId;
+      this.stopActiveTimer();
+      const idx = this.dayItems.findIndex(i => i.id === itemId);
+      if (idx >= 0) this.markItemDone(idx);
+    },
+    stopActiveTimer() {
       if (this.timerInterval) { clearInterval(this.timerInterval); this.timerInterval = null; }
       this.activeTimer = null;
     },
