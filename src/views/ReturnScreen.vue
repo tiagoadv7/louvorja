@@ -1,6 +1,6 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || timersModuleActive || videoPlayerActive }">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || timersModuleActive || videoPlayerActive || webLinkActive }">
       <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
            junto com uma música realmente ativa; some com fade quando ela
            termina. -->
@@ -86,6 +86,14 @@
           <VideoPlayerScreen />
         </div>
       </transition>
+
+      <!-- Espelho do link (YouTube/Canva, aba "Online" de Mídia) — mesmo
+           esquema do Vídeo acima, sempre mudo (ver components/WebLinkScreen.vue). -->
+      <transition name="rs-fade">
+        <div v-if="webLinkActive" class="rs-module-mirror">
+          <WebLinkScreen />
+        </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -95,6 +103,7 @@ import ClockScreen from '@/modules/clock/components/Screen.vue';
 import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
 import StopwatchScreen from '@/modules/cronometro_culto/components/StopwatchScreen.vue';
 import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
+import WebLinkScreen from '@/components/WebLinkScreen.vue';
 
 const isElectron = () =>
   typeof window !== 'undefined' &&
@@ -103,7 +112,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen },
 
   data: () => ({
     stateHandler: null,
@@ -150,6 +159,10 @@ export default {
     videoPlayerActive() {
       if (this.returnPopupModule) return this.returnPopupModule === 'video_player';
       return this.popupModule === 'video_player';
+    },
+    webLinkActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'web_link';
+      return this.popupModule === 'web_link';
     },
 
     mediaConfig() {

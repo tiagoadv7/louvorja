@@ -14,8 +14,18 @@
     @minimize="onMinimize()"
   >
     <template v-slot:system_buttons>
-      <LScreenBtn module="video_player" />
-      <LReturnScreenBtn module="video_player" />
+      <!-- Aba "Online" projeta como o pseudo-módulo "web_link" (ver
+           helpers/WebLink.js), não como "video_player" — precisa dos botões
+           de tela/retorno próprios, senão eles ficariam mostrando/controlando
+           o estado errado (vídeo local) enquanto um link estivesse ativo. -->
+      <template v-if="activeTab === 'online'">
+        <LScreenBtn module="web_link" />
+        <LReturnScreenBtn module="web_link" />
+      </template>
+      <template v-else>
+        <LScreenBtn module="video_player" />
+        <LReturnScreenBtn module="video_player" />
+      </template>
     </template>
 
     <!-- Abas: Vídeo (substitui a projeção, como sempre), Overlay de Imagem
@@ -30,6 +40,10 @@
         <v-tab value="video">
           <v-icon start size="15">mdi-movie-open-outline</v-icon>
           {{ t("tab_video") }}
+        </v-tab>
+        <v-tab value="online">
+          <v-icon start size="15">mdi-youtube</v-icon>
+          {{ t("tab_online") }}
         </v-tab>
         <v-tab value="overlay">
           <v-icon start size="15">mdi-image-multiple-outline</v-icon>
@@ -212,6 +226,54 @@
       </div>
     </div>
 
+    <!-- ═══════════════ Aba "Online" (YouTube/Canva) ═══════════════════════
+         Reaproveita o mesmo $webLink (helpers/WebLink.js) que a Liturgia já
+         usa pra tocar link do YouTube — só dá uma UI própria aqui dentro de
+         "Mídia" em vez de só existir como botões dentro da linha do item na
+         Liturgia. Projeta como pseudo-módulo "web_link" (ver system_buttons
+         acima e views/Popup.vue), não como "video_player". -->
+    <div class="vp-root" v-show="activeTab === 'online'">
+      <div class="vp-online-input-row">
+        <input
+          v-model="onlineUrlInput"
+          class="vp-online-input"
+          placeholder="Cole o link do YouTube..."
+          @keyup.enter="loadOnlineLink"
+        />
+        <button class="vp-search-btn" style="flex:0 0 auto" @click="loadOnlineLink">
+          <v-icon size="18">mdi-tray-arrow-down</v-icon>
+          Carregar
+        </button>
+      </div>
+
+      <div class="vp-online-current" v-if="onlineConfig.url">
+        <v-icon size="16">mdi-youtube</v-icon>
+        <span class="vp-online-current-label">Carregado agora:</span>
+        <span class="vp-online-current-url" :title="onlineConfig.url">{{ onlineConfig.url }}</span>
+      </div>
+      <div v-else class="vp-playlist-empty" style="padding-top:40px">Nenhum link carregado</div>
+
+      <div class="vp-transport" v-if="onlineConfig.videoId">
+        <button class="vp-tp-btn vp-tp-btn--play" @click="toggleOnlinePlay">
+          <v-icon size="20">{{ onlineConfig.isPlaying ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+        </button>
+        <button class="vp-tp-btn vp-tp-btn--stop" @click="stopOnline">
+          <v-icon size="18">mdi-stop</v-icon>
+        </button>
+
+        <div class="vp-vol-group">
+          <v-icon size="15">mdi-volume-high</v-icon>
+          <input
+            type="range" min="0" max="100" step="1"
+            class="vp-vol-slider"
+            :value="onlineConfig.volume"
+            @input="setOnlineVolume($event.target.value)"
+          />
+          <span class="vp-vol-pct">{{ onlineConfig.volume }}%</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════════ Aba "Overlay de Imagem" ═══════════════════════════
          Ported de image_overlay/interface/Index.vue (agora um stub vazio —
          ver aquele arquivo) — mesmo comportamento de arrastar/redimensionar,
@@ -299,6 +361,9 @@ export default {
     _pipHandlers: [],
     _focusHandler: null,
 
+    // ── Aba "Online" (YouTube/Canva, via $webLink) ──────────────────────────
+    onlineUrlInput: '',
+
     // ── Aba "Overlay de Imagem" (módulo independente image_overlay) ────────
     OVERLAY_HANDLES,
     overlayDrag: null,
@@ -331,6 +396,10 @@ export default {
       const flipScale = this.config.flip ? -1 : 1;
       return { transform: `rotate(${rotation}deg) scaleX(${flipScale})` };
     },
+
+    // ── Aba "Online" — mesma config compartilhada que a Liturgia já lê/grava
+    // via $webLink (modules.web_link.config), ver helpers/WebLink.js.
+    onlineConfig() { return this.$webLink.getConfig(); },
 
     // "Mídia" (video_player) e "Overlay de Imagem" (image_overlay) continuam
     // sendo dois módulos registrados de verdade, cada um com seu próprio
@@ -484,6 +553,17 @@ export default {
     rotateLeft()  { this.$videoPlayer.rotateBy(-90); },
     rotateRight() { this.$videoPlayer.rotateBy(90); },
     toggleFlip()  { this.$videoPlayer.toggleFlip(); },
+
+    // ── Aba "Online" (YouTube/Canva) ─────────────────────────────────────
+    loadOnlineLink() {
+      const url = this.onlineUrlInput.trim();
+      if (!url) return;
+      this.$webLink.open(url);
+      this.onlineUrlInput = '';
+    },
+    toggleOnlinePlay() { this.$webLink.togglePlay(); },
+    stopOnline() { this.$webLink.stop(); },
+    setOnlineVolume(v) { this.$webLink.setVolume(Number(v)); },
 
     // Prévia de PDF no painel do operador — mesma renderização da projeção
     // (ver PdfRenderer/Popup.vue), só que numa escala menor (é só uma
@@ -986,6 +1066,38 @@ export default {
   white-space: nowrap;
 }
 .vp-repeat-btn--on { background: #43a047; color: #fff; }
+
+/* ── Aba "Online" (YouTube/Canva) ── */
+.vp-online-input-row {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.vp-online-input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 13px;
+}
+.vp-online-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  font-size: 12.5px;
+}
+.vp-online-current-label { opacity: 0.6; flex-shrink: 0; }
+.vp-online-current-url {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Aba "Overlay de Imagem" (ver image_overlay/interface/Index.vue, stub) ── */
 .io-root {

@@ -1734,10 +1734,22 @@ export default {
         }
       }
       if (item.type === 'musica') this.$media.open({ id_music: item.id_music, mode: 'audio' });
-      else if (item.type === 'midia' && item.url) this.$videoPlayer.open(item.url, item.name, { addToPlaylist: false });
+      // Abre o painel "Mídia" (video_player) junto, igual ao que tocar uma
+      // música faz com o Editor de Músicas — sem isso, o vídeo ia direto pra
+      // projeção sem o operador nunca ver o painel de controle abrir sozinho.
+      else if (item.type === 'midia' && item.url) {
+        this.$videoPlayer.open(item.url, item.name, { addToPlaylist: false });
+        this._openMediaPanel('video');
+      }
       // Projeta em tela cheia na janela de saída (Canva, YouTube, qualquer
-      // link) em vez de abrir no navegador externo do Windows.
-      else if (item.type === 'link' && item.url) this.$webLink.open(item.url);
+      // link) em vez de abrir no navegador externo do Windows. YouTube
+      // especificamente também abre o painel "Mídia" na aba "Online" (mesmo
+      // motivo do vídeo acima) — outros links (Canva etc.) não têm aba própria
+      // ali, então continuam só projetando, sem abrir painel nenhum.
+      else if (item.type === 'link' && item.url) {
+        this.$webLink.open(item.url);
+        if (this.$webLink.isYoutube(item.url)) this._openMediaPanel('online');
+      }
       // PowerPoint não é projetado (ao contrário de vídeo/imagem/PDF) — abre
       // direto no PowerPoint/aplicativo nativo instalado no computador, igual
       // a dar duplo-clique no arquivo pelo Explorer (shell.openPath cuida de
@@ -1813,8 +1825,18 @@ export default {
     // play/pause do mesmo vídeo já projetado — igual ao video_player.
     toggleYoutubeItem(item, idx) {
       if (this.isYoutubeItemActive(item)) this.$webLink.togglePlay();
-      else this.$webLink.open(item.url);
+      else {
+        this.$webLink.open(item.url);
+        this._openMediaPanel('online');
+      }
       if (idx != null) this.markItemDone(idx);
+    },
+
+    // Abre o painel "Mídia" (video_player) já na aba certa — ver playItem()
+    // e toggleYoutubeItem() acima.
+    _openMediaPanel(tab) {
+      this.$appdata.set('modules.video_player.active_tab', tab);
+      this.$modules.open('video_player');
     },
 
     /* ── toolbar ── */
