@@ -335,7 +335,7 @@ export default {
 .about-collab-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0 16px;
+  gap: 6px 28px;
 }
 .about-collab-grid .about-collab {
   min-width: 0;
@@ -351,7 +351,7 @@ export default {
 }
 
 .about-collab {
-  margin-bottom: 22px;
+  margin-bottom: 26px;
 }
 .about-collab-name {
   font-size: 0.85rem;
@@ -391,7 +391,7 @@ export default {
   font-size: 0.84rem;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.75);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 .about-section-title.mt-4 {
   margin-top: 16px;
@@ -407,7 +407,7 @@ export default {
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.6);
-  margin: 20px 0 8px;
+  margin: 26px 0 14px;
 }
 .about-category-title--first {
   margin-top: 0;
@@ -415,7 +415,7 @@ export default {
 
 .about-section-title--h2 {
   font-size: 1.1rem;
-  margin-bottom: 4px;
+  margin-bottom: 16px;
 }
 
 .about-legacy {
