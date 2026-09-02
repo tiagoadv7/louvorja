@@ -13,7 +13,14 @@
        simples, linhas de link com ícone, duas colunas separadas por um
        traço vertical) — de propósito diferente do layout em cards do
        violin-app. -->
-  <Window v-model="dialog" title="Sobre" icon="mdi-information-outline" closable>
+  <Window
+    v-model="dialog"
+    title="Sobre"
+    icon="mdi-information-outline"
+    closable
+    @close="dialog = false"
+    @minimize="dialog = false"
+  >
     <div class="about-hero">
       <v-img :src="logoUrl" class="about-logo" />
       <div class="about-product">Louvor JA</div>
@@ -344,7 +351,7 @@ export default {
 }
 
 .about-collab {
-  margin-bottom: 12px;
+  margin-bottom: 22px;
 }
 .about-collab-name {
   font-size: 0.85rem;
@@ -361,7 +368,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 3px 0 0 6px;
+  margin: 4px 0 0 6px;
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
   font-size: 0.75rem;
