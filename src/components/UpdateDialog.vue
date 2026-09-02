@@ -102,18 +102,18 @@
       </v-card-text>
 
       <!-- ── Baixando ── -->
-      <v-card-text v-else-if="step === 'downloading'" class="py-6 px-6">
-        <div class="d-flex align-center gap-4 mb-5">
-          <v-progress-circular size="44" width="4" indeterminate color="primary" />
+      <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
+        <div class="d-flex align-center gap-5 mb-6">
+          <v-progress-circular size="48" width="4" indeterminate color="primary" />
           <div class="flex-grow-1 min-w-0">
-            <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
+            <div class="text-body-2 font-weight-semibold mb-2">Baixando atualização...</div>
             <div class="text-caption text-medium-emphasis text-truncate">{{ downloadStatus }}</div>
           </div>
           <div class="text-right flex-shrink-0">
             <div class="text-h6 font-weight-black text-primary">{{ downloadPercent }}<span class="text-body-2">%</span></div>
           </div>
         </div>
-        <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mb-3" />
+        <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mb-4" />
         <div class="d-flex justify-space-between">
           <span class="text-caption text-medium-emphasis">{{ downloadTransferred }} / {{ downloadTotal }}</span>
           <span class="text-caption text-primary font-weight-semibold">{{ downloadSpeed }}</span>

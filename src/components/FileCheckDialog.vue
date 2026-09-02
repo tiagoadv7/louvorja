@@ -230,9 +230,9 @@
           </v-card-text>
 
           <!-- ── Baixando ── -->
-          <v-card-text v-else-if="step === 'downloading'" class="pa-6">
-            <div class="d-flex align-center gap-4 mb-5">
-              <v-progress-circular size="38" width="3" indeterminate color="primary" />
+          <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
+            <div class="d-flex align-center gap-5 mb-6">
+              <v-progress-circular size="42" width="3" indeterminate color="primary" />
               <div class="flex-grow-1 min-w-0">
                 <div class="text-body-2 font-weight-semibold mb-2">Baixando arquivos...</div>
                 <div class="text-caption text-medium-emphasis text-truncate">{{ dlMessage }}</div>
@@ -242,7 +242,7 @@
                 <div class="text-caption text-primary font-weight-medium">{{ dlPercent }}%</div>
               </div>
             </div>
-            <v-progress-linear :model-value="dlPercent" height="8" rounded color="primary" class="mb-3" />
+            <v-progress-linear :model-value="dlPercent" height="8" rounded color="primary" class="mb-4" />
             <div class="d-flex justify-space-between">
               <span class="text-caption text-medium-emphasis">{{ dlFileSize }}</span>
               <span class="text-caption text-primary font-weight-semibold">{{ dlSpeed }}</span>
