@@ -156,6 +156,11 @@ export default {
     toggleOfflineMode() {
       this.offlineModeEnabled = !this.offlineModeEnabled;
       $storage.set("db_local_enabled", this.offlineModeEnabled);
+      // Espelha em $appdata (reativo) — $storage é só localStorage/electron-
+      // store puro, sem reatividade Vue, então outros componentes (ex.:
+      // layout/Menu.vue, que decide se mostra módulos só-online) não veriam
+      // a mudança sem isso.
+      this.$appdata.set("offline_mode", this.offlineModeEnabled);
       // Limpa o cache de sessão da API (db:*) pra próxima leitura já respeitar
       // o modo novo, em vez de servir dados em cache do modo anterior.
       $storage.removeAll("db", "session");

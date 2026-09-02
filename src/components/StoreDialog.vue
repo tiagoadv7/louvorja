@@ -504,6 +504,9 @@ export default {
       },
       set(val) {
         $storage.set('db_local_enabled', val);
+        // Espelha em $appdata (reativo) — ver mesmo comentário em
+        // layout/Header.vue#toggleOfflineMode.
+        this.$appdata.set('offline_mode', val);
       },
     },
 

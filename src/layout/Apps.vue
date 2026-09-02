@@ -31,9 +31,10 @@
               >
                 <v-card
                   v-if="
-                    module.language
+                    (module.language
                       ? module.language == language
-                      : !module.development || (is_dev && module.development)
+                      : !module.development || (is_dev && module.development))
+                    && !(module.manifest?.onlineOnlyLanguages?.includes(language) && !is_online)
                   "
                   :color="
                     module.invalid
@@ -111,6 +112,10 @@ export default {
           this.$userdata.set("language", value);
         }
       },
+    },
+    // Ver comentário equivalente em layout/Menu.vue.
+    is_online() {
+      return !this.$appdata.get("offline_mode");
     },
   },
   methods: {

@@ -11,9 +11,10 @@
       >
         <v-list-item
           v-if="
-            module.language
+            (module.language
               ? module.language == language
-              : !module.development || (is_dev && module.development)
+              : !module.development || (is_dev && module.development))
+            && !(module.manifest?.onlineOnlyLanguages?.includes(language) && !is_online)
           "
           :prepend-icon="module.icon"
           @click="
@@ -83,6 +84,13 @@ export default {
           this.$userdata.set("language", value);
         }
       },
+    },
+    // Alguns módulos (ex.: Hinário Adventista em espanhol) só têm dado real
+    // via API remota — o SQLite/JSON local (modo offline) não tem conteúdo
+    // pra esses idiomas, então ficam escondidos do menu até voltar a ficar
+    // online (ver manifest "onlineOnlyLanguages").
+    is_online() {
+      return !this.$appdata.get("offline_mode");
     },
   },
   methods: {
