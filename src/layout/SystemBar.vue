@@ -129,6 +129,8 @@ export default {
         const modules = this.$appdata.get('modules') || {};
         if (modules?.media?.minimized) {
           moduleId = 'media';
+        } else if (modules?.slide_editor?.minimized) {
+          moduleId = 'slide_editor';
         } else {
           for (const [id, mod] of Object.entries(modules)) {
             if (mod && mod.show) { moduleId = id; break; }

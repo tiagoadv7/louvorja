@@ -4,6 +4,7 @@
     <l-player v-else-if="videoActive" location="footer" source="video" />
     <l-player v-else-if="soundmasterActive" location="footer" source="soundmaster" />
     <l-player v-else-if="webLinkActive" location="footer" source="web_link" />
+    <l-player v-else-if="slideEditorActive" location="footer" source="slide_editor" />
     <v-row v-else class="ma-0 pa-0 align-center">
       <span class="text-caption pa-1">Versão {{ version }}</span>
       <v-spacer />
@@ -55,6 +56,11 @@ export default {
     // Liturgia (quem abriu o link), já que "web_link" não é um módulo próprio.
     webLinkActive() {
       return this.$webLink.isMinimized();
+    },
+    // Editor de Músicas (slide_editor) minimizado com uma música carregada
+    // (com áudio anexado) — mesmo critério do SoundMaster acima.
+    slideEditorActive() {
+      return this.$slideEditor.isMinimized() && !!this.$slideEditor.nowPlaying().title;
     },
   },
   methods: {

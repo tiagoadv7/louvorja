@@ -174,7 +174,7 @@
         :src="audioUrl"
         hidden
         @play="onAudioPlay"
-        @pause="audioPlaying = false"
+        @pause="onAudioPause"
         @ended="onAudioEnded"
         @timeupdate="onAudioTime"
         @loadedmetadata="onAudioLoad"
@@ -364,6 +364,12 @@ export default {
     pendingSongId() {
       return this.$appdata.get(`modules.${this.module_id}.pending_song_id`, "");
     },
+    // Comandos vindos do mini-player do rodapé (play/pause, avançar/voltar,
+    // buscar tempo, volume, encerrar) — ver watch abaixo e helpers/
+    // SlideEditorPlayer.js#_command (mesmo padrão do SoundMaster).
+    footerCommand() {
+      return this.$appdata.get(`modules.${this.module_id}.footer_command`);
+    },
     slides() {
       return this.song.slides;
     },
@@ -425,6 +431,18 @@ export default {
       if (!id) return;
       this.$appdata.set(`modules.${this.module_id}.pending_song_id`, "");
       this.loadSongById(id);
+    },
+    footerCommand(cmd) {
+      if (!cmd) return;
+      if (cmd.action === "toggle") this.togglePlay();
+      else if (cmd.action === "stop") this.close();
+      else if (cmd.action === "seek_by") this.onSeek(this.audioCurrentTime + (cmd.delta || 0));
+      else if (cmd.action === "seek_to") this.onSeek(cmd.time);
+      else if (cmd.action === "volume") {
+        const el = this.$refs.audioEl;
+        if (el) el.volume = Math.max(0, Math.min(100, cmd.value)) / 100;
+        this.syncNowPlaying();
+      }
     },
     "song.slides.length"(n) {
       if (n === 0) {
@@ -575,9 +593,11 @@ export default {
         this.audioUrl = "";
         this.audioCurrentTime = 0;
         this.audioDuration = 0;
+        this.syncNowPlaying();
         return;
       }
       this.audioUrl = (await CustomSongs.resolveAudioUrl(this.song.id, this.song.audio_name)) || "";
+      this.syncNowPlaying();
     },
 
     // Debounce pra não inundar o IPC de sincronização a cada tecla digitada —
@@ -911,6 +931,11 @@ export default {
     onAudioPlay() {
       this.audioPlaying = true;
       this._lastSyncTime = this.$refs.audioEl?.currentTime ?? -1;
+      this.syncNowPlaying();
+    },
+    onAudioPause() {
+      this.audioPlaying = false;
+      this.syncNowPlaying();
     },
     // Fim natural do áudio: além de soltar o botão de play, avisa quem
     // estiver tocando uma fila de várias músicas (ver custom_collections
@@ -918,6 +943,7 @@ export default {
     // "_autoCloseCallback" do $media, só que pro lado das músicas próprias.
     onAudioEnded() {
       this.audioPlaying = false;
+      this.syncNowPlaying();
       CustomSongsPlayback.autoAdvance?.();
     },
     onAudioTime() {
@@ -925,6 +951,7 @@ export default {
       if (!el) return;
       this.audioCurrentTime = el.currentTime;
       if (this.audioPlaying) this.syncSlideFromAudio();
+      this.syncNowPlaying();
     },
     // Auto-sync apenas em playback contínuo: avança o slide quando o tempo
     // cruza um marker gravado. Saltos (seek/navegação manual) são ignorados.
@@ -945,6 +972,23 @@ export default {
     onAudioLoad() {
       const el = this.$refs.audioEl;
       if (el) this.audioDuration = el.duration || 0;
+      this.syncNowPlaying();
+    },
+    // Espelha o essencial (título/tocando/tempo) em $appdata — o mini-player
+    // do rodapé (Footer.vue/Player.vue, ver $slideEditor em
+    // helpers/SlideEditorPlayer.js) é um componente totalmente separado e não
+    // tem acesso à instância do editor, mesmo padrão já usado por
+    // SoundMasterPanel.vue com SoundMaster.js.
+    syncNowPlaying() {
+      const el = this.$refs.audioEl;
+      this.$appdata.set(`modules.${this.module_id}.now_playing`, this.audioUrl ? {
+        title: this.songTitle,
+        playing: this.audioPlaying,
+        current_time: this.audioCurrentTime,
+        duration: this.audioDuration,
+        progress: this.audioDuration ? Math.min(100, (this.audioCurrentTime / this.audioDuration) * 100) : 0,
+        volume: el ? Math.round((el.volume ?? 1) * 100) : 100,
+      } : { title: "", playing: false, current_time: 0, duration: 0, progress: 0, volume: 100 });
     },
     onSeek(seconds) {
       const el = this.$refs.audioEl;

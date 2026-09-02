@@ -194,7 +194,7 @@
         />
         <LScreenBtn
           v-if="location !== 'fullscreen' && source !== 'soundmaster' && source !== 'web_link'"
-          :module="source === 'video' ? 'video_player' : 'media'"
+          :module="source === 'video' ? 'video_player' : source === 'slide_editor' ? 'slide_editor' : 'media'"
         />
 
         <v-menu v-if="location !== 'fullscreen' && compact">
@@ -334,6 +334,28 @@ export default {
             track: 0,
             image: "",
             audio: np.name ? "x" : "",
+            current_time: np.current_time || 0,
+            duration: np.duration || 0,
+            progress: np.progress || 0,
+            buffered: 100,
+            is_paused: !np.playing,
+            is_fading: false,
+            volume: np.volume ?? 100,
+          },
+        };
+      }
+      if (this.source === "slide_editor") {
+        const np = this.$slideEditor.nowPlaying();
+        return {
+          minimized: this.$slideEditor.isMinimized(),
+          loading: false,
+          data: {},
+          config: {
+            title: np.title || "",
+            subtitle: "",
+            track: 0,
+            image: "",
+            audio: np.title ? "x" : "",
             current_time: np.current_time || 0,
             duration: np.duration || 0,
             progress: np.progress || 0,
@@ -552,6 +574,7 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.togglePlay(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.togglePlay(); return; }
       if (this.source === 'web_link') { this.$webLink.togglePlay(); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.togglePlay(); return; }
       if (this.media.config.is_paused) {
         this.$media.play();
       } else {
@@ -562,6 +585,7 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.seekBy(-10); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekBy(-10); return; }
       if (this.source === 'web_link') { this.$webLink.seekBy(-10); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.seekBy(-10); return; }
       this.$media.advanceTime(-10);
     },
     first() {
@@ -580,6 +604,7 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.seekBy(10); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekBy(10); return; }
       if (this.source === 'web_link') { this.$webLink.seekBy(10); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.seekBy(10); return; }
       this.$media.advanceTime(+10);
     },
     open: function (data) {
@@ -592,12 +617,14 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.maximize(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.maximize(); return; }
       if (this.source === 'web_link') { this.$webLink.maximize(); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.maximize(); return; }
       this.$media.maximize();
     },
     close: function () {
       if (this.source === 'video') { this.$videoPlayer.stop(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.stop(); return; }
       if (this.source === 'web_link') { this.$webLink.stop(); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.stop(); return; }
       this.$media.close();
     },
     changeProgress() {
@@ -606,6 +633,7 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.seekTo(time); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.seekTo(time); return; }
       if (this.source === 'web_link') { this.$webLink.seekTo(time); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.seekTo(time); return; }
       this.$media.goToTime(time);
     },
     fullscreen(value = true) {
@@ -629,6 +657,7 @@ export default {
         if (this.source === 'video') this.$videoPlayer.setVolume(vol);
         else if (this.source === 'soundmaster') this.$soundMaster.setVolume(vol);
         else if (this.source === 'web_link') this.$webLink.setVolume(vol);
+        else if (this.source === 'slide_editor') this.$slideEditor.setVolume(vol);
         else this.$media.setVolume(vol);
       };
       let n = 0;
@@ -645,6 +674,7 @@ export default {
       if (this.source === 'video') { this.$videoPlayer.setVolume(this.media.config.volume); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.setVolume(this.media.config.volume); return; }
       if (this.source === 'web_link') { this.$webLink.setVolume(this.media.config.volume); return; }
+      if (this.source === 'slide_editor') { this.$slideEditor.setVolume(this.media.config.volume); return; }
       this.$media.setVolume(this.media.config.volume);
     },
     async togglePip() {

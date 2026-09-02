@@ -30,6 +30,7 @@ import Path from "@/helpers/Path";
 import Media from "@/helpers/Media";
 import VideoPlayer from "@/helpers/VideoPlayer";
 import SoundMaster from "@/helpers/SoundMaster";
+import SlideEditorPlayer from "@/helpers/SlideEditorPlayer";
 import Alert from "@/helpers/Alert";
 import Popup from "@/helpers/Popup";
 import WebLink from "@/helpers/WebLink";
@@ -49,6 +50,7 @@ app.mixin({
     this.$media = Media;
     this.$videoPlayer = VideoPlayer;
     this.$soundMaster = SoundMaster;
+    this.$slideEditor = SlideEditorPlayer;
     this.$alert = Alert;
     this.$popup = Popup;
     this.$webLink = WebLink;
