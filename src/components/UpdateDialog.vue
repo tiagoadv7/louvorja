@@ -106,8 +106,8 @@
         <div class="d-flex align-center gap-5 mb-6">
           <v-progress-circular size="48" width="4" indeterminate color="primary" />
           <div class="flex-grow-1 min-w-0">
-            <div class="text-body-2 font-weight-semibold mb-2">Baixando atualização...</div>
-            <div class="text-caption text-medium-emphasis text-truncate">{{ downloadStatus }}</div>
+            <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
+            <div class="text-caption text-medium-emphasis text-truncate mt-2">{{ downloadStatus }}</div>
           </div>
           <div class="text-right flex-shrink-0">
             <div class="text-h6 font-weight-black text-primary">{{ downloadPercent }}<span class="text-body-2">%</span></div>
@@ -304,7 +304,10 @@ export default {
         this.downloadSpeed = state.bytesPerSecond ? `${this.formatBytes(state.bytesPerSecond)}/s` : '';
         this.downloadTransferred = this.formatBytes(state.transferred || 0);
         this.downloadTotal = this.formatBytes(state.total || 0);
-        this.downloadStatus = this.downloadSpeed ? `${this.downloadSpeed} · ${this.downloadPercent}%` : 'Calculando...';
+        // Sem repetir o percentual aqui — já aparece grande do lado direito
+        // da linha (ver template); antes ficava "1.1 MB/s · 96%" colado embaixo
+        // do título "Baixando atualização...", duplicando a mesma informação.
+        this.downloadStatus = this.downloadSpeed || 'Calculando...';
       }
 
       if ((state.status === 'available' || state.status === 'downloaded') && prevStep !== state.status) {
