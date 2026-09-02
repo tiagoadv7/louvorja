@@ -306,7 +306,7 @@ export default {
 
 .about-col-mid {
   flex: 0 0 320px;
-  min-width: 260px;
+  min-width: 0;
 }
 
 .about-col-divider {
@@ -321,11 +321,17 @@ export default {
 }
 
 /* Patrocinadores e Desenvolvedores em 2 colunas, em vez de uma lista longa
-   e estreita de um item por linha. */
+   e estreita de um item por linha. minmax(0, 1fr) é essencial aqui — sem
+   isso, um link comprido (nowrap) força a track a crescer além da coluna
+   pra caber sem quebrar, e o grid inteiro vaza (overflow) por cima da
+   próxima coluna em vez de truncar com "…". */
 .about-collab-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 16px;
+}
+.about-collab-grid .about-collab {
+  min-width: 0;
 }
 
 .about-link--inline {
