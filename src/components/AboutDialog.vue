@@ -276,8 +276,8 @@ export default {
 }
 
 .about-col-left {
-  flex: 0 0 280px;
-  min-width: 240px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .about-col-divider {
@@ -287,7 +287,7 @@ export default {
 }
 
 .about-col-right {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -333,7 +333,7 @@ export default {
   margin-top: 1px;
 }
 .about-mini-link:hover {
-  text-decoration: underline;
+  opacity: 0.7;
 }
 /* Links de topo (contato/site) — sem o recuo/indent dos links por pessoa. */
 .about-mini-link--lg {
