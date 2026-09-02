@@ -417,7 +417,15 @@ function setupIpc(mainWindow) {
     return fs.existsSync(path.join(getDbDir(), `${filename}.json`));
   });
 
-  ipcMain.handle('db:local-get', (_, filename) => {
+  ipcMain.handle('db:local-get', async (_, filename) => {
+    // Auto-open do SQLite ainda em andamento (ver trySqliteAutoOpen acima) —
+    // espera terminar antes de decidir a fonte, senão essa leitura cairia pro
+    // JSON só por ter chegado alguns segundos cedo demais.
+    if (!sqliteReader.isOpen() && _sqliteAutoOpenPromise) {
+      await _sqliteAutoOpenPromise;
+      _sqliteAutoOpenPromise = null; // já resolvida — próximas chamadas checam isOpen() direto
+    }
+
     // 1. Leitura direta do SQLite — fonte primária quando config/database.db está aberto
     if (sqliteReader.isOpen()) {
       try {
@@ -614,7 +622,14 @@ function setupIpc(mainWindow) {
       }
     }
   };
-  trySqliteAutoOpen().catch(() => {});
+  // db:local-get (abaixo) espera essa mesma Promise antes de cair pro JSON —
+  // sem isso, os primeiros dbLocalGet do boot da renderer (categorias/músicas/
+  // bíblia, disparados quase que imediatamente após a janela abrir) corriam na
+  // frente do open() (sql.js carrega o WASM + lê um database.db de ~90MB pra
+  // memória, o que pode levar alguns segundos) e liam pro JSON em db/ — que
+  // pode nem existir ainda, ou ser um snapshot obsoleto de uma importação
+  // anterior (ver 'sqlite:import') — mesmo com o SQLite prestes a ficar pronto.
+  let _sqliteAutoOpenPromise = trySqliteAutoOpen().catch(() => {});
 
   // ── Handlers SQLite direto ────────────────────────────────────────────────
 
@@ -1897,21 +1912,38 @@ function setupIpc(mainWindow) {
   // `${origin}/params?type=env`, que devolve um texto "chave=valor" por linha
   // incluindo `db_version=<inteiro>`. Deriva o "origin" a partir de
   // dbBaseUrl (que aponta pra .../json_db) em vez de um novo env var.
+  //
+  // Reexecuta algumas vezes antes de desistir: updater.log mostrado em
+  // produção tinha vários AbortError (timeout de 15s) e até um
+  // ERR_CERT_AUTHORITY_INVALID isolado nesse mesmo endpoint — sintoma de
+  // handshake TLS instável do lado do servidor (renegociação em pleno
+  // handshake, observado direto com curl), não de indisponibilidade real da
+  // API. Uma falha passageira aqui fazia o app achar que não havia
+  // atualização de conteúdo nenhuma (ver sqlite:check-db-update abaixo, que
+  // trata "api-unavailable" como "sem novidade") — igual ao problema já
+  // corrigido no download nativo do instalador (ver downloadUpdateWithRetry
+  // em main.js), só que sem nenhuma tentativa extra até agora.
+  const DB_VERSION_RETRY_DELAYS_MS = [2000, 5000, 10000];
   async function fetchRemoteDbVersion(dbBaseUrl) {
     const origin = new URL(dbBaseUrl).origin;
     const url = `${origin}/params?type=env`;
-    const resp = await fetchWithTimeout(url, {}, 15000).catch((e) => { logDbUpdateError('GET ' + url, e); return null; });
-    if (!resp || !resp.ok) {
-      if (resp) logDbUpdateError('GET ' + url, new Error(`HTTP ${resp.status}`));
-      return { ok: false };
+    const maxAttempts = DB_VERSION_RETRY_DELAYS_MS.length + 1;
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const resp = await fetchWithTimeout(url, {}, 15000).catch((e) => { lastErr = e; return null; });
+      if (resp && resp.ok) {
+        const text = await resp.text();
+        const match = text.match(/^db_version=(\d+)/m);
+        if (match) return { ok: true, version: parseInt(match[1], 10) };
+        lastErr = new Error('db_version não encontrado na resposta');
+      } else if (resp) {
+        lastErr = new Error(`HTTP ${resp.status}`);
+      }
+      logDbUpdateError(`GET ${url} (tentativa ${attempt}/${maxAttempts})`, lastErr);
+      const delayMs = DB_VERSION_RETRY_DELAYS_MS[attempt - 1];
+      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    const text = await resp.text();
-    const match = text.match(/^db_version=(\d+)/m);
-    if (!match) {
-      logDbUpdateError('GET ' + url, new Error('db_version não encontrado na resposta'));
-      return { ok: false };
-    }
-    return { ok: true, version: parseInt(match[1], 10) };
+    return { ok: false };
   }
 
   // Verifica se há uma nova versão do banco de dados publicada (número de
