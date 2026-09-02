@@ -340,6 +340,10 @@
       </l-toolbar>
     </template>
 
+    <!-- Cantos arredondados só aqui no preview do operador — Screen.vue
+         também é a projeção real em tela cheia (Popup.vue), que não deve
+         ter cantos cortados. -->
+    <div class="sorteio-preview-frame">
     <!-- ===== TELA PRINCIPAL ===== -->
     <Screen v-show="activeTab !== 'roulette'" ref="screen" :override-panels="true" />
 
@@ -437,6 +441,7 @@
           <div v-if="rouletteDrawn.length === 0" class="roulette-panel__empty">-</div>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- ===== RODAPÉ ===== -->
@@ -1281,6 +1286,13 @@ export default {
 }
 
 /* ── Aba Roleta ─────────────────────────────────────────────────────── */
+.sorteio-preview-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .roulette-screen {
   display: flex;
   width: 100%;

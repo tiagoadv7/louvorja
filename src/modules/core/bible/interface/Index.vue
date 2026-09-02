@@ -291,7 +291,12 @@
               <LScreenBtn module="bible" />
             </v-toolbar>
           </div>
-          <Screen :height="compact ? height / 2 - 48 : height / 2 - 88" />
+          <!-- Cantos arredondados só aqui no preview do operador — Screen.vue
+               também é a projeção real em tela cheia (Popup.vue), que não
+               deve ter cantos cortados. -->
+          <div class="bb-preview-frame">
+            <Screen :height="compact ? height / 2 - 48 : height / 2 - 88" />
+          </div>
         </div>
       </div>
     </template>
@@ -833,3 +838,11 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.bb-preview-frame {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+</style>

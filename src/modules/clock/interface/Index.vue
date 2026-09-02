@@ -69,7 +69,12 @@
       </l-toolbar>
     </template>
 
-    <Screen />
+    <!-- Cantos arredondados só aqui no preview do operador — Screen.vue
+         também é a projeção real em tela cheia (Popup.vue), que não deve
+         ter cantos cortados. -->
+    <div class="cl-preview-frame">
+      <Screen />
+    </div>
   </l-window>
 </template>
 
@@ -182,3 +187,12 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.cl-preview-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+</style>

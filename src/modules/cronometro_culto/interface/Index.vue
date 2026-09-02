@@ -356,15 +356,20 @@
          só a visibilidade muda. Play/pausa/reiniciar/salvar do Avulso ficam
          junto ao próprio cronômetro (ver StopwatchScreen.vue), não duplicados
          na toolbar — igual ao módulo original. -->
-    <Screen v-show="activeTab === 'culto'" ref="cultoScreen" />
-    <StopwatchScreen
-      v-show="activeTab === 'avulso'"
-      ref="swScreen"
-      @start-run="startStopwatch"
-      @pause-run="pauseStopwatch"
-      @reset-run="resetStopwatch"
-      @save-time="saveTime"
-    />
+    <!-- Cantos arredondados só aqui no preview do operador (não no Screen.vue/
+         StopwatchScreen.vue em si, que também são a projeção real em tela
+         cheia — Popup.vue usa os mesmos componentes sem essa moldura). -->
+    <div class="cc-preview-frame">
+      <Screen v-show="activeTab === 'culto'" ref="cultoScreen" />
+      <StopwatchScreen
+        v-show="activeTab === 'avulso'"
+        ref="swScreen"
+        @start-run="startStopwatch"
+        @pause-run="pauseStopwatch"
+        @reset-run="resetStopwatch"
+        @save-time="saveTime"
+      />
+    </div>
 
     <template v-slot:right v-if="activeTab === 'avulso' && swSavedTimes.length > 0 && swUserdata.mode !== 'countdown'">
       <v-card
@@ -1026,6 +1031,12 @@ export default {
 </script>
 
 <style scoped>
+.cc-preview-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
 .cc-time-input,
 .cc-number-input {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));

@@ -18,6 +18,7 @@
     title="Sobre"
     icon="mdi-information-outline"
     closable
+    width="1280"
     @close="dialog = false"
     @minimize="dialog = false"
   >
@@ -127,7 +128,8 @@
       <div class="about-col-divider" />
 
       <!-- Coluna direita: Assets/UI e Outros Colaboradores, separada da
-           coluna de Desenvolvedores por outro traço. -->
+           coluna de Desenvolvedores por outro traço, também em 2 colunas
+           pra aproveitar melhor o espaço. -->
       <div class="about-col-right">
         <template v-for="(cat, idx) in otherCategories" :key="cat.name">
           <h3
@@ -135,6 +137,7 @@
             class="about-category-title"
             :class="{ 'about-category-title--first': idx === 0 }"
           >{{ cat.name }}:</h3>
+          <div class="about-collab-grid">
           <div v-for="person in cat.contributors" :key="person.name" class="about-collab">
             <div class="about-collab-name">
               {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> - {{ roleText(person.description) }}</span>
@@ -147,6 +150,7 @@
             >
               <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
+          </div>
           </div>
         </template>
       </div>
@@ -312,7 +316,7 @@ export default {
 }
 
 .about-col-mid {
-  flex: 0 0 320px;
+  flex: 0 0 440px;
   min-width: 0;
 }
 
