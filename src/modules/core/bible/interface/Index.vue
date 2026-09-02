@@ -224,77 +224,77 @@
             />
           </div>
 
-          <div :style="`height: ${height / 2 - 30}px;`" class="mt-2">
-            <v-skeleton-loader
-              v-show="loading_book || loading_verses"
-              type="list-item-two-line"
-            />
-            <v-list class="overflow h-100 ma-0 pa-0 no-select" width="100%">
-              <v-list-item
-                v-for="(verse, num) in verses"
-                :key="num"
-                link
-                variant="flat"
-                :value="verse"
-                :active="bible.verses.includes(+num)"
-                @click="selVerse($event, num)"
-                density="compact"
-                :id="`listVerse_${num}`"
-              >
-                <template v-slot:prepend>
-                  <v-chip class="mr-2">{{ num }}</v-chip>
-                </template>
+          <!-- Cantos arredondados no painel inteiro (lista + toolbar +
+               preview), não só no Screen.vue — que também é a projeção real
+               em tela cheia (Popup.vue) e por isso não recebe isso direto. -->
+          <div class="bb-panel-frame">
+            <div :style="`height: ${height / 2 - 30}px;`" class="mt-2">
+              <v-skeleton-loader
+                v-show="loading_book || loading_verses"
+                type="list-item-two-line"
+              />
+              <v-list class="overflow h-100 ma-0 pa-0 no-select" width="100%">
+                <v-list-item
+                  v-for="(verse, num) in verses"
+                  :key="num"
+                  link
+                  variant="flat"
+                  :value="verse"
+                  :active="bible.verses.includes(+num)"
+                  @click="selVerse($event, num)"
+                  density="compact"
+                  :id="`listVerse_${num}`"
+                >
+                  <template v-slot:prepend>
+                    <v-chip class="mr-2">{{ num }}</v-chip>
+                  </template>
 
-                <div v-html="verse" class="text-caption"></div>
-              </v-list-item>
-            </v-list>
-          </div>
-          <div style="height: 48px">
-            <v-toolbar density="compact">
-              <v-spacer />
-              <v-divider vertical />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-chevron-left "
-                @click="prevVerse()"
-                @shortkey="prevVerse()"
-                v-shortkey="['arrowleft']"
-              />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-chevron-right "
-                @click="nextVerse()"
-                @shortkey="nextVerse()"
-                v-shortkey="['arrowright']"
-              />
-              <v-divider vertical />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-eraser"
-                @click="clean()"
-                @shortkey="clean()"
-                v-shortkey="['del']"
-              />
-              <v-divider vertical />
-              <LScreenBtn module="bible" />
-            </v-toolbar>
-          </div>
-          <!-- Cantos arredondados só aqui no preview do operador — Screen.vue
-               também é a projeção real em tela cheia (Popup.vue), que não
-               deve ter cantos cortados. -->
-          <div class="bb-preview-frame">
+                  <div v-html="verse" class="text-caption"></div>
+                </v-list-item>
+              </v-list>
+            </div>
+            <div style="height: 48px">
+              <v-toolbar density="compact">
+                <v-spacer />
+                <v-divider vertical />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-chevron-left "
+                  @click="prevVerse()"
+                  @shortkey="prevVerse()"
+                  v-shortkey="['arrowleft']"
+                />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-chevron-right "
+                  @click="nextVerse()"
+                  @shortkey="nextVerse()"
+                  v-shortkey="['arrowright']"
+                />
+                <v-divider vertical />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-eraser"
+                  @click="clean()"
+                  @shortkey="clean()"
+                  v-shortkey="['del']"
+                />
+                <v-divider vertical />
+                <LScreenBtn module="bible" />
+              </v-toolbar>
+            </div>
             <Screen :height="compact ? height / 2 - 48 : height / 2 - 88" />
           </div>
         </div>
@@ -840,9 +840,9 @@ export default {
 </script>
 
 <style scoped>
-.bb-preview-frame {
+.bb-panel-frame {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
 }
 </style>

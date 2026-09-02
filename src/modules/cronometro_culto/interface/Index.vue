@@ -1034,7 +1034,7 @@ export default {
 .cc-preview-frame {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
 }
 .cc-time-input,
