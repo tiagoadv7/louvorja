@@ -10,7 +10,7 @@
     slot-left-style="width:300px"
     slot-right-style="width:260px"
     @close="close()"
-    @minimize="$modules.minimize(module_id)"
+    @minimize="onMinimize"
   >
     <template v-slot:system_buttons>
       <LScreenBtn module="slide_editor" />
@@ -333,6 +333,7 @@ export default {
     song: CustomSongs.newSong(),
     current: 0,
     dirty: false,
+    _restoringFromMinimize: false,
     aspectRatio: "16-9",
     audioUrl: "",
     audioPlaying: false,
@@ -400,11 +401,21 @@ export default {
   watch: {
     // O painel some/reaparece via v-dialog (o componente continua montado o
     // tempo todo), então sem isso reabrir o editor mostraria a música da vez
-    // anterior — a cada abertura, começa em branco de novo. Exceção: um
-    // handoff pendente de Coletâneas Personalizadas (ver watch
-    // "pendingSongId" abaixo) — nesse caso quem carrega a música certa é
-    // aquele watcher, não este reset.
+    // anterior — a cada abertura, começa em branco de novo. Exceções:
+    // 1) handoff pendente de Coletâneas Personalizadas (ver watch
+    //    "pendingSongId" abaixo) — quem carrega a música certa é aquele
+    //    watcher, não este reset;
+    // 2) reabrindo depois de MINIMIZAR (ver onMinimize/_restoringFromMinimize
+    //    abaixo) — minimizar só esconde a janela (o áudio continua tocando,
+    //    ver eager no <l-window>), então "reabrir" aqui é o mesmo "show"
+    //    disparando de novo; sem essa exceção, a música que estava tocando
+    //    desaparecia da tela (voltava pra "Nova música" em branco) assim que
+    //    o operador clicava no item minimizado pra voltar a ver o editor.
     show(open) {
+      if (open && this._restoringFromMinimize) {
+        this._restoringFromMinimize = false;
+        return;
+      }
       if (open && !this.pendingSongId) this.resetToBlank();
     },
     // Cobre o caso do editor JÁ estar aberto quando Coletâneas Personalizadas
@@ -455,8 +466,21 @@ export default {
       // encerrado suavemente aqui (fade, mesmo padrão do resto do sistema —
       // ver Media.js#stopAudio): sem isso, fechar o painel deixava a música
       // tocando escondida pra sempre, sem nenhum controle visível pra pará-la.
+      // Zera a flag do minimizar: se o operador minimizou e fechou de vez
+      // (sem restaurar antes), uma futura abertura "do zero" não pode ficar
+      // marcada como "restaurando", senão ficaria presa na música antiga.
+      this._restoringFromMinimize = false;
       this.stopAudioSmooth();
       this.$modules.close(this.module_id);
+    },
+    // Minimizar só esconde a janela — o componente continua montado (eager,
+    // ver <l-window> acima) e o áudio segue tocando. Marca a flag ANTES de
+    // avisar o Modules.js, pra o watch "show" (que dispara quando o operador
+    // reabre) saber que não é uma abertura nova e pular o reset pra "Nova
+    // música" (ver comentário lá).
+    onMinimize() {
+      this._restoringFromMinimize = true;
+      this.$modules.minimize(this.module_id);
     },
     /* METHODS OBRIGATÓRIAS - FIM */
 
