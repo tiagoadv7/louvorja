@@ -76,7 +76,7 @@
 
         <template v-if="sponsors.length > 0">
           <div class="about-section-title about-block-sep">Patrocinadores:</div>
-          <div class="about-sponsor-list">
+          <div class="about-collab-grid">
             <div v-for="s in sponsors" :key="s.name" class="about-collab">
               <div class="about-collab-name">
                 {{ s.name }}<span v-if="s.description" class="about-collab-role"> - {{ s.description }}</span>
@@ -96,12 +96,38 @@
 
       <div class="about-col-divider" />
 
-      <!-- Coluna direita: lista simples de colaboradores (nome + links), no
-           mesmo espírito de texto/link do "Sobre" original — sem cards. -->
+      <!-- Coluna do meio: Desenvolvedores, em 2 colunas pra não ficar uma
+           lista longa e estreita. -->
+      <div class="about-col-mid" v-if="devCategory">
+        <h2 class="about-section-title about-section-title--h2">{{ devCategory.name }}:</h2>
+        <div class="about-collab-grid">
+          <div v-for="person in devCategory.contributors" :key="person.name" class="about-collab">
+            <div class="about-collab-name">
+              {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> - {{ roleText(person.description) }}</span>
+            </div>
+            <a
+              v-for="(l, i) in contributorLinks(person)"
+              :key="i"
+              class="about-mini-link"
+              @click="openExternal(l.url)"
+            >
+              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-col-divider" />
+
+      <!-- Coluna direita: Assets/UI e Outros Colaboradores, separada da
+           coluna de Desenvolvedores por outro traço. -->
       <div class="about-col-right">
-        <h2 class="about-section-title about-section-title--h2">Colaboradores:</h2>
-        <template v-for="cat in rightCategories" :key="cat.name">
-          <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
+        <template v-for="(cat, idx) in otherCategories" :key="cat.name">
+          <h3
+            v-if="cat.contributors.length > 0"
+            class="about-category-title"
+            :class="{ 'about-category-title--first': idx === 0 }"
+          >{{ cat.name }}:</h3>
           <div v-for="person in cat.contributors" :key="person.name" class="about-collab">
             <div class="about-collab-name">
               {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> - {{ roleText(person.description) }}</span>
@@ -133,9 +159,11 @@ import Window from "@/components/Window.vue";
 import { CONTRIBUTORS } from "@/config/Contributors";
 import { contributorLinks } from "@/helpers/ContributorLinks";
 
-// Categorias mostradas como destaque na coluna da esquerda (compactas) —
-// as demais vão pra lista de colaboradores na coluna direita.
+// Categorias mostradas como destaque na coluna da esquerda (compactas).
+// "Desenvolvedores" ganha coluna própria (do meio); o restante (Assets/UI,
+// Outros Colaboradores) vai pra coluna da direita, separada por outro traço.
 const LEFT_CATEGORIES = ["Desenvolvedor da Coletânea", "Patrocinadores"];
+const MID_CATEGORY = "Desenvolvedores";
 
 export default {
   name: 'AboutDialog',
@@ -172,8 +200,11 @@ export default {
     sponsors() {
       return this.contributors.find(c => c.name === 'Patrocinadores')?.contributors || [];
     },
-    rightCategories() {
-      return this.contributors.filter(c => !LEFT_CATEGORIES.includes(c.name));
+    devCategory() {
+      return this.contributors.find(c => c.name === MID_CATEGORY) || null;
+    },
+    otherCategories() {
+      return this.contributors.filter(c => !LEFT_CATEGORIES.includes(c.name) && c.name !== MID_CATEGORY);
     },
   },
   mounted() {
@@ -273,6 +304,11 @@ export default {
   min-width: 240px;
 }
 
+.about-col-mid {
+  flex: 0 0 320px;
+  min-width: 260px;
+}
+
 .about-col-divider {
   flex: 0 0 1px;
   align-self: stretch;
@@ -282,6 +318,14 @@ export default {
 .about-col-right {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Patrocinadores e Desenvolvedores em 2 colunas, em vez de uma lista longa
+   e estreita de um item por linha. */
+.about-collab-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
 }
 
 .about-link--inline {
@@ -346,16 +390,14 @@ export default {
   margin-top: 18px;
   padding-top: 14px;
 }
-.about-sponsor-list .about-collab + .about-collab {
-  border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.15);
-  padding-top: 10px;
-}
-
 .about-category-title {
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.6);
   margin: 20px 0 8px;
+}
+.about-category-title--first {
+  margin-top: 0;
 }
 
 .about-section-title--h2 {
