@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('electron', {
   // ── Aplicação ────────────────────────────────────────────────────────────
   getVersion: () => ipcRenderer.invoke('app:get-version'),
   getOS: () => ipcRenderer.invoke('app:get-os'),
+  getElectronVersion: () => process.versions.electron,
   getUserDataPath: () => ipcRenderer.invoke('app:get-user-data-path'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   showItemInFolder: (filePath) => ipcRenderer.invoke('app:show-item-in-folder', filePath),

@@ -6,124 +6,117 @@
     Sobre o Louvor JA
   </v-tooltip>
 
-  <v-dialog v-model="dialog" max-width="480">
-    <v-card rounded="lg" elevation="12" style="overflow:hidden">
-
-      <!-- Cabeçalho -->
-      <div class="about-header">
-        <v-avatar size="56" color="primary" variant="tonal" class="flex-shrink-0">
-          <v-img :src="logoUrl" />
-        </v-avatar>
-        <div class="flex-grow-1 min-w-0">
-          <div class="text-h6 font-weight-bold">Louvor JA</div>
-          <div class="text-caption text-medium-emphasis">Software de projeção de letras de músicas</div>
-        </div>
-        <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" @click="dialog = false" />
+  <!-- Mesma "janela de módulo" (Window.vue) usada pela aba Coletâneas —
+       cabeçalho com ícone/título/fechar e corpo rolável, em vez do antigo
+       popup pequeno, pra ficar visualmente consistente com o resto do app. -->
+  <Window v-model="dialog" title="Sobre" icon="mdi-information-outline" closable>
+    <div class="about-hero">
+      <v-avatar size="80" color="primary" variant="tonal" class="about-logo">
+        <v-img :src="logoUrl" />
+      </v-avatar>
+      <div class="about-hero-text">
+        <div class="about-product">Louvor <b>JA</b></div>
+        <div class="about-tagline">Sistema de apresentação para cultos e eventos religiosos</div>
+        <div class="about-credits">Desenvolvido com <v-icon size="13" color="red">mdi-heart</v-icon> para a comunidade Adventista.</div>
       </div>
-      <v-divider />
 
-      <v-card-text class="about-body py-4">
-        <div class="d-flex align-center justify-space-between mb-4">
-          <v-chip color="primary" variant="tonal" class="font-weight-bold">
-            v{{ currentVersion || '...' }}
-          </v-chip>
-          <v-btn size="small" variant="text" prepend-icon="mdi-cloud-refresh-outline" @click="checkForUpdates">
-            Verificar atualizações
-          </v-btn>
+      <div class="about-info">
+        <div class="about-info-row">
+          <span class="about-info-label">Versão</span>
+          <span class="about-info-value">{{ currentVersion || '...' }}</span>
         </div>
+        <div class="about-info-row">
+          <span class="about-info-label">Build</span>
+          <span class="about-info-value">{{ buildInfo }}</span>
+        </div>
+        <div class="about-info-row">
+          <span class="about-info-label">Plataforma</span>
+          <span class="about-info-value">{{ platformLabel }}</span>
+        </div>
+      </div>
+    </div>
 
-        <!-- Contato / Site / Redes sociais -->
-        <div class="about-section-title">Contato / Site / Redes Sociais</div>
-        <div class="about-link" @click="openExternal('https://louvorja.com.br/')">
-          <v-icon size="18">mdi-web</v-icon>
-          <span>louvorja.com.br</span>
-        </div>
-        <div class="about-link" @click="openExternal('https://www.instagram.com/louvorja.app')">
-          <v-icon size="18">mdi-instagram</v-icon>
-          <span>@louvorja.app</span>
-        </div>
-        <div class="about-link" @click="openExternal('mailto:contato@louvorja.com.br')">
-          <v-icon size="18">mdi-email-outline</v-icon>
-          <span>contato@louvorja.com.br</span>
-        </div>
+    <v-divider class="my-4" />
 
-        <!-- Desenvolvedor da coletânea -->
-        <div class="about-section-title mt-4">Desenvolvedor da Coletânea</div>
-        <div class="text-body-2 font-weight-medium">Mayco W. G. Rolbuche</div>
-        <div class="about-link" @click="openExternal('mailto:mayco.rolbuche@yahoo.com.br')">
-          <v-icon size="18">mdi-email-outline</v-icon>
-          <span>mayco.rolbuche@yahoo.com.br</span>
-        </div>
-        <div class="about-link" @click="openExternal('https://www.facebook.com/maycorolbuche')">
-          <v-icon size="18">mdi-facebook</v-icon>
-          <span>facebook.com/maycorolbuche</span>
-        </div>
+    <div class="about-actions">
+      <a class="about-link" @click="openExternal('https://louvorja.com.br/')">
+        <v-icon size="16">mdi-web</v-icon>
+        Website
+      </a>
+      <a class="about-link" @click="openExternal('https://app.louvorja.com.br')">
+        <v-icon size="16">mdi-cast-variant</v-icon>
+        LouvorJA On-line
+      </a>
+      <a class="about-link" @click="openExternal('mailto:contato@louvorja.com.br')">
+        <v-icon size="16">mdi-email-outline</v-icon>
+        Email
+      </a>
+      <a class="about-link" @click="openExternal('https://www.facebook.com/louvorja')">
+        <v-icon size="16" color="blue">mdi-facebook</v-icon>
+        Facebook
+      </a>
+      <a class="about-link" @click="openExternal('https://www.instagram.com/louvorja.app')">
+        <v-icon size="16" color="purple">mdi-instagram</v-icon>
+        Instagram
+      </a>
+      <a class="about-link" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
+        <v-icon size="16" color="green">mdi-whatsapp</v-icon>
+        Whatsapp
+      </a>
+      <a class="about-link" @click="openExternal('https://louvorja.com.br/telegram')">
+        <v-icon size="16" color="blue" class="mdi-rotate-315">mdi-send</v-icon>
+        Telegram
+      </a>
+      <a class="about-link" @click="checkForUpdates">
+        <v-icon size="16" color="primary">mdi-cloud-refresh-outline</v-icon>
+        Verificar atualizações
+      </a>
+      <a class="about-link" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
+        <v-icon size="16" color="orange">mdi-bug-outline</v-icon>
+        Enviar Feedback
+      </a>
+    </div>
 
-        <!-- Colaboradores -->
-        <v-expansion-panels class="mt-4" variant="accordion">
-          <v-expansion-panel>
-            <v-expansion-panel-title class="about-section-title pa-0">
-              Colaboradores ({{ contributors.length }})
-            </v-expansion-panel-title>
-            <v-expansion-panel-text>
-              <div v-for="c in contributors" :key="c.name" class="mb-2">
-                <div class="text-body-2 font-weight-medium">{{ c.name }}</div>
-                <div v-if="c.email" class="about-link about-link--small" @click="openExternal('mailto:' + c.email)">
-                  <v-icon size="15">mdi-email-outline</v-icon>
-                  <span>{{ c.email }}</span>
-                </div>
-                <div v-if="c.link" class="about-link about-link--small" @click="openExternal(c.link)">
-                  <v-icon size="15">mdi-link-variant</v-icon>
-                  <span>{{ c.link.replace(/^https?:\/\//, '') }}</span>
-                </div>
-              </div>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
+    <v-divider class="my-5" />
 
-        <!-- Créditos ao LouvorJA original (Delphi) -->
-        <div class="about-legacy mt-4">
-          <div class="text-caption text-medium-emphasis">
-            Louvor JA é a modernização do LouvorJA original (Delphi).
-            <span
-              v-if="legacyVersion"
-              class="about-link about-link--inline"
-              @click="openExternal('https://github.com/louvorja/desktop/releases')"
-            >Versão legada: v{{ legacyVersion }}</span>
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-dialog>
+    <h2 class="about-section-title">Contribuidores</h2>
+
+    <template v-for="cat in contributors" :key="cat.name">
+      <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
+      <v-row>
+        <ContributorCard
+          v-for="contrib in cat.contributors"
+          :key="contrib.name"
+          :contributor="contrib"
+        />
+      </v-row>
+    </template>
+
+    <div v-if="legacyVersion" class="about-legacy">
+      Louvor JA é a modernização do LouvorJA original (Delphi).
+      <span class="about-link about-link--inline" @click="openExternal('https://github.com/louvorja/desktop/releases')">
+        Versão legada: v{{ legacyVersion }}
+      </span>
+    </div>
+  </Window>
 </template>
 
 <script>
-// Colaboradores portados do "Sobre" original (Delphi, gpSobre em fmMenu.dfm —
-// https://github.com/louvorja/desktop) — mesmo conteúdo já público na versão
-// instalada por todos os usuários, só recriado aqui na tela nova em Vue.
-const CONTRIBUTORS = [
-  { name: 'Ido Rodrigues',                 email: 'idorodrigues@hotmail.com',          link: 'https://www.facebook.com/ido.rodrigues' },
-  { name: 'Augusto Resende',               email: 'augusto.resende@outlook.com',       link: 'https://www.facebook.com/AugustoResendePublico' },
-  { name: 'Neemias Lima',                  email: 'neemiasml@gmail.com',               link: 'https://www.facebook.com/neemias.iasdc' },
-  { name: 'Gabriel Dutra Apolinário',      email: 'gabrieldutragv@hotmail.com',        link: 'https://www.facebook.com/G2brielD2tra1' },
-  { name: 'Blog Daniel Gonçalves',         email: null,                                link: 'http://daniellocutor.com.br' },
-  { name: 'Eleandro Borel',                email: null,                                link: 'https://www.facebook.com/lele.kmi' },
-  { name: 'Caíque Marcel',                 email: 'caiquemarceldbv@gmail.com',         link: null },
-  { name: 'Tiago Lima',                    email: 'tiagolimadbvs7@gmail.com',          link: 'https://www.facebook.com/tiago.nevesdelima' },
-  { name: 'Carlos Eduardo',                email: 'carlos.lol.lol.lol@gmail.com',      link: 'https://www.facebook.com/carlos.lol.lol.lol' },
-  { name: 'Natanael Rodrigues',            email: 'natosro@hotmail.com',               link: 'https://facebook.com/natanael.srodrigues' },
-  { name: 'Alexandre Oliveira Melo',       email: 'flanguista51bis@hotmail.com',       link: 'https://www.facebook.com/alexandre.oliveiradossantos.54' },
-  { name: 'Rogerio Figueira',              email: 'roger.figueira31@gmail.com',        link: 'https://www.facebook.com/roger.figueira.14' },
-  { name: 'Edvaldo Cordeiro',              email: 'edvaldocostacordeiro@hotmail.com',  link: 'https://www.facebook.com/edvaldocostacordeiro' },
-  { name: 'Elcio Silva',                   email: 'elciosilva.dbv@gmail.com',          link: 'https://www.facebook.com/elcio.silva.1422' },
-  { name: 'Victor Hugo Ventura Rodrigues', email: 'victor_hugo_ventura@hotmail.com',   link: 'https://www.facebook.com/victor.hugo.ventura' },
-];
+import Window from "@/components/Window.vue";
+import ContributorCard from "@/components/ContributorCard.vue";
+import { CONTRIBUTORS } from "@/config/Contributors";
 
 export default {
   name: 'AboutDialog',
+  components: {
+    Window,
+    ContributorCard,
+  },
   data: () => ({
     dialog: false,
     currentVersion: '',
+    electronVersion: '',
+    osPlatform: '',
     legacyVersion: '',
     logoUrl: `${import.meta.env.BASE_URL}ico/favicon.svg`,
     contributors: CONTRIBUTORS,
@@ -133,11 +126,23 @@ export default {
     is_desktop() {
       return this.$appdata.get('is_desktop');
     },
+    buildInfo() {
+      if (!this.is_desktop) return 'Web';
+      const parts = ['Desktop'];
+      if (this.electronVersion) parts.push(`Electron ${this.electronVersion}`);
+      return parts.join(' · ');
+    },
+    platformLabel() {
+      const map = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' };
+      return map[this.osPlatform] || (this.is_desktop ? 'Desktop' : 'Navegador');
+    },
   },
   mounted() {
     if (!this.$electron.isElectron()) return;
 
     this.$electron.getVersion?.().then(v => { this.currentVersion = v || ''; }).catch(() => {});
+    this.$electron.getOS?.().then(v => { this.osPlatform = v || ''; }).catch(() => {});
+    Promise.resolve(this.$electron.getElectronVersion?.()).then(v => { this.electronVersion = v || ''; }).catch(() => {});
 
     // Aberto pelo menu nativo (Ajuda > Sobre o LouvorJA, ver electron/menu.js)
     this._aboutHandler = this.$electron.on('menu:about', () => this.open());
@@ -166,6 +171,7 @@ export default {
     // (ver App.vue, listener 'check-updates') — evita duplicar a lógica de
     // checagem/diálogo já implementada em UpdateDialog.vue.
     checkForUpdates() {
+      this.dialog = false;
       window.dispatchEvent(new CustomEvent('check-updates'));
     },
   },
@@ -173,47 +179,129 @@ export default {
 </script>
 
 <style scoped>
-.about-header {
+.about-hero {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
-.about-body {
-  max-height: 60vh;
-  overflow-y: auto;
+
+.about-logo {
+  flex-shrink: 0;
 }
-.about-section-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  opacity: 0.65;
-  margin-bottom: 6px;
+
+.about-hero-text {
+  min-width: 0;
+  flex: 1 1 260px;
 }
-.about-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  cursor: pointer;
-  font-size: 0.875rem;
+
+.about-product {
+  font-size: 28px;
+  font-weight: 300;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.about-product b {
   color: rgb(var(--v-theme-primary));
-  width: fit-content;
+  font-weight: 700;
+}
+
+.about-tagline {
+  font-size: 0.9rem;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  margin-top: 4px;
+}
+
+.about-credits {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.about-info {
+  flex: 0 0 auto;
+  min-width: 280px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  padding: 4px 16px;
+}
+
+.about-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  font-size: 0.85rem;
+}
+.about-info-row:last-child {
+  border-bottom: none;
+}
+.about-info-label {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+.about-info-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
 }
 .about-link:hover {
-  text-decoration: underline;
-}
-.about-link--small {
-  font-size: 0.78rem;
-  opacity: 0.85;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+  border-color: rgb(var(--v-theme-primary));
 }
 .about-link--inline {
   display: inline-flex;
   margin-left: 4px;
+  padding: 2px 8px;
 }
+
+.about-section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.about-category-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin: 20px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
 .about-legacy {
   border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.15);
-  padding-top: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
+  font-size: 0.78rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 </style>

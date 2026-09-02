@@ -121,6 +121,8 @@ export default {
     isElectron() ? window.electron.getVersion() : Promise.resolve(null),
   getOS: () =>
     isElectron() ? window.electron.getOS() : Promise.resolve(navigator.platform),
+  getElectronVersion: () =>
+    isElectron() ? window.electron.getElectronVersion() : null,
   getUserDataPath: () =>
     isElectron() ? window.electron.getUserDataPath() : Promise.resolve(null),
   openExternal: (url) =>
