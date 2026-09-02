@@ -128,7 +128,7 @@ export default {
 .al-icon--info    { background: rgba(2, 136, 209, 0.15); color: #0288d1; }
 .al-icon--neutral { background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); }
 
-.al-content { min-width: 0; padding-top: 2px; }
+.al-content { min-width: 0; flex: 1; padding-top: 2px; }
 
 .al-title {
   font-size: 15px;
