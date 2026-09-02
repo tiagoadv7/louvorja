@@ -90,16 +90,52 @@ function rememberPopupModuleForRestore(entry) {
   }
 }
 
+// ── Associação de arquivo .slja ("executar"/abrir com duplo clique) ─────────
+// Guarda o caminho recebido até a janela principal existir E o renderer
+// avisar que já carregou (ver ipcMain.once('app:loaded') mais abaixo) — um
+// duplo clique no .slja pode chegar antes de qualquer uma das duas coisas
+// (app recém-aberto pelo próprio arquivo).
+let pendingSljaPath = null;
+
+function extractSljaPath(argv) {
+  for (const arg of argv) {
+    if (typeof arg === 'string' && !arg.startsWith('-') && arg.toLowerCase().endsWith('.slja')) {
+      return arg;
+    }
+  }
+  return null;
+}
+
+function openSljaFile(filePath) {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send('open-slja-file', filePath);
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  } else {
+    pendingSljaPath = filePath;
+  }
+}
+
+// process.argv: [electron/exe, script.js (só em dev), ...args do usuário] —
+// extractSljaPath já ignora os dois primeiros por não terminarem em .slja.
+const initialSljaPath = extractSljaPath(process.argv);
+if (initialSljaPath) pendingSljaPath = initialSljaPath;
+
 // Previne múltiplas instâncias
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+    // Duplo clique num .slja com o app já rodando: a instância nova (que vai
+    // fechar sozinha) entrega o caminho aqui em vez de abrir uma segunda
+    // janela — mesma ideia do WM_COPYDATA do LouvorJA em Delphi.
+    const sljaPath = extractSljaPath(argv);
+    if (sljaPath) openSljaFile(sljaPath);
   });
 }
 
@@ -863,6 +899,13 @@ function registerIpcHandlers() {
   // Vue sinaliza que está pronto: fade-in da janela principal + fecha loading
   ipcMain.once('app:loaded', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    // Abriu o app clicando duas vezes num .slja (ver extractSljaPath/
+    // openSljaFile mais acima) — só agora o renderer está pronto pra receber.
+    if (pendingSljaPath) {
+      mainWindow.webContents.send('open-slja-file', pendingSljaPath);
+      pendingSljaPath = null;
+    }
 
     // Restaura a projeção que estava aberta quando o app foi fechado da
     // última vez — sem isso, o operador precisa reabrir manualmente o mesmo

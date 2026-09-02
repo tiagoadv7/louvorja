@@ -343,6 +343,7 @@ export default {
     _projTimer: null,
     _fadeTimer: null,
     _keyHandler: null,
+    _openFileHandler: null,
     _lastSyncTime: -1,
   }),
   computed: {
@@ -363,6 +364,14 @@ export default {
     // uma música salva pra carregar em vez de abrir em branco.
     pendingSongId() {
       return this.$appdata.get(`modules.${this.module_id}.pending_song_id`, "");
+    },
+    // Caminho de um .slja recebido por fora (duplo clique no arquivo, com o
+    // SO abrindo/entregando pro app — ver electron/main.js#openSljaFile e o
+    // listener 'open-slja-file' registrado em mounted() abaixo). Mesma ideia
+    // do pendingSongId acima, só que pra um arquivo cru em vez de uma música
+    // já salva.
+    pendingSljaPath() {
+      return this.$appdata.get(`modules.${this.module_id}.pending_slja_path`, "");
     },
     // Comandos vindos do mini-player do rodapé (play/pause, avançar/voltar,
     // buscar tempo, volume, encerrar) — ver watch abaixo e helpers/
@@ -409,8 +418,8 @@ export default {
     // tempo todo), então sem isso reabrir o editor mostraria a música da vez
     // anterior — a cada abertura, começa em branco de novo. Exceções:
     // 1) handoff pendente de Coletâneas Personalizadas (ver watch
-    //    "pendingSongId" abaixo) — quem carrega a música certa é aquele
-    //    watcher, não este reset;
+    //    "pendingSongId" abaixo) ou de um .slja externo (ver "pendingSljaPath"
+    //    abaixo) — quem carrega a música certa é aquele watcher, não este reset;
     // 2) reabrindo depois de MINIMIZAR (ver onMinimize/_restoringFromMinimize
     //    abaixo) — minimizar só esconde a janela (o áudio continua tocando,
     //    ver eager no <l-window>), então "reabrir" aqui é o mesmo "show"
@@ -422,7 +431,7 @@ export default {
         this._restoringFromMinimize = false;
         return;
       }
-      if (open && !this.pendingSongId) this.resetToBlank();
+      if (open && !this.pendingSongId && !this.pendingSljaPath) this.resetToBlank();
     },
     // Cobre o caso do editor JÁ estar aberto quando Coletâneas Personalizadas
     // pede pra abrir outra música — "show" não dispara de novo (já é true),
@@ -431,6 +440,13 @@ export default {
       if (!id) return;
       this.$appdata.set(`modules.${this.module_id}.pending_song_id`, "");
       this.loadSongById(id);
+    },
+    // Mesma ideia do watch acima, pra um .slja recebido de fora (duplo clique
+    // no arquivo — ver mounted() abaixo e electron/main.js#openSljaFile).
+    pendingSljaPath(path) {
+      if (!path) return;
+      this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, "");
+      this.loadSljaFromPath(path);
     },
     footerCommand(cmd) {
       if (!cmd) return;
@@ -538,6 +554,29 @@ export default {
         // audioUrl acabou de mudar — o <audio> (v-if="audioUrl") só existe
         // na árvore depois que o DOM atualizar.
         this.$nextTick(() => this.togglePlay());
+      }
+    },
+
+    // Duplo clique num .slja no Windows (ou "Abrir com" > Louvor JA) — mesmo
+    // parse de onLoadSlja(), só que a partir de um caminho no disco em vez de
+    // um <input type=file>. $electron.readFile(path, null) devolve os bytes
+    // crus (mesmo padrão de CustomSongs.js#getAudioBlob/getImageBlob), que
+    // viram um File de verdade (JSZip/parseSljaToSong aceitam Blob/File).
+    async loadSljaFromPath(filePath) {
+      try {
+        const data = await this.$electron.readFile(filePath, null);
+        if (!data) throw new Error("Arquivo não encontrado");
+        const fileName = filePath.split(/[\\/]/).pop();
+        const file = new File([data], fileName);
+        const newSong = await CustomSongs.parseSljaToSong(file);
+        this.song = newSong;
+        this.current = 0;
+        this.dirty = false;
+        this.resolvedImages = {};
+        await this.rebuildAudioUrl();
+        await this.ensureAllImagesResolved();
+      } catch (err) {
+        this.$alert.error({ title: this.t("data.invalid_file"), text: String(err?.message || err), translate: false });
       }
     },
 
@@ -1120,11 +1159,21 @@ export default {
       }
     };
     window.addEventListener("keydown", this._keyHandler);
+
+    // Duplo clique num .slja no SO (ou "Abrir com") — ver electron/main.js
+    // #openSljaFile. Abre a janela do editor e marca o handoff (watch
+    // "pendingSljaPath" acima) pra carregar o arquivo assim que "show" virar
+    // true, em vez de resetar pra "Nova música".
+    this._openFileHandler = this.$electron.on("open-slja-file", (filePath) => {
+      this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, filePath);
+      this.$modules.open(this.module_id);
+    });
   },
   beforeUnmount() {
     clearTimeout(this._projTimer);
     clearInterval(this._fadeTimer);
     if (this._keyHandler) window.removeEventListener("keydown", this._keyHandler);
+    if (this._openFileHandler) this.$electron.off("open-slja-file", this._openFileHandler);
   },
 };
 </script>

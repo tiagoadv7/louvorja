@@ -101,6 +101,15 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "slja",
+        "name": "Apresentação Louvor JA",
+        "description": "Apresentação de música do Louvor JA (Editor de Músicas)",
+        "icon": "public/ico/favicon.ico",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "target": [
         {

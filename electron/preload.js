@@ -34,6 +34,7 @@ const RECEIVE_CHANNELS = [
   'updater:state',
   'displays-changed',
   'output-display-not-found',
+  'open-slja-file',
 ];
 
 contextBridge.exposeInMainWorld('electron', {
