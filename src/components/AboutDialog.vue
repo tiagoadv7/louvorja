@@ -8,10 +8,13 @@
 
   <!-- Mesma "janela de módulo" (Window.vue) usada pela aba Coletâneas —
        cabeçalho com ícone/título/fechar e corpo rolável, em vez do antigo
-       popup pequeno, pra ficar visualmente consistente com o resto do app. -->
+       popup pequeno, pra ficar visualmente consistente com o resto do app.
+       Layout em duas colunas (links/destaques à esquerda, grade de
+       contribuidores à direita) inspirado no "Sobre" original em Delphi,
+       mas com o visual mais atual (cards, ícones) do resto do app. -->
   <Window v-model="dialog" title="Sobre" icon="mdi-information-outline" closable>
     <div class="about-hero">
-      <v-avatar size="80" color="primary" variant="tonal" class="about-logo">
+      <v-avatar size="72" color="primary" variant="tonal" class="about-logo">
         <v-img :src="logoUrl" />
       </v-avatar>
       <div class="about-hero-text">
@@ -38,63 +41,96 @@
 
     <v-divider class="my-4" />
 
-    <div class="about-actions">
-      <a class="about-link" @click="openExternal('https://louvorja.com.br/')">
-        <v-icon size="16">mdi-web</v-icon>
-        Website
-      </a>
-      <a class="about-link" @click="openExternal('https://app.louvorja.com.br')">
-        <v-icon size="16">mdi-cast-variant</v-icon>
-        LouvorJA On-line
-      </a>
-      <a class="about-link" @click="openExternal('mailto:contato@louvorja.com.br')">
-        <v-icon size="16">mdi-email-outline</v-icon>
-        Email
-      </a>
-      <a class="about-link" @click="openExternal('https://www.facebook.com/louvorja')">
-        <v-icon size="16" color="blue">mdi-facebook</v-icon>
-        Facebook
-      </a>
-      <a class="about-link" @click="openExternal('https://www.instagram.com/louvorja.app')">
-        <v-icon size="16" color="purple">mdi-instagram</v-icon>
-        Instagram
-      </a>
-      <a class="about-link" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
-        <v-icon size="16" color="green">mdi-whatsapp</v-icon>
-        Whatsapp
-      </a>
-      <a class="about-link" @click="openExternal('https://louvorja.com.br/telegram')">
-        <v-icon size="16" color="blue" class="mdi-rotate-315">mdi-send</v-icon>
-        Telegram
-      </a>
-      <a class="about-link" @click="checkForUpdates">
-        <v-icon size="16" color="primary">mdi-cloud-refresh-outline</v-icon>
-        Verificar atualizações
-      </a>
-      <a class="about-link" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
-        <v-icon size="16" color="orange">mdi-bug-outline</v-icon>
-        Enviar Feedback
-      </a>
+    <div class="about-columns">
+      <!-- Coluna esquerda: links + destaques (Desenvolvedor/Patrocinadores) -->
+      <div class="about-col-left">
+        <div class="about-section-title">Contato / Site / Redes Sociais</div>
+        <a class="about-link-row" @click="openExternal('https://louvorja.com.br/')">
+          <v-icon size="16">mdi-web</v-icon> Website
+        </a>
+        <a class="about-link-row" @click="openExternal('https://app.louvorja.com.br')">
+          <v-icon size="16">mdi-cast-variant</v-icon> LouvorJA On-line
+        </a>
+        <a class="about-link-row" @click="openExternal('mailto:contato@louvorja.com.br')">
+          <v-icon size="16">mdi-email-outline</v-icon> Email
+        </a>
+        <a class="about-link-row" @click="openExternal('https://www.facebook.com/louvorja')">
+          <v-icon size="16" color="blue">mdi-facebook</v-icon> Facebook
+        </a>
+        <a class="about-link-row" @click="openExternal('https://www.instagram.com/louvorja.app')">
+          <v-icon size="16" color="purple">mdi-instagram</v-icon> Instagram
+        </a>
+        <a class="about-link-row" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
+          <v-icon size="16" color="green">mdi-whatsapp</v-icon> Whatsapp
+        </a>
+        <a class="about-link-row" @click="openExternal('https://louvorja.com.br/telegram')">
+          <v-icon size="16" color="blue" class="mdi-rotate-315">mdi-send</v-icon> Telegram
+        </a>
+        <a class="about-link-row" @click="checkForUpdates">
+          <v-icon size="16" color="primary">mdi-cloud-refresh-outline</v-icon> Verificar atualizações
+        </a>
+        <a class="about-link-row" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
+          <v-icon size="16" color="orange">mdi-bug-outline</v-icon> Enviar Feedback
+        </a>
+
+        <template v-if="mainDev">
+          <div class="about-section-title mt-5">Desenvolvedor da Coletânea</div>
+          <div class="about-person">
+            <div class="about-person-name">{{ mainDev.name }}</div>
+            <div v-if="mainDev.description" class="about-person-desc">{{ mainDev.description }}</div>
+            <div class="about-person-links">
+              <v-btn
+                v-for="(l, i) in contributorLinks(mainDev)"
+                :key="i"
+                :icon="l.icon"
+                variant="text"
+                size="x-small"
+                density="comfortable"
+                @click="openExternal(l.url)"
+              />
+            </div>
+          </div>
+        </template>
+
+        <template v-if="sponsors.length > 0">
+          <div class="about-section-title mt-5">Patrocinadores</div>
+          <div v-for="s in sponsors" :key="s.name" class="about-person">
+            <div class="about-person-name">{{ s.name }}</div>
+            <div v-if="s.description" class="about-person-desc">{{ s.description }}</div>
+            <div class="about-person-links">
+              <v-btn
+                v-for="(l, i) in contributorLinks(s)"
+                :key="i"
+                :icon="l.icon"
+                variant="text"
+                size="x-small"
+                density="comfortable"
+                @click="openExternal(l.url)"
+              />
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Coluna direita: grade de contribuidores (até 3 por linha) -->
+      <div class="about-col-right">
+        <h2 class="about-section-title">Contribuidores</h2>
+        <template v-for="cat in rightCategories" :key="cat.name">
+          <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
+          <v-row>
+            <ContributorCard
+              v-for="contrib in cat.contributors"
+              :key="contrib.name"
+              :contributor="contrib"
+            />
+          </v-row>
+        </template>
+      </div>
     </div>
-
-    <v-divider class="my-5" />
-
-    <h2 class="about-section-title">Contribuidores</h2>
-
-    <template v-for="cat in contributors" :key="cat.name">
-      <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
-      <v-row>
-        <ContributorCard
-          v-for="contrib in cat.contributors"
-          :key="contrib.name"
-          :contributor="contrib"
-        />
-      </v-row>
-    </template>
 
     <div v-if="legacyVersion" class="about-legacy">
       Louvor JA é a modernização do LouvorJA original (Delphi).
-      <span class="about-link about-link--inline" @click="openExternal('https://github.com/louvorja/desktop/releases')">
+      <span class="about-link--inline" @click="openExternal('https://github.com/louvorja/desktop/releases')">
         Versão legada: v{{ legacyVersion }}
       </span>
     </div>
@@ -105,6 +141,11 @@
 import Window from "@/components/Window.vue";
 import ContributorCard from "@/components/ContributorCard.vue";
 import { CONTRIBUTORS } from "@/config/Contributors";
+import { contributorLinks } from "@/helpers/ContributorLinks";
+
+// Categorias mostradas como destaque na coluna da esquerda (compactas, sem
+// avatar/card) — as demais vão pra grade de cards na coluna direita.
+const LEFT_CATEGORIES = ["Desenvolvedor da Coletânea", "Patrocinadores"];
 
 export default {
   name: 'AboutDialog',
@@ -136,6 +177,15 @@ export default {
       const map = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' };
       return map[this.osPlatform] || (this.is_desktop ? 'Desktop' : 'Navegador');
     },
+    mainDev() {
+      return this.contributors.find(c => c.name === 'Desenvolvedor da Coletânea')?.contributors[0] || null;
+    },
+    sponsors() {
+      return this.contributors.find(c => c.name === 'Patrocinadores')?.contributors || [];
+    },
+    rightCategories() {
+      return this.contributors.filter(c => !LEFT_CATEGORIES.includes(c.name));
+    },
   },
   mounted() {
     if (!this.$electron.isElectron()) return;
@@ -164,9 +214,14 @@ export default {
     open() {
       this.dialog = true;
     },
+    // Sem isso os links abriam numa janela do Electron dentro do próprio
+    // app (não há setWindowOpenHandler nas BrowserWindow do main.js), em
+    // vez do navegador padrão do sistema — daí sempre passar por aqui em
+    // vez de usar href/target="_blank" direto no template.
     openExternal(url) {
       this.$electron.openExternal(url);
     },
+    contributorLinks,
     // Reaproveita o mesmo evento de janela que o Menu lateral já dispara
     // (ver App.vue, listener 'check-updates') — evita duplicar a lógica de
     // checagem/diálogo já implementada em UpdateDialog.vue.
@@ -196,7 +251,7 @@ export default {
 }
 
 .about-product {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 300;
   margin: 0;
   letter-spacing: -0.01em;
@@ -207,13 +262,13 @@ export default {
 }
 
 .about-tagline {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: rgba(var(--v-theme-on-surface), 0.65);
   margin-top: 4px;
 }
 
 .about-credits {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-style: italic;
   color: rgba(var(--v-theme-on-surface), 0.55);
   margin-top: 8px;
@@ -224,7 +279,7 @@ export default {
 
 .about-info {
   flex: 0 0 auto;
-  min-width: 280px;
+  min-width: 260px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
   padding: 4px 16px;
@@ -235,9 +290,9 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 8px 0;
+  padding: 7px 0;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 .about-info-row:last-child {
   border-bottom: none;
@@ -250,42 +305,78 @@ export default {
   font-variant-numeric: tabular-nums;
 }
 
-.about-actions {
+/* Duas colunas, no espírito do "Sobre" original: links/destaques à
+   esquerda (coluna estreita e fixa), grade de contribuidores à direita. */
+.about-columns {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 32px;
 }
 
-.about-link {
-  display: inline-flex;
+.about-col-left {
+  flex: 0 0 260px;
+  min-width: 220px;
+}
+
+.about-col-right {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.about-link-row {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin: 0 -6px 1px;
+  padding: 5px 6px;
+  border-radius: 6px;
   text-decoration: none;
   color: rgb(var(--v-theme-on-surface));
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 6px;
+  font-size: 0.83rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s;
 }
-.about-link:hover {
-  background: rgba(var(--v-theme-on-surface), 0.1);
-  border-color: rgb(var(--v-theme-primary));
+.about-link-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.07);
 }
+
 .about-link--inline {
   display: inline-flex;
-  margin-left: 4px;
-  padding: 2px 8px;
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+}
+.about-link--inline:hover {
+  text-decoration: underline;
+}
+
+.about-person {
+  margin-bottom: 12px;
+}
+.about-person-name {
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.about-person-desc {
+  font-size: 0.75rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-top: 1px;
+  line-height: 1.35;
+}
+.about-person-links {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 2px 0 0 -6px;
 }
 
 .about-section-title {
-  font-size: 1.15rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.65;
+  margin: 0 0 8px;
 }
 
 .about-category-title {
@@ -296,10 +387,17 @@ export default {
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
+h2.about-section-title {
+  font-size: 1.1rem;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 1;
+  margin-bottom: 4px;
+}
 
 .about-legacy {
   border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.15);
-  margin-top: 16px;
+  margin-top: 20px;
   padding-top: 12px;
   font-size: 0.78rem;
   color: rgba(var(--v-theme-on-surface), 0.6);

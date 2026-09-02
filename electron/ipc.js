@@ -81,7 +81,7 @@ function setupIpc(mainWindow) {
   ipcMain.handle('app:get-user-data-path', () => app.getPath('userData'));
 
   ipcMain.handle('app:open-external', (_, url) => {
-    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+    if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
       shell.openExternal(url);
     }
   });

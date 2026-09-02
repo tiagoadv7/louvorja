@@ -1,5 +1,5 @@
 <template>
-  <v-col cols="12" sm="6" md="4" lg="3">
+  <v-col cols="12" sm="6" md="4">
     <v-card class="contributor-card" rounded="lg" variant="outlined">
       <div class="contributor-card-body">
         <v-avatar size="72" class="contributor-avatar">
@@ -32,96 +32,15 @@
           </div>
         </div>
       </div>
-      <div v-if="hasLinks" class="contributor-links">
+      <div v-if="links.length > 0" class="contributor-links">
         <v-btn
-          v-if="contributor.github"
-          :href="`https://github.com/${contributor.github}`"
-          icon="mdi-github"
+          v-for="(l, i) in links"
+          :key="i"
+          :icon="l.icon"
           variant="text"
           size="small"
           density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.linkedin"
-          :href="`https://linkedin.com/in/${contributor.linkedin}`"
-          icon="mdi-linkedin"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.facebook"
-          :href="contributor.facebook.startsWith('http') ? contributor.facebook : `https://facebook.com/${contributor.facebook}`"
-          icon="mdi-facebook"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.instagram"
-          :href="`https://instagram.com/${contributor.instagram}`"
-          icon="mdi-instagram"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.x"
-          :href="`https://x.com/${contributor.x}`"
-          icon="mdi-twitter"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.website"
-          :href="contributor.website"
-          icon="mdi-web"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.whatsapp"
-          :href="`https://wa.me/${contributor.whatsapp}`"
-          icon="mdi-whatsapp"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.website2"
-          :href="contributor.website2"
-          icon="mdi-web"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
-        />
-        <v-btn
-          v-if="contributor.email"
-          :href="`mailto:${contributor.email}`"
-          icon="mdi-email-outline"
-          variant="text"
-          size="small"
-          density="comfortable"
-          target="_blank"
-          rel="noopener noreferrer"
+          @click="open(l.url)"
         />
       </div>
     </v-card>
@@ -129,6 +48,8 @@
 </template>
 
 <script>
+import { contributorLinks } from "@/helpers/ContributorLinks";
+
 export default {
   name: "ContributorCard",
   props: {
@@ -163,9 +84,8 @@ export default {
       if (this.showFallbackAvatar) return null;
       return this.avatarSources[this.avatarFallbackIndex] ?? null;
     },
-    hasLinks() {
-      const c = this.contributor;
-      return !!(c.github || c.linkedin || c.facebook || c.instagram || c.x || c.website || c.website2 || c.whatsapp || c.email);
+    links() {
+      return contributorLinks(this.contributor);
     },
   },
   methods: {
@@ -176,6 +96,12 @@ export default {
       } else {
         this.showFallbackAvatar = true;
       }
+    },
+    // Sem isso, os <v-btn href target="_blank"> abriam numa janela do
+    // Electron dentro do próprio app (não há setWindowOpenHandler nas
+    // BrowserWindow do main.js) em vez do navegador padrão do sistema.
+    open(url) {
+      this.$electron.openExternal(url);
     },
   },
 };
