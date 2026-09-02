@@ -8,7 +8,54 @@
     <div class="sm-actions-row">
       <v-btn variant="text" size="small" icon="mdi-content-save-outline" @click="savePlaylist" title="Salvar playlist" />
       <v-btn variant="text" size="small" icon="mdi-folder-open-outline" @click="loadPlaylist" title="Carregar playlist" />
+      <v-btn
+        variant="text" size="small"
+        :icon="showSettings ? 'mdi-cog' : 'mdi-cog-outline'"
+        :color="showSettings ? 'primary' : undefined"
+        @click="showSettings = !showSettings"
+        title="Configurações"
+      />
     </div>
+
+    <!-- ── FX row ──────────────────────────────────────────────────────── -->
+    <div class="sm-fx-row">
+      <div
+        v-for="pad in fxPads" :key="pad.id"
+        class="sm-fx-pad"
+        :class="{ active: activeFxIds.has(pad.id) }"
+        @click="onFxClick(pad)"
+        @dragover.prevent
+        @drop.prevent="onDrop($event, pad, 'fx')"
+        :title="pad.name || `FX ${pad.id}`"
+      >
+        <span class="sm-fx-key">F{{ pad.id }}</span>
+        <span class="sm-fx-name">{{ pad.name || '—' }}</span>
+        <div v-if="activeFxIds.has(pad.id)" class="sm-bars sm-bars--sm">
+          <span v-for="i in 3" :key="i" class="sm-bar" />
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings panel ──────────────────────────────────────────────── -->
+    <v-expand-transition>
+      <div v-if="showSettings" class="sm-settings">
+        <v-row dense>
+          <v-col cols="4">
+            <v-text-field v-model.number="fadeInMs" type="number" min="0" max="5000" step="100"
+              label="Fade In (ms)" density="compact" variant="outlined" hide-details />
+          </v-col>
+          <v-col cols="4">
+            <v-text-field v-model.number="fadeOutMs" type="number" min="0" max="8000" step="100"
+              label="Fade Out (ms)" density="compact" variant="outlined" hide-details />
+          </v-col>
+          <v-col cols="4">
+            <div class="sm-setting-label">Atenuação: {{ Math.round(duckingLevel * 100) }}%</div>
+            <v-slider v-model="duckingLevel" min="0" max="1" step="0.05"
+              hide-details density="compact" color="primary" />
+          </v-col>
+        </v-row>
+      </div>
+    </v-expand-transition>
 
     <!-- ── Pads grid ───────────────────────────────────────────────────── -->
     <div class="sm-pads">
@@ -154,6 +201,7 @@ export default {
 
   data: () => ({
     mainPads:      makePads(10),
+    fxPads:        makePads(10),
     masterVolume:  1.0,
     isMuted:       false,
     isTalkover:    false,
@@ -165,12 +213,15 @@ export default {
     // do pad principal (crossfade, fadeIn/Out, ducking, volume master), mas
     // não fica em mainPads, então não ocupa/aparece como pad na grade.
     externalPad:   null,
+    activeFxIds:   new Set(),
     currentTime:   0,
     duration:      0,
     progress:      0,
     isPlaying:     false,
     dragOverId:    null,
+    showSettings:  false,
     _mainAudio:    null,
+    _fxAudios:     {},
     _fades:        {},
     _ticker:       null,
     _keyHandler:   null,
@@ -270,6 +321,11 @@ export default {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
       const k = e.key;
 
+      // F1–F10 → FX pads
+      if (/^F([1-9]|10)$/.test(k)) {
+        const n = parseInt(k.slice(1));
+        if (n >= 1 && n <= 10) { e.preventDefault(); this.onFxClick(this.fxPads[n - 1]); return; }
+      }
       // 1–9, 0 → main pads (0 = pad 10)
       if (/^[0-9]$/.test(k) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
@@ -287,9 +343,10 @@ export default {
     window.addEventListener('keydown', this._keyHandler);
 
     // Outro dono de áudio (video_player, media) começou a tocar: encerra (com
-    // fade) a faixa principal, sem esperar o próximo clique.
+    // fade) a faixa principal e os FX ativos, sem esperar o próximo clique.
     this._focusHandler = $audioBus.listen('soundmaster', () => {
       this.stopMain(true);
+      [...this.activeFxIds].forEach(id => this.stopFx(id, true));
     });
   },
 
@@ -314,7 +371,7 @@ export default {
     // quanto por onMinimize() de video_player/interface/Index.vue (minimizar
     // agora também encerra a reprodução, em vez de deixar tocando escondido).
     async stopSmooth() {
-      const hasAudio = !!this._mainAudio;
+      const hasAudio = this._mainAudio || this.activeFxIds.size > 0;
       if (hasAudio && this.fadeOutMs > 0) {
         this.stopAll();
         await new Promise(r => setTimeout(r, this.fadeOutMs + 60));
@@ -332,7 +389,7 @@ export default {
     effVol(padVol, isMain) {
       if (this.isMuted) return 0;
       let v = padVol * this.masterVolume;
-      if (isMain && this.isTalkover) v *= this.duckingLevel;
+      if (isMain && (this.activeFxIds.size > 0 || this.isTalkover)) v *= this.duckingLevel;
       return Math.max(0, Math.min(1, v));
     },
 
@@ -378,6 +435,10 @@ export default {
       if (this._mainAudio && this.activePad) {
         this._mainAudio.volume = this.effVol(this.activePad.volume, true);
       }
+      Object.entries(this._fxAudios).forEach(([id, a]) => {
+        const pad = this.fxPads.find(p => p.id === +id);
+        if (pad) a.volume = this.effVol(pad.volume, false);
+      });
     },
 
     toggleMute() {
@@ -394,6 +455,10 @@ export default {
       if (this._mainAudio) {
         this.fade('main', this._mainAudio, this._mainAudio.volume, this.effVol(this.activePad?.volume ?? 1, true), fadeMs);
       }
+      Object.entries(this._fxAudios).forEach(([id, a]) => {
+        const p = this.fxPads.find(f => f.id === +id);
+        this.fade(`fx${id}`, a, a.volume, this.effVol(p?.volume ?? 1, false), fadeMs);
+      });
     },
 
     togglePlay() {
@@ -429,11 +494,13 @@ export default {
     stopAll() {
       // Botão Stop: encerra com fade suave
       this.stopMain(true);
+      [...this.activeFxIds].forEach(id => this.stopFx(id, true));
     },
 
     stopAllImmediate() {
       // Usado apenas no beforeUnmount (componente já está sendo destruído)
       this.stopMain(false);
+      [...this.activeFxIds].forEach(id => this.stopFx(id, false));
     },
 
     async pickFile() {
@@ -468,6 +535,7 @@ export default {
 
     clearPad(pad, type) {
       if (type === 'main' && this.activeMainId === pad.id) this.stopMain(false);
+      if (type === 'fx'   && this.activeFxIds.has(pad.id)) this.stopFx(pad.id, false);
       pad.filePath = null; pad.fileUrl = null; pad.name = '';
     },
 
@@ -560,6 +628,38 @@ export default {
       if (this._mainAudio && this.activeMainId === pad.id) this._mainAudio.loop = pad.isLooping;
     },
 
+    async onFxClick(pad) {
+      if (!pad.fileUrl) {
+        const fp = await this.pickFile();
+        if (fp) this.assignFile(pad, fp, null);
+        return;
+      }
+      if (this.activeFxIds.has(pad.id)) { this.stopFx(pad.id); return; }
+      this.playFx(pad);
+    },
+
+    playFx(pad) {
+      const audio = new Audio(pad.fileUrl);
+      audio.volume = 0;
+      this._fxAudios[pad.id] = audio;
+      const ids = new Set(this.activeFxIds); ids.add(pad.id); this.activeFxIds = ids;
+      this.applyVolumes();
+      audio.addEventListener('ended', () => this.stopFx(pad.id, false));
+      audio.play().then(() => this.fade(`fx${pad.id}`, audio, 0, this.effVol(pad.volume, false), this.fadeInMs * 0.5));
+    },
+
+    stopFx(id, fade = true) {
+      const audio = this._fxAudios[id];
+      if (!audio) return;
+      const done = () => {
+        audio.pause(); audio.src = ''; delete this._fxAudios[id];
+        const ids = new Set(this.activeFxIds); ids.delete(id); this.activeFxIds = ids;
+        this.applyVolumes();
+      };
+      if (fade && this.fadeOutMs > 0) this.fade(`fx${id}`, audio, audio.volume, 0, this.fadeOutMs * 0.5, done);
+      else { clearInterval(this._fades[`fx${id}`]); done(); }
+    },
+
     async savePlaylist() {
       this.userdata.fade_in_ms    = this.fadeInMs;
       this.userdata.fade_out_ms   = this.fadeOutMs;
@@ -568,6 +668,7 @@ export default {
         version: '1.0',
         settings: { fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs, duckingLevel: this.duckingLevel, masterVolume: this.masterVolume },
         mainPads: this.mainPads.map(p => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
+        fxPads:   this.fxPads.map(p  => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
       }, null, 2);
       const fp = await this.$electron.saveDialog({ title: 'Salvar playlist', defaultPath: 'playlist.smp', filters: [{ name: 'SoundMaster', extensions: ['smp'] }] });
       if (fp) await this.$electron.writeFile(fp, data);
@@ -586,6 +687,11 @@ export default {
         });
         (data.mainPads || []).forEach(s => {
           const p = this.mainPads.find(x => x.id === s.id);
+          if (!p) return;
+          Object.assign(p, { name: s.name || '', filePath: s.filePath || null, fileUrl: s.filePath ? toFileUrl(s.filePath) : null, volume: s.volume ?? 1, isLooping: s.isLooping ?? false });
+        });
+        (data.fxPads || []).forEach(s => {
+          const p = this.fxPads.find(x => x.id === s.id);
           if (!p) return;
           Object.assign(p, { name: s.name || '', filePath: s.filePath || null, fileUrl: s.filePath ? toFileUrl(s.filePath) : null, volume: s.volume ?? 1, isLooping: s.isLooping ?? false });
         });
@@ -616,6 +722,47 @@ export default {
   flex-shrink: 0;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
+
+/* ─── FX row ──────────────────────────────────────────────────────── */
+.sm-fx-row {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.sm-fx-pad {
+  position: relative;
+  flex: 1;
+  min-width: 58px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.10);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  overflow: hidden;
+  gap: 2px;
+}
+.sm-fx-pad:hover  { background: rgba(var(--v-theme-on-surface), 0.10); border-color: #6366f1; }
+.sm-fx-pad.active { background: rgba(99, 102, 241, 0.2); border-color: #6366f1; }
+.sm-fx-key  { font-size: 9px; font-weight: 700; color: #6366f1; opacity: 0.85; line-height: 1; }
+.sm-fx-name { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 54px; }
+
+/* ─── Settings ────────────────────────────────────────────────────── */
+.sm-settings {
+  padding: 8px 14px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+}
+.sm-setting-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.50); margin-bottom: 2px; }
 
 /* ─── Pads grid ───────────────────────────────────────────────────── */
 .sm-pads {
