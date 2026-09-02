@@ -106,8 +106,12 @@
            categorias, mesmo formato de lista simples do Sobre original. -->
       <div class="about-col-right">
         <h2 class="about-section-title about-section-title--h2">Colaboradores:</h2>
-        <template v-for="cat in otherCategories" :key="cat.name">
-          <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}:</h3>
+        <template v-for="(cat, idx) in otherCategories" :key="cat.name">
+          <h3
+            v-if="cat.contributors.length > 0"
+            class="about-category-title"
+            :class="{ 'about-block-sep': idx > 0 }"
+          >{{ cat.name }}:</h3>
           <div v-for="person in cat.contributors" :key="person.name" class="about-collab">
             <div class="about-collab-name">
               {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> - {{ roleText(person.description) }}</span>

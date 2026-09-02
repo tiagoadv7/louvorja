@@ -122,7 +122,7 @@ export const CONTRIBUTORS = [
       },
       {
         name: "Tiago Lima",
-        description: ["Web"],
+        description: ["Web", "Electron"],
         email: "tiagolimadbvs7@gmail.com",
         website: "https://tiagolimadev.netlify.app/",
         github: "tiagoadv7",
@@ -225,11 +225,6 @@ export const CONTRIBUTORS = [
         name: "Rogerio Figueira",
         email: "roger.figueira31@gmail.com",
         facebook: "roger.figueira.14",
-      },
-      {
-        name: "Tiago Lima",
-        email: "tiagolimadbvs7@gmail.com",
-        facebook: "tiago.nevesdelima",
       },
     ],
   },
