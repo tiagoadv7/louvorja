@@ -9,34 +9,18 @@
   <!-- Mesma "janela de módulo" (Window.vue) usada pela aba Coletâneas —
        cabeçalho com ícone/título/fechar e corpo rolável, em vez do antigo
        popup pequeno, pra ficar visualmente consistente com o resto do app.
-       Layout em duas colunas (links/destaques à esquerda, grade de
-       contribuidores à direita) inspirado no "Sobre" original em Delphi,
-       mas com o visual mais atual (cards, ícones) do resto do app. -->
+       Conteúdo segue de perto o "Sobre" original em Delphi (cabeçalho
+       simples, linhas de link com ícone, duas colunas separadas por um
+       traço vertical) — de propósito diferente do layout em cards do
+       violin-app. -->
   <Window v-model="dialog" title="Sobre" icon="mdi-information-outline" closable>
     <div class="about-hero">
-      <v-avatar size="72" color="primary" variant="tonal" class="about-logo">
-        <v-img :src="logoUrl" />
-      </v-avatar>
-      <div class="about-hero-text">
-        <div class="about-product">Louvor <b>JA</b></div>
-        <div class="about-tagline">Sistema de apresentação para cultos e eventos religiosos</div>
-        <div class="about-credits">Desenvolvido com <v-icon size="13" color="red">mdi-heart</v-icon> para a comunidade Adventista.</div>
-      </div>
-
-      <div class="about-info">
-        <div class="about-info-row">
-          <span class="about-info-label">Versão</span>
-          <span class="about-info-value">{{ currentVersion || '...' }}</span>
-        </div>
-        <div class="about-info-row">
-          <span class="about-info-label">Build</span>
-          <span class="about-info-value">{{ buildInfo }}</span>
-        </div>
-        <div class="about-info-row">
-          <span class="about-info-label">Plataforma</span>
-          <span class="about-info-value">{{ platformLabel }}</span>
-        </div>
-      </div>
+      <v-img :src="logoUrl" class="about-logo" />
+      <div class="about-product">Louvor JA</div>
+    </div>
+    <div class="about-meta">
+      <div>Versão: <b>{{ currentVersion || '...' }}</b><span v-if="is_desktop"> ({{ buildInfo }}<span v-if="platformLabel"> · {{ platformLabel }}</span>)</span></div>
+      <div class="about-meta-note">Este programa não pode ser vendido!</div>
     </div>
 
     <v-divider class="my-4" />
@@ -44,37 +28,39 @@
     <div class="about-columns">
       <!-- Coluna esquerda: links + destaques (Desenvolvedor/Patrocinadores) -->
       <div class="about-col-left">
-        <div class="about-section-title">Contato / Site / Redes Sociais</div>
-        <a class="about-link-row" @click="openExternal('https://louvorja.com.br/')">
-          <v-icon size="16">mdi-web</v-icon> Website
+        <div class="about-section-title">Contato / Sites / Redes Sociais:</div>
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('mailto:contato@louvorja.com.br')">
+          <v-icon size="15">mdi-email-outline</v-icon> contato@louvorja.com.br
         </a>
-        <a class="about-link-row" @click="openExternal('https://app.louvorja.com.br')">
-          <v-icon size="16">mdi-cast-variant</v-icon> LouvorJA On-line
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.facebook.com/louvorja')">
+          <v-icon size="15" color="blue">mdi-facebook</v-icon> facebook.com/louvorja
         </a>
-        <a class="about-link-row" @click="openExternal('mailto:contato@louvorja.com.br')">
-          <v-icon size="16">mdi-email-outline</v-icon> Email
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.instagram.com/louvorja.app')">
+          <v-icon size="15" color="purple">mdi-instagram</v-icon> instagram.com/louvorja.app
         </a>
-        <a class="about-link-row" @click="openExternal('https://www.facebook.com/louvorja')">
-          <v-icon size="16" color="blue">mdi-facebook</v-icon> Facebook
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://louvorja.com.br/')">
+          <v-icon size="15">mdi-web</v-icon> louvorja.com.br
         </a>
-        <a class="about-link-row" @click="openExternal('https://www.instagram.com/louvorja.app')">
-          <v-icon size="16" color="purple">mdi-instagram</v-icon> Instagram
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
+          <v-icon size="15" color="green">mdi-whatsapp</v-icon> Whatsapp
         </a>
-        <a class="about-link-row" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
-          <v-icon size="16" color="green">mdi-whatsapp</v-icon> Whatsapp
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://louvorja.com.br/telegram')">
+          <v-icon size="15" color="blue" class="mdi-rotate-315">mdi-send</v-icon> Telegram
         </a>
-        <a class="about-link-row" @click="openExternal('https://louvorja.com.br/telegram')">
-          <v-icon size="16" color="blue" class="mdi-rotate-315">mdi-send</v-icon> Telegram
+
+        <div class="about-section-title mt-4">LouvorJA On-line</div>
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://app.louvorja.com.br')">
+          <v-icon size="15">mdi-web</v-icon> app.louvorja.com.br
         </a>
-        <a class="about-link-row" @click="checkForUpdates">
-          <v-icon size="16" color="primary">mdi-cloud-refresh-outline</v-icon> Verificar atualizações
+        <a class="about-mini-link about-mini-link--lg" @click="checkForUpdates">
+          <v-icon size="15" color="primary">mdi-cloud-refresh-outline</v-icon> Verificar atualizações
         </a>
-        <a class="about-link-row" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
-          <v-icon size="16" color="orange">mdi-bug-outline</v-icon> Enviar Feedback
+        <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
+          <v-icon size="15" color="orange">mdi-bug-outline</v-icon> Enviar Feedback
         </a>
 
         <template v-if="mainDev">
-          <div class="about-section-title mt-5">Desenvolvedor da Coletânea</div>
+          <div class="about-section-title about-block-sep">Desenvolvedor da Coletânea:</div>
           <div class="about-collab">
             <div class="about-collab-name">{{ mainDev.name }}</div>
             <a
@@ -83,39 +69,42 @@
               class="about-mini-link"
               @click="openExternal(l.url)"
             >
-              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
+              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
           </div>
         </template>
 
         <template v-if="sponsors.length > 0">
-          <div class="about-section-title mt-5">Patrocinadores</div>
-          <div v-for="s in sponsors" :key="s.name" class="about-collab">
-            <div class="about-collab-name">
-              {{ s.name }}<span v-if="s.description" class="about-collab-role"> — {{ s.description }}</span>
+          <div class="about-section-title about-block-sep">Patrocinadores:</div>
+          <div class="about-sponsor-list">
+            <div v-for="s in sponsors" :key="s.name" class="about-collab">
+              <div class="about-collab-name">
+                {{ s.name }}<span v-if="s.description" class="about-collab-role"> - {{ s.description }}</span>
+              </div>
+              <a
+                v-for="(l, i) in contributorLinks(s)"
+                :key="i"
+                class="about-mini-link"
+                @click="openExternal(l.url)"
+              >
+                <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
+              </a>
             </div>
-            <a
-              v-for="(l, i) in contributorLinks(s)"
-              :key="i"
-              class="about-mini-link"
-              @click="openExternal(l.url)"
-            >
-              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
-            </a>
           </div>
         </template>
       </div>
 
+      <div class="about-col-divider" />
+
       <!-- Coluna direita: lista simples de colaboradores (nome + links), no
-           mesmo espírito de texto/link do "Sobre" original — sem cards, pra
-           diferenciar do layout em grade do violin-app. -->
+           mesmo espírito de texto/link do "Sobre" original — sem cards. -->
       <div class="about-col-right">
-        <h2 class="about-section-title">Colaboradores</h2>
+        <h2 class="about-section-title about-section-title--h2">Colaboradores:</h2>
         <template v-for="cat in rightCategories" :key="cat.name">
           <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
           <div v-for="person in cat.contributors" :key="person.name" class="about-collab">
             <div class="about-collab-name">
-              {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> — {{ roleText(person.description) }}</span>
+              {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> - {{ roleText(person.description) }}</span>
             </div>
             <a
               v-for="(l, i) in contributorLinks(person)"
@@ -123,7 +112,7 @@
               class="about-mini-link"
               @click="openExternal(l.url)"
             >
-              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
+              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
           </div>
         </template>
@@ -244,108 +233,55 @@ export default {
 .about-hero {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .about-logo {
-  flex-shrink: 0;
-}
-
-.about-hero-text {
-  min-width: 0;
-  flex: 1 1 260px;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
 }
 
 .about-product {
   font-size: 26px;
-  font-weight: 300;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-.about-product b {
-  color: rgb(var(--v-theme-primary));
-  font-weight: 700;
+  font-weight: 400;
+  color: rgba(var(--v-theme-on-surface), 0.87);
 }
 
-.about-tagline {
-  font-size: 0.88rem;
-  color: rgba(var(--v-theme-on-surface), 0.65);
-  margin-top: 4px;
-}
-
-.about-credits {
-  font-size: 0.76rem;
-  font-style: italic;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.about-info {
-  flex: 0 0 auto;
-  min-width: 260px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 8px;
-  padding: 4px 16px;
-}
-
-.about-info-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 7px 0;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+.about-meta {
+  margin-top: 12px;
   font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  line-height: 1.8;
 }
-.about-info-row:last-child {
-  border-bottom: none;
-}
-.about-info-label {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-.about-info-value {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.about-meta-note {
+  font-style: italic;
+  color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
 /* Duas colunas, no espírito do "Sobre" original: links/destaques à
-   esquerda (coluna estreita e fixa), grade de contribuidores à direita. */
+   esquerda (coluna estreita e fixa), lista de colaboradores à direita,
+   separadas por um traço vertical fino. */
 .about-columns {
   display: flex;
-  align-items: flex-start;
-  gap: 32px;
+  align-items: stretch;
+  gap: 24px;
 }
 
 .about-col-left {
-  flex: 0 0 300px;
+  flex: 0 0 280px;
   min-width: 240px;
+}
+
+.about-col-divider {
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: rgba(var(--v-theme-on-surface), 0.12);
 }
 
 .about-col-right {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.about-link-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 -6px 1px;
-  padding: 5px 6px;
-  border-radius: 6px;
-  text-decoration: none;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 0.83rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.about-link-row:hover {
-  background: rgba(var(--v-theme-on-surface), 0.07);
 }
 
 .about-link--inline {
@@ -370,13 +306,14 @@ export default {
   font-weight: 400;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
+
 .about-mini-link {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin: 2px 0 0 4px;
+  gap: 6px;
+  margin: 3px 0 0 6px;
   color: rgb(var(--v-theme-primary));
-  text-decoration: none;
+  text-decoration: underline;
   font-size: 0.75rem;
   cursor: pointer;
   overflow: hidden;
@@ -384,31 +321,45 @@ export default {
   white-space: nowrap;
 }
 .about-mini-link:hover {
-  text-decoration: underline;
+  opacity: 0.8;
+}
+/* Links de topo (contato/site) — sem o recuo/indent dos links por pessoa. */
+.about-mini-link--lg {
+  margin-left: 0;
+  font-size: 0.83rem;
+  margin-top: 4px;
 }
 
 .about-section-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  opacity: 0.65;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.75);
   margin: 0 0 8px;
+}
+.about-section-title.mt-4 {
+  margin-top: 16px;
+}
+/* Traço pontilhado antes de cada bloco novo (Desenvolvedor/Patrocinadores),
+   igual ao "Sobre" original em Delphi. */
+.about-block-sep {
+  border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.15);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+.about-sponsor-list .about-collab + .about-collab {
+  border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.15);
+  padding-top: 10px;
 }
 
 .about-category-title {
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.6);
-  margin: 20px 0 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  margin: 20px 0 8px;
 }
-h2.about-section-title {
+
+.about-section-title--h2 {
   font-size: 1.1rem;
-  text-transform: none;
-  letter-spacing: normal;
-  opacity: 1;
   margin-bottom: 4px;
 }
 
