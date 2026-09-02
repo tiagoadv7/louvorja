@@ -728,7 +728,6 @@ export default {
   display: flex;
   gap: 4px;
   padding: 6px 12px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
   overflow-x: auto;
@@ -758,7 +757,6 @@ export default {
 /* ─── Settings ────────────────────────────────────────────────────── */
 .sm-settings {
   padding: 8px 14px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
 }
