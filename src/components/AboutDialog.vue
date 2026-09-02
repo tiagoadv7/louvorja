@@ -75,55 +75,57 @@
 
         <template v-if="mainDev">
           <div class="about-section-title mt-5">Desenvolvedor da Coletânea</div>
-          <div class="about-person">
-            <div class="about-person-name">{{ mainDev.name }}</div>
-            <div v-if="mainDev.description" class="about-person-desc">{{ mainDev.description }}</div>
-            <div class="about-person-links">
-              <v-btn
-                v-for="(l, i) in contributorLinks(mainDev)"
-                :key="i"
-                :icon="l.icon"
-                variant="text"
-                size="x-small"
-                density="comfortable"
-                @click="openExternal(l.url)"
-              />
-            </div>
+          <div class="about-collab">
+            <div class="about-collab-name">{{ mainDev.name }}</div>
+            <a
+              v-for="(l, i) in contributorLinks(mainDev)"
+              :key="i"
+              class="about-mini-link"
+              @click="openExternal(l.url)"
+            >
+              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
+            </a>
           </div>
         </template>
 
         <template v-if="sponsors.length > 0">
           <div class="about-section-title mt-5">Patrocinadores</div>
-          <div v-for="s in sponsors" :key="s.name" class="about-person">
-            <div class="about-person-name">{{ s.name }}</div>
-            <div v-if="s.description" class="about-person-desc">{{ s.description }}</div>
-            <div class="about-person-links">
-              <v-btn
-                v-for="(l, i) in contributorLinks(s)"
-                :key="i"
-                :icon="l.icon"
-                variant="text"
-                size="x-small"
-                density="comfortable"
-                @click="openExternal(l.url)"
-              />
+          <div v-for="s in sponsors" :key="s.name" class="about-collab">
+            <div class="about-collab-name">
+              {{ s.name }}<span v-if="s.description" class="about-collab-role"> — {{ s.description }}</span>
             </div>
+            <a
+              v-for="(l, i) in contributorLinks(s)"
+              :key="i"
+              class="about-mini-link"
+              @click="openExternal(l.url)"
+            >
+              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
+            </a>
           </div>
         </template>
       </div>
 
-      <!-- Coluna direita: grade de contribuidores (até 3 por linha) -->
+      <!-- Coluna direita: lista simples de colaboradores (nome + links), no
+           mesmo espírito de texto/link do "Sobre" original — sem cards, pra
+           diferenciar do layout em grade do violin-app. -->
       <div class="about-col-right">
-        <h2 class="about-section-title">Contribuidores</h2>
+        <h2 class="about-section-title">Colaboradores</h2>
         <template v-for="cat in rightCategories" :key="cat.name">
           <h3 v-if="cat.contributors.length > 0" class="about-category-title">{{ cat.name }}</h3>
-          <v-row>
-            <ContributorCard
-              v-for="contrib in cat.contributors"
-              :key="contrib.name"
-              :contributor="contrib"
-            />
-          </v-row>
+          <div v-for="person in cat.contributors" :key="person.name" class="about-collab">
+            <div class="about-collab-name">
+              {{ person.name }}<span v-if="roleText(person.description)" class="about-collab-role"> — {{ roleText(person.description) }}</span>
+            </div>
+            <a
+              v-for="(l, i) in contributorLinks(person)"
+              :key="i"
+              class="about-mini-link"
+              @click="openExternal(l.url)"
+            >
+              <v-icon size="13">{{ l.icon }}</v-icon> {{ l.label }}
+            </a>
+          </div>
         </template>
       </div>
     </div>
@@ -139,19 +141,17 @@
 
 <script>
 import Window from "@/components/Window.vue";
-import ContributorCard from "@/components/ContributorCard.vue";
 import { CONTRIBUTORS } from "@/config/Contributors";
 import { contributorLinks } from "@/helpers/ContributorLinks";
 
-// Categorias mostradas como destaque na coluna da esquerda (compactas, sem
-// avatar/card) — as demais vão pra grade de cards na coluna direita.
+// Categorias mostradas como destaque na coluna da esquerda (compactas) —
+// as demais vão pra lista de colaboradores na coluna direita.
 const LEFT_CATEGORIES = ["Desenvolvedor da Coletânea", "Patrocinadores"];
 
 export default {
   name: 'AboutDialog',
   components: {
     Window,
-    ContributorCard,
   },
   data: () => ({
     dialog: false,
@@ -222,6 +222,13 @@ export default {
       this.$electron.openExternal(url);
     },
     contributorLinks,
+    // "description" tanto pode ser um texto simples (Patrocinadores/Assets)
+    // quanto uma lista de papéis (Desenvolvedores, ex.: ["Web", "Electron"])
+    // — ver src/config/Contributors.js.
+    roleText(description) {
+      if (!description) return '';
+      return Array.isArray(description) ? description.join(', ') : description;
+    },
     // Reaproveita o mesmo evento de janela que o Menu lateral já dispara
     // (ver App.vue, listener 'check-updates') — evita duplicar a lógica de
     // checagem/diálogo já implementada em UpdateDialog.vue.
@@ -314,8 +321,8 @@ export default {
 }
 
 .about-col-left {
-  flex: 0 0 260px;
-  min-width: 220px;
+  flex: 0 0 300px;
+  min-width: 240px;
 }
 
 .about-col-right {
@@ -350,24 +357,34 @@ export default {
   text-decoration: underline;
 }
 
-.about-person {
+.about-collab {
   margin-bottom: 12px;
 }
-.about-person-name {
-  font-size: 0.86rem;
+.about-collab-name {
+  font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.3;
 }
-.about-person-desc {
-  font-size: 0.75rem;
+.about-collab-role {
+  font-size: 0.78rem;
+  font-weight: 400;
   color: rgba(var(--v-theme-on-surface), 0.6);
-  margin-top: 1px;
-  line-height: 1.35;
 }
-.about-person-links {
+.about-mini-link {
   display: flex;
-  flex-wrap: wrap;
-  margin: 2px 0 0 -6px;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 0 4px;
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  font-size: 0.75rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.about-mini-link:hover {
+  text-decoration: underline;
 }
 
 .about-section-title {
