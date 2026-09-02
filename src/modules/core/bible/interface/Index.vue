@@ -842,7 +842,7 @@ export default {
 <style scoped>
 .bb-panel-frame {
   width: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 </style>
