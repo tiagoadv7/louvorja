@@ -366,16 +366,22 @@ export default {
 
 .about-mini-link {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin: 4px 0 0 6px;
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
   font-size: 0.75rem;
+  line-height: 1.4;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Quebra a linha em vez de truncar com "…" — o texto completo do link
+     (e-mail, URL) fica visível, mesmo comprido, dentro da coluna estreita
+     do grid (minmax(0, 1fr) já garante que isso não estoura a track). */
+  overflow-wrap: anywhere;
+}
+.about-mini-link :deep(.v-icon) {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 .about-mini-link:hover {
   opacity: 0.8;
