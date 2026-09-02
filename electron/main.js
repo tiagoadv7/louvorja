@@ -711,6 +711,15 @@ let _checkedViaGithub = false;
 // 'updater:error' pro renderer aqui; a primeira já tem seu próprio tratamento
 // em runUpdateCheck() (fallback pro GitHub antes de decidir o que reportar).
 let _downloadingNative = false;
+// true durante toda a duração de downloadUpdateWithRetry() — suprime o
+// forward automático do evento 'error' nativo abaixo em CADA tentativa
+// (mesmo a última): o catch de updater:download já reporta o erro final ao
+// renderer explicitamente depois que todas as tentativas se esgotam, então
+// deixar o evento passar também duplicaria a mensagem. Sem essa flag, a 1ª
+// tentativa falhando já mostrava "erro no download" pro operador mesmo
+// quando uma tentativa seguinte teria dado certo (rede instável, hiccup
+// passageiro do GitHub).
+let _downloadRetryInProgress = false;
 
 async function runUpdateCheck() {
   sendToRenderer('updater:checking');
@@ -921,6 +930,39 @@ async function downloadInstallerWithRetry(url, destPath, onProgress) {
   throw lastErr;
 }
 
+// Mesma tolerância a falha passageira (rede instável, hiccup momentâneo da
+// API/CDN do GitHub) do download manual acima, mas pro caminho NATIVO
+// (autoUpdater.downloadUpdate() — usado sempre que a verificação também foi
+// feita pelo electron-updater, o caso mais comum). Antes, esse caminho não
+// tentava de novo nenhuma vez: qualquer falha momentânea de rede já reportava
+// "falha no download" pro operador, mesmo o release estando 100% publicado e
+// acessível (confirmado: falhas nesse caminho não são sempre por causa do
+// release em si).
+async function downloadUpdateWithRetry() {
+  const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
+  _downloadRetryInProgress = true;
+  try {
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await autoUpdater.downloadUpdate();
+      } catch (e) {
+        lastErr = e;
+        logUpdaterError(`download nativo tentativa ${attempt}/${maxAttempts} falhou`, e);
+        const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw lastErr;
+  } finally {
+    // Sempre reabilita o forward do evento nativo pra próxima vez (ex.: um
+    // "Baixar agora" chamado fora de downloadUpdateWithRetry, se um dia
+    // existir) — o erro FINAL desta chamada já é reportado explicitamente
+    // pelo catch de updater:download, então não precisa passar pelo evento.
+    _downloadRetryInProgress = false;
+  }
+}
+
 function setupAutoUpdater() {
   // autoDownload continua false — baixar só quando o operador clicar em
   // "Baixar agora" (ver updater:download abaixo), não assim que encontrar
@@ -957,7 +999,7 @@ function setupAutoUpdater() {
     // reportar "sem atualização") — não duplica aqui. Só durante o DOWNLOAD
     // nativo (updater:download abaixo) é que esse é o único aviso que existe
     // — sem isso, "Baixando..." ficava travado pra sempre se ele falhasse no meio.
-    if (_downloadingNative) {
+    if (_downloadingNative && !_downloadRetryInProgress) {
       sendToRenderer('updater:error', msg);
     }
   });
@@ -974,10 +1016,10 @@ function setupAutoUpdater() {
     if (!_checkedViaGithub) {
       _downloadingNative = true;
       try {
-        await autoUpdater.downloadUpdate();
+        await downloadUpdateWithRetry();
         return { ok: true, native: true };
       } catch (e) {
-        logUpdaterError('download (electron-updater nativo)', e);
+        logUpdaterError('download (electron-updater nativo, todas as tentativas)', e);
         sendToRenderer('updater:error', e.message);
         return { ok: false, error: e.message };
       } finally {
