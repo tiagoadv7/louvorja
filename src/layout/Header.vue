@@ -71,6 +71,8 @@
 
     <MonitorSelector />
 
+    <AboutDialog />
+
     <LanguageSelector />
   </v-app-bar>
 </template>
@@ -78,6 +80,7 @@
 <script>
 import LanguageSelector from "@/components/LanguageSelector.vue";
 import MonitorSelector from "@/components/MonitorSelector.vue";
+import AboutDialog from "@/components/AboutDialog.vue";
 import DownloadCenter from "@/components/DownloadCenter.vue";
 import QuickSearch from "@/components/QuickSearch.vue";
 import $storage from "@/helpers/Storage";
@@ -87,6 +90,7 @@ export default {
   components: {
     LanguageSelector,
     MonitorSelector,
+    AboutDialog,
     DownloadCenter,
     QuickSearch,
   },
