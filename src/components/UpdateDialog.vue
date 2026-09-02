@@ -75,7 +75,7 @@
       </v-card-text>
 
       <!-- ── Sem atualização ── -->
-      <v-card-text v-else-if="step === 'up-to-date'" class="d-flex flex-column align-center py-12 gap-4">
+      <v-card-text v-else-if="step === 'not-available'" class="d-flex flex-column align-center py-12 gap-4">
         <v-avatar size="72" color="success" variant="tonal">
           <v-icon size="40">mdi-check-circle-outline</v-icon>
         </v-avatar>
@@ -93,12 +93,7 @@
           <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
             v{{ updateInfo?.version || '?' }}
           </v-chip>
-          <div class="text-caption text-medium-emphasis mt-2">
-            Nova versão disponível
-            <template v-if="updateInfo?.releaseDate">
-              · {{ formatDate(updateInfo.releaseDate) }}
-            </template>
-          </div>
+          <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
         </div>
         <div v-if="updateInfo?.releaseNotes">
           <h3 class="upd-notes-title">Novidades desta versão</h3>
@@ -147,6 +142,9 @@
         <div class="text-center px-4">
           <div class="text-h6 font-weight-bold">Erro ao baixar atualização</div>
           <div class="text-body-2 text-medium-emphasis mt-2">{{ errorMessage }}</div>
+          <v-btn size="small" variant="text" color="primary" class="mt-3" prepend-icon="mdi-open-in-new" @click="openReleasePage">
+            Baixar manualmente pelo navegador
+          </v-btn>
         </div>
       </v-card-text>
 
@@ -188,7 +186,10 @@ export default {
   data: () => ({
     dialog:   false,
     snackbar: false,
-    step:     'idle', // idle | checking | available | downloading | downloaded | up-to-date | error
+    // idle | checking | available | not-available | downloading | downloaded | error
+    // — mesmo vocabulário de status usado por electron/updater.js (_state.status),
+    // espelhado aqui via um único evento 'updater:state' (ver mounted()).
+    step:     'idle',
 
     currentVersion: '',
     updateInfo:     null,
@@ -229,34 +230,34 @@ export default {
     // ── Dialog ──────────────────────────────────────────────────────────────
     headerColor() {
       const map = {
-        checking:   'primary',
-        available:  'primary',
-        downloading:'primary',
-        downloaded: 'primary',
-        'up-to-date': 'success',
-        error:      'error',
+        checking:       'primary',
+        available:      'primary',
+        downloading:    'primary',
+        downloaded:     'primary',
+        'not-available': 'success',
+        error:          'error',
       };
       return map[this.step] || 'primary';
     },
     dialogIcon() {
       const map = {
-        checking:     'mdi-cloud-search-outline',
-        available:    'mdi-arrow-up-circle-outline',
-        downloading:  'mdi-download-circle-outline',
-        downloaded:   'mdi-check-circle-outline',
-        'up-to-date': 'mdi-check-circle-outline',
-        error:        'mdi-alert-circle-outline',
+        checking:       'mdi-cloud-search-outline',
+        available:      'mdi-arrow-up-circle-outline',
+        downloading:    'mdi-download-circle-outline',
+        downloaded:     'mdi-check-circle-outline',
+        'not-available': 'mdi-check-circle-outline',
+        error:          'mdi-alert-circle-outline',
       };
       return map[this.step] || 'mdi-update';
     },
     dialogTitle() {
       const map = {
-        checking:     'Verificando atualizações',
-        available:    'Atualização disponível',
-        downloading:  'Baixando atualização',
-        downloaded:   'Atualização pronta',
-        'up-to-date': 'Verificar atualizações',
-        error:        'Erro ao baixar atualização',
+        checking:       'Verificando atualizações',
+        available:      'Atualização disponível',
+        downloading:    'Baixando atualização',
+        downloaded:     'Atualização pronta',
+        'not-available': 'Verificar atualizações',
+        error:          'Erro ao baixar atualização',
       };
       return map[this.step] || 'Atualizações';
     },
@@ -277,47 +278,10 @@ export default {
       if (h) this._handlers.push([channel, h]);
     };
 
-    listen('updater:checking', () => {
-      this.step = 'checking';
-    });
-
-    listen('updater:available', (info) => {
-      this.updateInfo = info;
-      this.step       = 'available';
-      this.snackbar   = true;
-      if (this.dialog) this.dialog = true; // mantém aberto se já estava
-    });
-
-    listen('updater:not-available', () => {
-      this.step = 'up-to-date';
-      // Só mostra o dialog se o usuário clicou em "Verificar atualizações" manualmente
-      if (!this.dialog) return;
-    });
-
-    listen('updater:progress', (prog) => {
-      this.step            = 'downloading';
-      this.downloadPercent = Math.round(prog.percent || 0);
-      this.downloadSpeed   = prog.bytesPerSecond
-        ? `${this.formatBytes(prog.bytesPerSecond)}/s`
-        : '';
-      this.downloadTransferred = this.formatBytes(prog.transferred || 0);
-      this.downloadTotal       = this.formatBytes(prog.total || 0);
-      this.downloadStatus      = this.downloadSpeed ? `${this.downloadSpeed} · ETA ${this.formatEta(prog.eta)}` : 'Calculando...';
-    });
-
-    listen('updater:downloaded', (info) => {
-      this.updateInfo = info;
-      this.step       = 'downloaded';
-      this.snackbar   = true;
-      if (this.dialog) this.dialog = true;
-    });
-
-    listen('updater:error', (msg) => {
-      this.errorMessage = msg;
-      this.step         = 'error';
-      // Só mostra o dialog de erro se o usuário iniciou manualmente
-      if (!this.dialog) return;
-    });
+    // Único canal — o processo main (electron/updater.js) manda o estado
+    // inteiro a cada mudança, em vez de 6 eventos separados. Mesmo padrão do
+    // fork mais avançado deste app (louvorja/violin-app).
+    listen('updater:state', (state) => this.applyState(state));
   },
 
   beforeUnmount() {
@@ -325,6 +289,30 @@ export default {
   },
 
   methods: {
+    // Aplica o snapshot de estado vindo de electron/updater.js aos campos
+    // locais que o template já usa. O snackbar só reabre numa TRANSIÇÃO pra
+    // 'available'/'downloaded' (não a cada atualização de estado que mantém
+    // o mesmo status), pra não reaparecer depois que o usuário já fechou.
+    applyState(state) {
+      const prevStep = this.step;
+      this.step = state.status;
+      this.updateInfo = { version: state.newVersion, releaseNotes: state.releaseNotes };
+      this.errorMessage = state.error || '';
+
+      if (state.status === 'downloading') {
+        this.downloadPercent = Math.round(state.progress || 0);
+        this.downloadSpeed = state.bytesPerSecond ? `${this.formatBytes(state.bytesPerSecond)}/s` : '';
+        this.downloadTransferred = this.formatBytes(state.transferred || 0);
+        this.downloadTotal = this.formatBytes(state.total || 0);
+        this.downloadStatus = this.downloadSpeed ? `${this.downloadSpeed} · ${this.downloadPercent}%` : 'Calculando...';
+      }
+
+      if ((state.status === 'available' || state.status === 'downloaded') && prevStep !== state.status) {
+        this.snackbar = true;
+        if (this.dialog) this.dialog = true; // mantém aberto se já estava
+      }
+    },
+
     // Abre o dialog e inicia verificação manual
     async checkNow() {
       this.step    = 'checking';
@@ -334,8 +322,8 @@ export default {
         await this.$electron.updaterCheck();
       } catch (_) {
         // Falha ao verificar não deve assustar o usuário com uma tela de erro
-        // — trata como "sem atualização disponível" (ver electron/main.js).
-        this.step = 'up-to-date';
+        // — trata como "sem atualização disponível" (ver electron/updater.js).
+        this.step = 'not-available';
       }
     },
 
@@ -345,29 +333,34 @@ export default {
 
     async startDownload() {
       // Não força step='downloading' aqui — o diálogo nativo "Salvar como"
-      // abre primeiro (ver electron/main.js, handler 'updater:download'), e só
-      // depois de escolhido o destino o download começa de fato (evento
-      // 'updater:progress' abaixo já cuida de mudar o step). Se o usuário
-      // cancelar o diálogo, o step permanece 'available' — sem tela de erro.
-      this.errorMessage = '';
+      // abre primeiro (ver downloadPackage em electron/updater.js), e só
+      // depois de escolhido o destino o download começa de fato (o evento
+      // 'updater:state' já cuida de mudar o step). Se o usuário cancelar o
+      // diálogo, o step permanece 'available' — sem tela de erro.
       try {
         const result = await this.$electron.updaterDownload();
         if (result?.canceled) return;
-        if (result && result.ok === false) {
+        // Erro real já chega via 'updater:state' (applyState) antes desta
+        // Promise resolver — isso aqui é só uma rede de segurança caso, por
+        // algum motivo, nenhum estado tenha chegado.
+        if (result && result.ok === false && this.step !== 'error') {
           this.errorMessage = result.error || 'Erro ao baixar a atualização.';
           this.step = 'error';
         }
       } catch (_) {
-        this.step = 'error';
-        // O handler principal (electron/main.js) já manda a mensagem real via
-        // 'updater:error' antes de resolver essa chamada — só cai no genérico
-        // se por algum motivo nenhuma mensagem específica chegou.
-        if (!this.errorMessage) this.errorMessage = 'Erro ao baixar a atualização.';
+        if (this.step !== 'error') {
+          this.step = 'error';
+          if (!this.errorMessage) this.errorMessage = 'Erro ao baixar a atualização.';
+        }
       }
     },
 
     install() {
       this.$electron.updaterInstall();
+    },
+
+    openReleasePage() {
+      this.$electron.updaterOpenReleasePage?.();
     },
 
     formatBytes(bytes) {
@@ -377,23 +370,14 @@ export default {
       return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
     },
 
-    formatEta(seconds) {
-      if (!seconds || seconds < 0) return '–';
-      if (seconds < 60) return `${Math.round(seconds)}s`;
-      return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
-    },
-
-    formatDate(dateStr) {
-      try {
-        return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-      } catch { return ''; }
-    },
-
-    // Formata o changelog (texto puro do corpo do release do GitHub) pro mesmo
-    // estilo do FreeShow: escapa HTML (defensivo — o texto vira v-html), preserva
-    // quebra de linha e troca marcadores de lista ("- item"/"* item") por "• item".
+    // Formata o changelog (HTML já renderizado via GitHub /markdown, ver
+    // electron/updater.js — cai pro texto cru se a renderização falhar) pro
+    // mesmo estilo do FreeShow: preserva quebra de linha e troca marcadores
+    // de lista ("- item"/"* item") por "• item" só quando ainda é texto cru
+    // (heurística simples: HTML de verdade já vem com tags "<").
     formatChangelog(text) {
       if (!text) return '';
+      if (/<[a-z][\s\S]*>/i.test(text)) return text; // já é HTML (renderMarkdown)
       const escaped = String(text)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')

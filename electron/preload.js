@@ -31,12 +31,7 @@ const RECEIVE_CHANNELS = [
   'album:download-progress',
   'files:download-progress',
   'files:scan-progress',
-  'updater:checking',
-  'updater:available',
-  'updater:not-available',
-  'updater:progress',
-  'updater:downloaded',
-  'updater:error',
+  'updater:state',
   'displays-changed',
   'output-display-not-found',
 ];
@@ -171,9 +166,12 @@ contextBridge.exposeInMainWorld('electron', {
   getHostname: () => ipcRenderer.invoke('app:hostname'),
 
   // ── Auto-updater ─────────────────────────────────────────────────────────
-  updaterCheck:    () => ipcRenderer.invoke('updater:check'),
-  updaterDownload: () => ipcRenderer.invoke('updater:download'),
-  updaterInstall:  () => ipcRenderer.invoke('updater:install'),
+  updaterCheck:           () => ipcRenderer.invoke('updater:check'),
+  updaterDownload:        () => ipcRenderer.invoke('updater:download'),
+  updaterInstall:         () => ipcRenderer.invoke('updater:install'),
+  updaterStatus:          () => ipcRenderer.invoke('updater:status'),
+  updaterSetOptions:      (opts) => ipcRenderer.invoke('updater:setOptions', opts),
+  updaterOpenReleasePage: () => ipcRenderer.invoke('updater:openReleasePage'),
 
   // ── Telas / displays ─────────────────────────────────────────────────────
   getScreens: () => ipcRenderer.invoke('screen:get-all'),

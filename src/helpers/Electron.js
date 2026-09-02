@@ -128,6 +128,26 @@ export default {
   showItemInFolder: (filePath) =>
     isElectron() && window.electron.showItemInFolder(filePath),
 
+  // ── Auto-updater (ver electron/updater.js) ─────────────────────────────
+  // Faltavam aqui (window.electron já expunha certinho via preload.js) —
+  // UpdateDialog.vue chamava this.$electron.updaterCheck/Download/Install
+  // direto, e sem esse wrapper cada chamada estourava "is not a function",
+  // caindo sempre no catch genérico. Explica o "Erro ao baixar atualização."
+  // sem nenhum detalhe visto em produção — não era falha de rede/download
+  // de verdade, a chamada nem chegava a sair do renderer.
+  updaterCheck: () =>
+    isElectron() ? window.electron.updaterCheck() : Promise.resolve({ ok: false }),
+  updaterDownload: () =>
+    isElectron() ? window.electron.updaterDownload() : Promise.resolve({ ok: false }),
+  updaterInstall: () =>
+    isElectron() && window.electron.updaterInstall(),
+  updaterStatus: () =>
+    isElectron() ? window.electron.updaterStatus() : Promise.resolve(null),
+  updaterSetOptions: (opts) =>
+    isElectron() ? window.electron.updaterSetOptions(opts) : Promise.resolve(null),
+  updaterOpenReleasePage: () =>
+    isElectron() && window.electron.updaterOpenReleasePage(),
+
   // ── Arquivos de mídia locais ──────────────────────────────────────────
   mediaGetBaseFolder: () =>
     isElectron() ? window.electron.mediaGetBaseFolder() : Promise.resolve(null),

@@ -901,13 +901,8 @@ function registerIpcHandlers() {
     };
     step();
 
-    // Verifica atualizações automaticamente em produção (15s de delay para não competir com o startup)
-    // via GitHub Releases (electron-updater) — ver electron/updater.js.
-    if (!isDev && app.isPackaged) {
-      setTimeout(() => {
-        Updater.checkForUpdates().catch(() => {});
-      }, 15000);
-    }
+    // Verificação automática de atualização (15s de delay, só em build empacotada)
+    // já é agendada dentro de Updater.init() — ver electron/updater.js.
 
     // Após o fade-in: verifica se SQLite já foi aberto por trySqliteAutoOpen (ipc.js).
     // Se sim, notifica o renderer. Se não (race condition ou primeira execução sem banco salvo),

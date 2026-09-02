@@ -1,11 +1,13 @@
 /**
  * updater.js — Auto-update do app via GitHub Releases.
  *
- * Fonte: GitHub Releases via electron-updater (ver build.publish em package.json).
- * Extraído de electron/main.js pra ficar no mesmo padrão de módulo isolado
- * usado pelo fork mais avançado deste app (ver PR — GITHUB_OWNER=louvorja/violin-app,
- * electron/main/updater.js daquele repo) — mesmo comportamento de antes, só
- * separado num arquivo próprio.
+ * Refeito seguindo a mesma arquitetura do fork mais avançado deste app
+ * (louvorja/violin-app, electron/main/updater.js) — que por sua vez nasceu
+ * copiando o retry/rate-limit daqui. Agora os dois compartilham o mesmo
+ * desenho: um único objeto de estado (_state) emitido via IPC "updater:state"
+ * a cada mudança, em vez de 6 eventos separados (checking/available/
+ * not-available/progress/downloaded/error) — a UI só precisa reagir a
+ * `status`, sem coordenar múltiplos listeners.
  *
  * Uso em electron/main.js:
  *   const Updater = require('./updater');
@@ -13,10 +15,16 @@
  *   Updater.setMainWindow(mainWindow); // logo após criar a janela principal
  *   Updater.checkForUpdates();         // dispara verificação (ex.: 15s após o boot)
  *
+ * Estado emitido ao renderer via IPC "updater:state":
+ *   { status, version, newVersion, releaseNotes, progress, bytesPerSecond,
+ *     transferred, total, error, packagePath }
+ * Status possíveis: idle | checking | available | not-available | downloading
+ *                    | downloaded | error
+ *
  * Qualquer falha durante a VERIFICAÇÃO é tratada como "sem atualização
  * disponível" — o usuário que clica em "Verificar atualizações" não precisa
  * saber a razão técnica, só se há ou não uma versão nova. A tela de erro fica
- * reservada para falhas de download (ver downloadInstallerWithRetry abaixo).
+ * reservada para falhas de DOWNLOAD (ver downloadPackage/downloadUpdate abaixo).
  *
  * Se o electron-updater falhar ao verificar (proxy/firewall corporativo
  * bloqueando o formato de request dele, parsing do feed, etc. — ou em dev,
@@ -24,13 +32,28 @@
  * de desistir — mesma fonte, caminho mais simples, sem o overhead do
  * provider do electron-updater. Só depois dessa segunda tentativa falhar é
  * que reporta "sem atualização".
+ *
+ * Diferença deliberada do violin-app: o download manual (fallback) aqui
+ * SEMPRE pergunta onde salvar antes de baixar (dialog.showSaveDialog) — nunca
+ * direto na pasta Downloads. Motivo: a pasta de instalação do Louvor JA
+ * também guarda músicas/capas/banco de dados do usuário (ver getWritableBase()
+ * em ipc.js e build/installer.nsh); salvar o instalador ali por engano seria
+ * fácil de fazer sem esse passo manual. Isso não existe no violin-app porque
+ * lá a pasta de instalação não acumula conteúdo do usuário.
  */
 
-const { app, ipcMain, dialog, shell } = require('electron');
-const { autoUpdater } = require('electron-updater');
+// Lazy require — electron-updater acessa app.getVersion() na importação,
+// antes do app estar pronto (mesmo cuidado do violin-app).
+const { app, ipcMain, dialog, shell, BrowserWindow } = require('electron');
 const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
+
+let autoUpdater = null;
+
+const GITHUB_OWNER = 'tiagoadv7';
+const GITHUB_REPO = 'louvorja';
+const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`;
 
 /** @type {import('electron').BrowserWindow | null} */
 let _mainWindow = null;
@@ -39,14 +62,81 @@ function setMainWindow(win) {
   _mainWindow = win;
 }
 
-function _sendToRenderer(channel, payload) {
+/** @type {{ status: string, version: string, newVersion: string|null, releaseNotes: string|null, progress: number, bytesPerSecond: number, transferred: number, total: number, error: string|null, packagePath: string|null }} */
+let _state = {
+  status: 'idle',
+  version: '0.0.0',
+  newVersion: null,
+  releaseNotes: null,
+  progress: 0,
+  bytesPerSecond: 0,
+  transferred: 0,
+  total: 0,
+  error: null,
+  packagePath: null,
+};
+
+// Opções em runtime (aplicadas a cada check) — expostas mas sem UI própria
+// ainda no Louvor JA; useBeta/autoDownload ficam desligadas por padrão pra
+// preservar o comportamento atual (só considera releases estáveis, só baixa
+// quando o operador clica em "Baixar agora").
+let _useBeta      = false;
+let _autoCheck    = true;
+let _autoDownload = false;
+
+// Candidata mais recente encontrada via GitHub API — guardada pro download
+// manual não precisar refazer o check.
+let _latestReleaseInfo = null;
+
+// _checkedViaGithub registra QUAL caminho respondeu por último — o download
+// (updater:download/install abaixo) precisa usar o MESMO mecanismo da
+// verificação: se foi o electron-updater que confirmou a versão nova, só ele
+// tem o estado interno pra baixar/instalar nativamente; se foi o fallback do
+// GitHub, o electron-updater nunca chegou a "ver" essa versão, então só o
+// download manual funciona.
+let _checkedViaGithub = false;
+
+// Amostragem de taxa de download (download manual via GitHub API).
+let _dlSample = { time: 0, received: 0, rate: 0 };
+
+// Um release recém-publicado no GitHub pode levar de segundos a alguns
+// MINUTOS pra terminar de propagar (arquivos grandes de ~150MB passam por
+// verificação antes de ficar baixáveis via browser_download_url) — confirmado
+// na prática duas vezes: um release apareceu com os assets listados na API
+// mas retornando 404 por vários minutos seguidos, e depois (v1.28.20) um
+// "Baixar agora" clicado ~11min após o publish ainda falhou com uma janela de
+// só ~100s de tolerância — a propagação daquela vez levou mais que isso.
+// Atraso progressivo (10s, 15s, 20s, 30s, 45s, 60s, 60s, 90s) soma ~5,5min de
+// tolerância total.
+const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 30000, 45000, 60000, 60000, 90000];
+
+// true durante toda a duração de _downloadUpdateWithRetry() — suprime o
+// forward automático do evento nativo 'error' do autoUpdater em CADA
+// tentativa (mesmo a última): o catch de downloadUpdate() já reporta o erro
+// final via _setState() depois que todas as tentativas se esgotam, então
+// deixar o evento passar também sobrescreveria o estado no meio de uma
+// tentativa seguinte que ainda pode dar certo.
+let _downloadRetryInProgress = false;
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+function _emit() {
   if (_mainWindow && !_mainWindow.isDestroyed()) {
-    _mainWindow.webContents.send(channel, payload);
+    _mainWindow.webContents.send('updater:state', { ..._state });
   }
 }
 
+function _setState(patch) {
+  _state = { ..._state, ...patch };
+  _emit();
+}
+
 // console.error some no vazio numa GUI empacotada sem terminal anexado — sem
-// isso, uma falha real de update é indiagnosticável depois do fato.
+// isso, uma falha real de update é indiagnosticável depois do fato. Mantido
+// como arquivo próprio (o violin-app não tem — só console.log) porque já
+// serviu pra diagnosticar problemas de produção reais neste projeto.
 function logUpdaterError(context, err) {
   try {
     const line = `[${new Date().toISOString()}] ${context}: ${err?.stack || err?.message || err}\n`;
@@ -54,74 +144,114 @@ function logUpdaterError(context, err) {
   } catch (_) { /* não crítico — só o console.error já emitido segue valendo */ }
 }
 
-// _checkedViaGithub registra QUAL caminho respondeu por último — o download
-// (updater:download/install abaixo) precisa usar o MESMO mecanismo da
-// verificação: se foi o electron-updater que confirmou a versão nova, só ele
-// tem o estado interno pra baixar/instalar nativamente; se foi o fallback do
-// GitHub, o electron-updater nunca chegou a "ver" essa versão, então só o
-// download manual funciona. Mesmo padrão usado no fork mais avançado deste
-// app (ver PR — GITHUB_OWNER=louvorja/violin-app).
-let _checkedViaGithub = false;
-
-// true só durante autoUpdater.downloadUpdate() (ver updater:download) — o
-// evento nativo 'error' do autoUpdater dispara tanto numa falha de
-// VERIFICAÇÃO quanto numa falha de DOWNLOAD, mas só a segunda precisa virar
-// 'updater:error' pro renderer aqui; a primeira já tem seu próprio tratamento
-// em checkForUpdates() (fallback pro GitHub antes de decidir o que reportar).
-let _downloadingNative = false;
-// true durante toda a duração de downloadUpdateWithRetry() — suprime o
-// forward automático do evento 'error' nativo abaixo em CADA tentativa
-// (mesmo a última): o catch de updater:download já reporta o erro final ao
-// renderer explicitamente depois que todas as tentativas se esgotam, então
-// deixar o evento passar também duplicaria a mensagem. Sem essa flag, a 1ª
-// tentativa falhando já mostrava "erro no download" pro operador mesmo
-// quando uma tentativa seguinte teria dado certo (rede instável, hiccup
-// passageiro do GitHub).
-let _downloadRetryInProgress = false;
-
-async function checkForUpdates() {
-  _sendToRenderer('updater:checking');
-  _checkedViaGithub = false;
-
-  try {
-    const r = await autoUpdater.checkForUpdates();
-    // Em dev (app não empacotado, sem dev-app-update.yml) ou em instalações
-    // sem config de update, checkForUpdates() resolve com null SEM emitir
-    // nenhum evento (ver isUpdaterActive() no electron-updater) — trata como
-    // falha e cai no fallback abaixo, em vez de reportar "sem atualização"
-    // sem nem checar de verdade (isso também é o que permite testar o fluxo
-    // completo em dev, contra a API real do GitHub).
-    if (r == null) throw new Error('electron-updater inativo (dev ou sem configuração de update)');
-  } catch (e) {
-    console.error('[updater] Falha ao verificar via electron-updater, tentando fallback GitHub API:', e.message || e);
-    logUpdaterError('check (electron-updater)', e);
-    _checkedViaGithub = true;
-    try {
-      const info = await checkGithubReleaseDirect();
-      if (info.updateAvailable) _sendToRenderer('updater:available', { version: info.version, releaseNotes: info.releaseNotes });
-      else _sendToRenderer('updater:not-available', {});
-    } catch (e2) {
-      console.error('[updater] Fallback GitHub API também falhou:', e2.message || e2);
-      logUpdaterError('check (github fallback)', e2);
-      _sendToRenderer('updater:not-available', {});
-    }
-  }
+/** Fetch HTTP(S) simples, retorna Buffer ou JSON, seguindo redirecionamentos. */
+function _request(url, { headers = {}, parseJson = false } = {}, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'LouvorJA', Accept: 'application/vnd.github+json', ...headers } }, (res) => {
+      const status = res.statusCode || 0;
+      if (status >= 300 && status < 400 && res.headers.location) {
+        res.resume();
+        if (redirects >= 10) return reject(new Error('Muitos redirecionamentos ao acessar o GitHub'));
+        const next = new URL(res.headers.location, url).toString();
+        return _request(next, { headers, parseJson }, redirects + 1).then(resolve, reject);
+      }
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (status >= 400) {
+          // A API do GitHub sem autenticação libera só 60 requisições/hora por
+          // IP — numa rede compartilhada (igreja/escritório com vários
+          // instaladores checando update) isso estoura fácil e aparecia pro
+          // usuário só como "HTTP 403", sem nenhuma pista do que fazer. O
+          // rate-limit vem sempre com esses dois headers, então dá pra
+          // detectar com certeza (em vez de adivinhar pelo texto do body,
+          // que muda) e avisar quando o limite libera de novo.
+          const remaining = res.headers['x-ratelimit-remaining'];
+          const resetHeader = res.headers['x-ratelimit-reset'];
+          if (status === 403 && remaining === '0' && resetHeader) {
+            const resetDate = new Date(parseInt(resetHeader, 10) * 1000);
+            const mins = Math.max(1, Math.ceil((resetDate.getTime() - Date.now()) / 60000));
+            return reject(new Error(`Limite de requisições do GitHub atingido — tente novamente em cerca de ${mins} min`));
+          }
+          return reject(new Error(`HTTP ${status} ao acessar o GitHub`));
+        }
+        if (!parseJson) return resolve(buf);
+        try { resolve(JSON.parse(buf.toString('utf8'))); }
+        catch (e) { reject(new Error(`Resposta inválida (não-JSON) do GitHub: ${e.message}`)); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => req.destroy(new Error('Timeout ao consultar o GitHub')));
+  });
 }
 
-// ── Download do instalador ──────────────────────────────────────────────────
-// electron-updater (autoUpdater.downloadUpdate) baixa sempre para a própria
-// pasta de cache dele (%LOCALAPPDATA%\louvorja-updater) e depois instala
-// silenciosamente — o usuário nunca escolhe o destino. Aqui o download do
-// instalador é feito à parte, direto da API do GitHub Releases (mesma fonte
-// do autoUpdater), só para poder perguntar ANTES onde salvar o arquivo —
-// nunca dentro da pasta de instalação do Louvor JA, que também guarda
-// músicas/capas/banco de dados do usuário (ver getWritableBase() em ipc.js e
-// build/installer.nsh). O autoUpdater continua sendo usado só para VERIFICAR
-// se há versão nova (checkForUpdates acima).
-const GITHUB_OWNER = 'tiagoadv7';
-const GITHUB_REPO = 'louvorja';
+/**
+ * Compara dois identificadores de pré-release semver por partes separadas
+ * por ponto (ex: "test.10" vs "test.2"). Retorna >0 se a>b.
+ *
+ * Regras semver:
+ *  - identificadores numéricos são comparados numericamente (10 > 2);
+ *  - numérico tem precedência MENOR que alfanumérico;
+ *  - alfanuméricos são comparados lexicograficamente (ASCII);
+ *  - mais identificadores = maior precedência (test.3.1 > test.3).
+ */
+function _comparePrerelease(a, b) {
+  const aParts = a.split('.');
+  const bParts = b.split('.');
+  const len = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < len; i++) {
+    const x = aParts[i];
+    const y = bParts[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xNum = /^\d+$/.test(x);
+    const yNum = /^\d+$/.test(y);
+    if (xNum && yNum) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d !== 0) return d;
+    } else if (xNum) {
+      return -1;
+    } else if (yNum) {
+      return 1;
+    } else {
+      const d = x < y ? -1 : x > y ? 1 : 0;
+      if (d !== 0) return d;
+    }
+  }
+  return 0;
+}
 
-let downloadedInstallerPath = null;
+function _parseVersion(v) {
+  const clean = String(v || '').replace(/^v/, '').trim();
+  const [core, pre] = clean.split('-', 2);
+  const nums = core.split('.').map((n) => parseInt(n, 10) || 0);
+  while (nums.length < 3) nums.push(0);
+  nums.prerelease = pre || null;
+  return nums;
+}
+
+/**
+ * Compara versões semver básicas (a.b.c[-pre.release]). Retorna >0 se a>b.
+ * Suporta pré-release (ex: 1.28.19-test.1 < 1.28.19) — a comparação antiga
+ * (parseInt ingênuo por "."), tratava "1.28.19-test.1" como [1,28,19] (o
+ * sufixo "-test" virava NaN||0 e era descartado), fazendo uma versão de
+ * teste comparar IGUAL à versão estável de mesmo número — confirmado na
+ * prática ao publicar v1.28.19-test.1 nesta sessão.
+ */
+function compareVersions(a, b) {
+  const pa = _parseVersion(a);
+  const pb = _parseVersion(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  }
+  const ap = pa.prerelease;
+  const bp = pb.prerelease;
+  if (ap && !bp) return -1;
+  if (!ap && bp) return 1;
+  if (ap && bp) return _comparePrerelease(ap, bp);
+  return 0;
+}
 
 function assetExtensionForPlatform() {
   if (process.platform === 'win32') return 'exe';
@@ -129,186 +259,376 @@ function assetExtensionForPlatform() {
   return 'AppImage';
 }
 
-/** GET simples de JSON via HTTPS, seguindo redirecionamentos. */
-function githubApiRequest(urlStr, redirects = 0) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(urlStr);
-    const req = https.get(
-      { hostname: u.hostname, path: u.pathname + u.search, headers: { 'User-Agent': 'LouvorJA', Accept: 'application/vnd.github+json' } },
-      (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume();
-          if (redirects >= 10) return reject(new Error('Muitos redirecionamentos ao consultar o GitHub'));
-          return githubApiRequest(new URL(res.headers.location, urlStr).toString(), redirects + 1).then(resolve, reject);
-        }
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          const body = Buffer.concat(chunks).toString('utf8');
-          if (res.statusCode >= 400) {
-            // A API do GitHub sem autenticação libera só 60 requisições/hora por
-            // IP — numa rede compartilhada (igreja/escritório com vários
-            // instaladores checando update) isso estoura fácil e aparecia pro
-            // usuário só como "HTTP 403", sem nenhuma pista do que fazer.
-            // rate-limit vem sempre com esses dois headers, então dá pra
-            // detectar com certeza (em vez de adivinhar pelo texto do body,
-            // que muda) e avisar quando o limite libera de novo.
-            const remaining = res.headers['x-ratelimit-remaining'];
-            const resetHeader = res.headers['x-ratelimit-reset'];
-            if (res.statusCode === 403 && remaining === '0' && resetHeader) {
-              const resetDate = new Date(parseInt(resetHeader, 10) * 1000);
-              const mins = Math.max(1, Math.ceil((resetDate.getTime() - Date.now()) / 60000));
-              return reject(new Error(`Limite de requisições do GitHub atingido — tente novamente em cerca de ${mins} min`));
-            }
-            return reject(new Error(`HTTP ${res.statusCode} ao consultar o GitHub`));
-          }
-          try { resolve(JSON.parse(body)); } catch (e) { reject(new Error(`Resposta inválida do GitHub: ${e.message}`)); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.setTimeout(30000, () => req.destroy(new Error('Timeout ao consultar o GitHub')));
+/**
+ * Busca a release mais recente (compatível com a plataforma e com useBeta)
+ * do repositório via GitHub API. Retorna { updateAvailable, version, tag,
+ * url, assets } ou null se não houver nenhuma release candidata.
+ */
+async function checkGithubRelease() {
+  const releases = await _request(GITHUB_RELEASES_URL, { parseJson: true });
+  if (!Array.isArray(releases)) return null;
+
+  const candidates = releases.filter((r) => {
+    if (!r || r.draft) return false;
+    const tag = String(r.tag_name || '').replace(/^v/, '');
+    if (!/^\d+\.\d+\.\d+/.test(tag)) return false;
+    // Pre-release: só considera se useBeta estiver ativo.
+    if (r.prerelease && !_useBeta) return false;
+    return true;
   });
-}
+  if (candidates.length === 0) return null;
 
-// Cache curto da release "latest" — checkForUpdates (verificação, periódica ou
-// manual) e updater:download (clique em "Baixar agora") consultavam o mesmo
-// endpoint em separado, cada um consumindo sua própria cota das 60
-// requisições/hora sem autenticação. Reaproveitar a resposta por alguns
-// minutos cobre o caso comum (usuário vê "atualização disponível" e clica em
-// baixar logo em seguida) sem precisar de token.
-let _releaseCache = { data: null, time: 0 };
-const RELEASE_CACHE_TTL_MS = 5 * 60 * 1000;
+  candidates.sort((a, b) => compareVersions(String(b.tag_name), String(a.tag_name)));
+  const latest = candidates[0];
+  const version = String(latest.tag_name).replace(/^v/, '');
 
-async function fetchLatestRelease() {
-  const now = Date.now();
-  if (_releaseCache.data && now - _releaseCache.time < RELEASE_CACHE_TTL_MS) {
-    return _releaseCache.data;
-  }
-  const release = await githubApiRequest(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
-  _releaseCache = { data: release, time: now };
-  return release;
-}
-
-/** Busca a release mais recente e o asset compatível com a plataforma atual. */
-async function findLatestReleaseAsset() {
-  const release = await fetchLatestRelease();
-  const ext = assetExtensionForPlatform();
-  const asset = (release.assets || []).find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
-  if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na última release`);
-  const version = String(release.tag_name || '').replace(/^v/, '');
-  return { asset, version };
-}
-
-/** Compara duas versões "major.minor.patch". Retorna >0 se a > b. */
-function compareVersions(a, b) {
-  const pa = String(a).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) {
-    const diff = (pa[i] || 0) - (pb[i] || 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
-// Fallback de VERIFICAÇÃO usado por checkForUpdates quando autoUpdater.checkForUpdates()
-// falha (ex.: proxy/firewall bloqueando o formato de request do electron-updater) —
-// consulta a mesma release "latest" direto pela API do GitHub, sem depender do
-// provider do electron-updater, só para decidir se há versão nova.
-async function checkGithubReleaseDirect() {
-  const release = await fetchLatestRelease();
-  const version = String(release.tag_name || '').replace(/^v/, '');
-  if (!version) return { updateAvailable: false, version: null };
-  // release.body já vem pronto na mesma resposta da API (texto markdown cru
-  // do corpo da release) — sem precisar de uma segunda chamada, ao contrário
-  // do fork violin-app (getCurrentReleaseNotes), que busca a release por tag
-  // e ainda renderiza via /markdown à parte. UpdateDialog.vue já trata esse
-  // mesmo formato cru no caminho nativo do electron-updater (ver
-  // formatChangelog), então dá pra reaproveitar sem mudar nada na UI.
   return {
     updateAvailable: compareVersions(version, app.getVersion()) > 0,
     version,
-    releaseNotes: release.body || null,
+    tag: latest.tag_name,
+    url: latest.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/${latest.tag_name}`,
+    assets: latest.assets || [],
   };
 }
 
-/** Baixa uma URL para um arquivo local, com progresso e redirecionamentos. */
-function downloadFile(url, destPath, onProgress) {
-  return new Promise((resolve, reject) => {
-    const tmpPath = `${destPath}.tmp`;
-    const request = (u) => {
-      https.get(u, { headers: { 'User-Agent': 'LouvorJA' } }, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume();
-          return request(res.headers.location);
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`HTTP ${res.statusCode} ao baixar o instalador`));
-        }
-        const total = parseInt(res.headers['content-length'] || '0', 10);
-        let received = 0;
-        let sample = { time: Date.now(), received: 0 };
-        const out = fs.createWriteStream(tmpPath);
-        res.on('data', (chunk) => {
-          received += chunk.length;
-          const now = Date.now();
-          if (now - sample.time >= 250) {
-            const bytesPerSecond = Math.round(((received - sample.received) / (now - sample.time)) * 1000);
-            sample = { time: now, received };
-            const eta = bytesPerSecond > 0 && total > 0 ? Math.round((total - received) / bytesPerSecond) : null;
-            onProgress({ percent: total ? Math.min(99, Math.round((received / total) * 100)) : 0, transferred: received, total, bytesPerSecond, eta });
-          }
+/**
+ * Renderiza markdown (GFM) em HTML usando a API pública do GitHub
+ * (`POST /markdown`). Retorna null em caso de falha para que a UI tenha
+ * fallback pro texto cru (ver UpdateDialog.vue).
+ */
+function renderMarkdown(text) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ text: String(text || ''), mode: 'gfm' });
+    const req = https.request(
+      'https://api.github.com/markdown',
+      {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'LouvorJA',
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const status = res.statusCode || 0;
+          if (status < 200 || status >= 300) return resolve(null);
+          resolve(Buffer.concat(chunks).toString('utf8'));
         });
-        res.pipe(out);
-        out.on('finish', () => out.close(() => fs.rename(tmpPath, destPath, (err) => (err ? reject(err) : resolve()))));
-        out.on('error', reject);
-      }).on('error', reject).setTimeout(120000, function () {
-        this.destroy(new Error('Timeout ao baixar o instalador'));
-      });
-    };
-    request(url);
+      }
+    );
+    req.on('error', () => resolve(null));
+    req.setTimeout(30000, () => req.destroy(new Error('Timeout ao consultar o GitHub')));
+    req.end(body);
   });
 }
 
-// Tenta o download algumas vezes com espera entre tentativas antes de desistir.
-// Motivo: um release recém-publicado no GitHub pode levar de segundos a alguns
-// MINUTOS pra terminar de propagar (arquivos grandes de ~150MB passam por
-// verificação antes de ficar baixáveis via browser_download_url) — confirmado
-// na prática duas vezes: um release apareceu com os assets listados na API mas
-// retornando 404 por vários minutos seguidos, e depois (v1.28.20) um "Baixar
-// agora" clicado ~11min após o publish ainda falhou com os ~100s de tolerância
-// que a janela original (10s/15s/20s/25s/30s) cobria — a propagação daquela vez
-// levou mais que isso. Atraso progressivo mais longo (10s, 15s, 20s, 30s, 45s,
-// 60s, 60s, 90s) soma ~5,5min de tolerância total.
-const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 30000, 45000, 60000, 60000, 90000];
-
-async function downloadInstallerWithRetry(url, destPath, onProgress) {
-  const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
-  let lastErr;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await downloadFile(url, destPath, onProgress);
-    } catch (e) {
-      lastErr = e;
-      logUpdaterError(`download tentativa ${attempt}/${maxAttempts} falhou`, e);
-      try { fs.unlinkSync(`${destPath}.tmp`); } catch (_) { /* pode não existir ainda */ }
-      const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
-      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+/** Faz o check via GitHub API e atualiza o estado unificado. */
+async function checkGithubAndSetState() {
+  _setState({ status: 'checking', error: null, newVersion: null });
+  try {
+    const info = await checkGithubRelease();
+    if (!info) {
+      _setState({ status: 'not-available' });
+      return { ok: true, updateAvailable: false };
     }
+    _latestReleaseInfo = info;
+    if (!info.updateAvailable) {
+      _setState({ status: 'not-available', newVersion: info.version });
+      return { ok: true, updateAvailable: false };
+    }
+    // checkGithubRelease() não devolve o corpo (a listagem /releases não
+    // precisa dele pra decidir se há update) — busca a release específica só
+    // pra pegar o markdown cru e renderizar em HTML (cai pro texto cru se
+    // essa segunda chamada ou o /markdown falharem).
+    const release = await _request(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/v${info.version}`, { parseJson: true }).catch(() => null);
+    const body = release?.body || '';
+    const releaseNotes = body ? (await renderMarkdown(body)) || body : null;
+
+    _setState({ status: 'available', newVersion: info.version, releaseNotes, error: null });
+    if (_autoDownload) {
+      downloadPackage().catch((e) => console.warn('[updater] auto-download falhou:', e.message));
+    }
+    return { ok: true, updateAvailable: true, version: info.version };
+  } catch (e) {
+    logUpdaterError('check (github fallback)', e);
+    _setState({ status: 'error', error: e.message || String(e) });
+    return { ok: false, error: e.message };
   }
-  throw lastErr;
 }
 
-// Mesma tolerância a falha passageira (rede instável, hiccup momentâneo da
-// API/CDN do GitHub) do download manual acima, mas pro caminho NATIVO
-// (autoUpdater.downloadUpdate() — usado sempre que a verificação também foi
-// feita pelo electron-updater, o caso mais comum). Antes, esse caminho não
-// tentava de novo nenhuma vez: qualquer falha momentânea de rede já reportava
-// "falha no download" pro operador, mesmo o release estando 100% publicado e
-// acessível (confirmado: falhas nesse caminho não são sempre por causa do
-// release em si).
-async function downloadUpdateWithRetry() {
+/**
+ * Baixa o asset (.exe) da release pra um destino escolhido pelo usuário
+ * (dialog.showSaveDialog — ver nota no topo do arquivo sobre por que isso é
+ * diferente do violin-app), com progresso e retry.
+ *
+ * @param {import('electron').BrowserWindow} [win] janela pra ancorar o diálogo de salvar
+ */
+async function downloadPackage(win) {
+  if (!_latestReleaseInfo || !_latestReleaseInfo.assets) {
+    const chk = await checkGithubAndSetState();
+    if (!chk.ok || !chk.updateAvailable) {
+      throw new Error(_state.error || 'Nenhuma versão disponível para download');
+    }
+  }
+  const info = _latestReleaseInfo;
+  const ext = assetExtensionForPlatform();
+  const asset = info.assets.find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
+  if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na release ${info.tag}`);
+
+  const chosen = await dialog.showSaveDialog(win || _mainWindow, {
+    title: 'Salvar instalador da atualização',
+    defaultPath: path.join(app.getPath('downloads'), asset.name),
+    filters: [{ name: 'Instalador', extensions: [ext] }],
+  });
+  if (chosen.canceled || !chosen.filePath) return { canceled: true };
+
+  const dest = chosen.filePath;
+  const tmp = `${dest}.tmp`;
+
+  _dlSample = { time: 0, received: 0, rate: 0 };
+  _setState({ status: 'downloading', progress: 0, newVersion: info.version, error: null, bytesPerSecond: 0, transferred: 0, total: asset.size || 0 });
+
+  const attemptOnce = () =>
+    new Promise((resolve, reject) => {
+      const download = (url) => {
+        https.get(url, { headers: { 'User-Agent': 'LouvorJA' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            res.resume();
+            return download(res.headers.location);
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`HTTP ${res.statusCode} ao baixar ${asset.name}`));
+          }
+          _pipeToFile(res, dest, tmp, info, resolve, reject);
+        }).on('error', reject).setTimeout(120000, function () {
+          this.destroy(new Error('Timeout ao baixar o instalador'));
+        });
+      };
+      download(asset.browser_download_url);
+    });
+
+  try {
+    const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await attemptOnce();
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        logUpdaterError(`download (manual) tentativa ${attempt}/${maxAttempts} falhou`, e);
+        try { fs.unlinkSync(tmp); } catch (_) { /* pode não existir ainda */ }
+        const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1];
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    if (lastErr) throw lastErr;
+
+    _setState({ status: 'downloaded', progress: 100, newVersion: info.version, packagePath: dest });
+    return { ok: true, path: dest };
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ }
+    logUpdaterError('download (manual, todas as tentativas)', e);
+    _setState({ status: 'error', error: e.message || String(e) });
+    throw e;
+  }
+}
+
+function _pipeToFile(res, dest, tmp, info, resolve, reject) {
+  const total = parseInt(res.headers['content-length'] || '0', 10);
+  let received = 0;
+  const out = fs.createWriteStream(tmp);
+  res.on('data', (chunk) => {
+    received += chunk.length;
+    if (total > 0) {
+      const now = Date.now();
+      if (now - _dlSample.time >= 250) {
+        _dlSample.rate = (received - _dlSample.received) / ((now - _dlSample.time) / 1000);
+        _dlSample.time = now;
+        _dlSample.received = received;
+      }
+      _setState({
+        status: 'downloading',
+        progress: Math.min(99, Math.round((received / total) * 100)),
+        newVersion: info.version,
+        bytesPerSecond: Math.round(_dlSample.rate),
+        transferred: received,
+        total,
+      });
+    }
+  });
+  res.pipe(out);
+  out.on('finish', () => out.close(() => fs.rename(tmp, dest, (err) => (err ? reject(err) : resolve()))));
+  out.on('error', reject);
+}
+
+/** Abre o instalador baixado e fecha o app pro instalador assumir o resto. */
+function openPackage() {
+  if (!_state.packagePath) return Promise.resolve({ ok: false, error: 'Nenhum instalador baixado' });
+  return shell.openPath(_state.packagePath).then(
+    (err) => {
+      if (err) { logUpdaterError('install (manual)', new Error(err)); return { ok: false, error: err }; }
+      setTimeout(() => app.quit(), 500);
+      return { ok: true };
+    },
+    (err) => ({ ok: false, error: String(err) })
+  );
+}
+
+/** Abre a página da release no browser — fallback quando o asset não é encontrado/baixável. */
+function openReleasePage() {
+  const url = _latestReleaseInfo?.url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+  shell.openExternal(url);
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Inicializa o updater: registra os listeners do autoUpdater e os handlers
+ * IPC (updater:check, updater:download, updater:install, updater:status,
+ * updater:setOptions, updater:openReleasePage). Deve ser chamado uma única
+ * vez, antes de qualquer chamada IPC do renderer — setMainWindow() pode vir
+ * depois, os handlers abaixo leem _mainWindow em tempo de chamada.
+ *
+ * @param {{ channel?: string, autoCheck?: boolean, autoDownload?: boolean, useBeta?: boolean }} opts
+ */
+function init({ channel = 'latest', autoCheck = true, autoDownload = false, useBeta = false } = {}) {
+  _useBeta      = !!useBeta;
+  _autoCheck    = !!autoCheck;
+  _autoDownload = !!autoDownload;
+  _state.version = app.getVersion();
+
+  if (!autoUpdater) {
+    try {
+      autoUpdater = require('electron-updater').autoUpdater;
+    } catch (e) {
+      console.warn('[updater] electron-updater indisponível:', e.message);
+    }
+  }
+
+  if (autoUpdater) {
+    // autoDownload do PROVIDER continua false por padrão — baixar só quando
+    // o operador clicar em "Baixar agora" (updater:download abaixo), a
+    // menos que _autoDownload (opção do app, não do provider) esteja ligada.
+    autoUpdater.autoDownload   = _autoDownload;
+    autoUpdater.allowPrerelease = _useBeta;
+    autoUpdater.channel        = channel;
+    autoUpdater.logger         = null; // silencia logs internos do electron-updater
+
+    autoUpdater.on('checking-for-update', () => {
+      _setState({ status: 'checking', error: null });
+    });
+
+    autoUpdater.on('update-available', async (info) => {
+      const raw = typeof info.releaseNotes === 'string' ? info.releaseNotes : null;
+      const releaseNotes = raw ? (await renderMarkdown(raw)) || raw : null;
+      _setState({ status: 'available', newVersion: info.version, releaseNotes, error: null });
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+      _setState({ status: 'not-available', newVersion: info?.version || null });
+    });
+
+    // Progresso/conclusão do download NATIVO (autoUpdater.downloadUpdate(),
+    // ver updater:download abaixo) — mesmo _state que o download manual usa,
+    // então UpdateDialog.vue não precisa saber qual dos dois está em uso.
+    autoUpdater.on('download-progress', (prog) => {
+      _setState({
+        status: 'downloading',
+        progress: Math.round(prog.percent || 0),
+        transferred: prog.transferred,
+        total: prog.total,
+        bytesPerSecond: prog.bytesPerSecond,
+      });
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      _setState({ status: 'downloaded', newVersion: info.version, progress: 100 });
+    });
+
+    autoUpdater.on('error', (err) => {
+      const msg = err?.message || String(err);
+      console.error('[updater] Erro do autoUpdater:', msg);
+      logUpdaterError('autoUpdater error event', err);
+      // Durante um retry de download (ver _downloadUpdateWithRetry), esse
+      // mesmo evento dispara a cada tentativa que falha — só a tentativa
+      // FINAL (depois de esgotar DOWNLOAD_RETRY_DELAYS_MS) deve virar estado
+      // de erro pro usuário; senão "Baixando..." já mostrava erro na 1ª
+      // falha passageira mesmo quando uma tentativa seguinte teria dado certo.
+      if (_downloadRetryInProgress) return;
+      _setState({ status: 'error', error: msg });
+    });
+  }
+
+  ipcMain.handle('updater:check', () => checkForUpdates());
+  ipcMain.handle('updater:download', (event) => downloadUpdate(BrowserWindow.fromWebContents(event.sender) || _mainWindow));
+  ipcMain.handle('updater:install', () => quitAndInstall());
+  ipcMain.handle('updater:status', () => status());
+  ipcMain.handle('updater:setOptions', (_e, opts) => setOptions(opts));
+  ipcMain.handle('updater:openReleasePage', () => openReleasePage());
+
+  // Verifica automaticamente só em build empacotada — em dev (`npm run
+  // electron:dev`, app.isPackaged=false) cada restart do processo dispararia
+  // um check novo, gastando a cota de 60 req/hora sem autenticação da API do
+  // GitHub e distraindo com popups de update no meio do desenvolvimento.
+  // 15s de delay pra não competir com o carregamento inicial do app.
+  if (_autoCheck && app.isPackaged) {
+    setTimeout(() => {
+      checkForUpdates().catch(() => {});
+    }, 15000);
+  }
+
+  console.log('[updater] Inicializado. autoUpdater:', !!autoUpdater, '| autoDownload:', _autoDownload, '| useBeta:', _useBeta);
+}
+
+/**
+ * Aplica opções em runtime (ex.: futura tela de configurações).
+ * @param {{ useBeta?: boolean, autoCheck?: boolean, autoDownload?: boolean }} opts
+ */
+function setOptions({ useBeta, autoCheck, autoDownload } = {}) {
+  if (typeof useBeta === 'boolean') _useBeta = useBeta;
+  if (typeof autoCheck === 'boolean') _autoCheck = autoCheck;
+  if (typeof autoDownload === 'boolean') _autoDownload = autoDownload;
+  if (autoUpdater) {
+    autoUpdater.allowPrerelease = _useBeta;
+    autoUpdater.autoDownload    = _autoDownload;
+  }
+}
+
+/**
+ * Verifica se há versão nova.
+ * - Produção com electron-updater ativo: delega a ele.
+ * - Dev (app não empacotado) ou electron-updater inativo/falhou: fallback GitHub API.
+ */
+async function checkForUpdates() {
+  if (!autoUpdater || !autoUpdater.isUpdaterActive()) {
+    _checkedViaGithub = true;
+    return checkGithubAndSetState();
+  }
+  try {
+    _checkedViaGithub = false;
+    autoUpdater.allowPrerelease = _useBeta;
+    autoUpdater.autoDownload    = _autoDownload;
+    await autoUpdater.checkForUpdates();
+    return { ok: true, state: { ..._state } };
+  } catch (e) {
+    console.warn('[updater] Falha ao verificar via electron-updater, tentando fallback GitHub API:', e.message || e);
+    logUpdaterError('check (electron-updater)', e);
+    _checkedViaGithub = true;
+    return checkGithubAndSetState();
+  }
+}
+
+/** Tenta autoUpdater.downloadUpdate() algumas vezes antes de desistir (ver DOWNLOAD_RETRY_DELAYS_MS). */
+async function _downloadUpdateWithRetry() {
   const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
   _downloadRetryInProgress = true;
   try {
@@ -325,131 +645,65 @@ async function downloadUpdateWithRetry() {
     }
     throw lastErr;
   } finally {
-    // Sempre reabilita o forward do evento nativo pra próxima vez (ex.: um
-    // "Baixar agora" chamado fora de downloadUpdateWithRetry, se um dia
-    // existir) — o erro FINAL desta chamada já é reportado explicitamente
-    // pelo catch de updater:download, então não precisa passar pelo evento.
     _downloadRetryInProgress = false;
   }
 }
 
 /**
- * Registra os listeners do autoUpdater e os handlers IPC (updater:check,
- * updater:download, updater:install). Deve ser chamado uma única vez, antes
- * de qualquer chamada IPC do renderer (setMainWindow pode vir depois — os
- * handlers abaixo leem _mainWindow em tempo de chamada, não no registro).
+ * Inicia o download da atualização disponível.
+ * - Verificação foi feita pelo electron-updater: baixa nativamente (cache
+ *   próprio do electron-updater, fora da pasta de instalação do app).
+ * - Dev ou verificação caiu pro fallback GitHub API: download manual, com
+ *   diálogo de "salvar como" (ver downloadPackage).
  */
-function init() {
-  // autoDownload continua false — baixar só quando o operador clicar em
-  // "Baixar agora" (ver updater:download abaixo), não assim que encontrar
-  // uma versão nova. A diferença agora é COMO baixa: nativamente pelo
-  // electron-updater (sem diálogo de "salvar como", instala sozinho) sempre
-  // que a própria verificação também tiver sido feita por ele — só cai pro
-  // download manual (GitHub API + escolher onde salvar) quando o
-  // electron-updater não estava realmente ativo na verificação (dev, ou
-  // checkForUpdates falhou) — ver _checkedViaGithub em checkForUpdates().
-  autoUpdater.autoDownload = false;
-  autoUpdater.logger = null; // silencia logs internos do electron-updater
-
-  autoUpdater.on('checking-for-update',  ()       => _sendToRenderer('updater:checking'));
-  autoUpdater.on('update-available',     (info)   => _sendToRenderer('updater:available', info));
-  autoUpdater.on('update-not-available', (info)   => _sendToRenderer('updater:not-available', info));
-  // Progresso/conclusão do download NATIVO (autoUpdater.downloadUpdate(),
-  // ver updater:download abaixo) — reaproveita os mesmos canais que o
-  // download manual já usava, então UpdateDialog.vue não precisa saber qual
-  // dos dois mecanismos está em uso.
-  autoUpdater.on('download-progress', (prog) => _sendToRenderer('updater:progress', {
-    percent: Math.round(prog.percent || 0),
-    transferred: prog.transferred,
-    total: prog.total,
-    bytesPerSecond: prog.bytesPerSecond,
-  }));
-  autoUpdater.on('update-downloaded', (info) => _sendToRenderer('updater:downloaded', { version: info.version }));
-  autoUpdater.on('error', (err) => {
-    const msg = err?.message || String(err);
-    console.error('[updater] Erro do autoUpdater:', msg);
-    logUpdaterError('autoUpdater error event', err);
-    // Durante a VERIFICAÇÃO, quem decide o que reportar ao renderer é o catch
-    // de checkForUpdates (que também recebe esse mesmo erro via rejeição da
-    // promise de checkForUpdates() e tenta o fallback do GitHub antes de
-    // reportar "sem atualização") — não duplica aqui. Só durante o DOWNLOAD
-    // nativo (updater:download abaixo) é que esse é o único aviso que existe
-    // — sem isso, "Baixando..." ficava travado pra sempre se ele falhasse no meio.
-    if (_downloadingNative && !_downloadRetryInProgress) {
-      _sendToRenderer('updater:error', msg);
-    }
-  });
-
-  ipcMain.handle('updater:check', () => checkForUpdates());
-
-  ipcMain.handle('updater:download', async () => {
-    // Verificação foi feita pelo electron-updater de verdade → baixa e
-    // instala nativamente (cache próprio do electron-updater, fora da pasta
-    // de instalação do app — não conflita com músicas/capas/banco de dados
-    // do usuário, ver comentário histórico sobre getWritableBase() acima).
-    // Sem diálogo de "salvar como": o instalador some assim que o processo
-    // termina, igual ao fluxo padrão de qualquer app atualizado por essa lib.
-    if (!_checkedViaGithub) {
-      _downloadingNative = true;
-      try {
-        await downloadUpdateWithRetry();
-        return { ok: true, native: true };
-      } catch (e) {
-        logUpdaterError('download (electron-updater nativo, todas as tentativas)', e);
-        _sendToRenderer('updater:error', e.message);
-        return { ok: false, error: e.message };
-      } finally {
-        _downloadingNative = false;
-      }
-    }
-
-    // Fallback manual (dev, ou checkForUpdates() do electron-updater falhou
-    // na verificação) — mesmo fluxo de sempre: GitHub API direto + o
-    // operador escolhe onde salvar o instalador.
+async function downloadUpdate(win) {
+  if (_checkedViaGithub || !autoUpdater || !autoUpdater.isUpdaterActive()) {
     try {
-      const { asset, version } = await findLatestReleaseAsset();
-
-      const chosen = await dialog.showSaveDialog(_mainWindow, {
-        title: 'Salvar instalador da atualização',
-        defaultPath: path.join(app.getPath('downloads'), asset.name),
-        filters: [{ name: 'Instalador', extensions: [assetExtensionForPlatform()] }],
-      });
-      if (chosen.canceled || !chosen.filePath) return { canceled: true };
-
-      await downloadInstallerWithRetry(asset.browser_download_url, chosen.filePath, (prog) => _sendToRenderer('updater:progress', prog));
-
-      downloadedInstallerPath = chosen.filePath;
-      _sendToRenderer('updater:downloaded', { version });
-      return { ok: true, path: chosen.filePath };
+      return await downloadPackage(win);
     } catch (e) {
-      logUpdaterError('download (manual)', e);
-      _sendToRenderer('updater:error', e.message);
       return { ok: false, error: e.message };
     }
-  });
+  }
+  try {
+    autoUpdater.allowPrerelease = _useBeta;
+    autoUpdater.autoDownload    = true;
+    await _downloadUpdateWithRetry();
+    return { ok: true, native: true };
+  } catch (e) {
+    logUpdaterError('download (electron-updater nativo, todas as tentativas)', e);
+    _setState({ status: 'error', error: e.message });
+    return { ok: false, error: e.message };
+  }
+}
 
-  ipcMain.handle('updater:install', () => {
-    // Download nativo: electron-updater fecha e reabre o app sozinho,
-    // substituindo os arquivos — não precisa abrir instalador nenhum.
-    if (!_checkedViaGithub) {
-      autoUpdater.quitAndInstall();
-      return;
-    }
-    // Download manual: abre o instalador baixado (NSIS), que assume o resto.
-    if (!downloadedInstallerPath) return;
-    shell.openPath(downloadedInstallerPath).then((err) => {
-      if (err) {
-        logUpdaterError('install', new Error(err));
-        _sendToRenderer('updater:error', err);
-        return;
-      }
-      setTimeout(() => app.quit(), 500);
-    });
-  });
+/**
+ * Fecha o app e instala a atualização baixada.
+ * - Download nativo: electron-updater fecha e reabre o app sozinho.
+ * - Download manual: abre o instalador (NSIS) baixado, que assume o resto.
+ */
+function quitAndInstall() {
+  if (_checkedViaGithub || !autoUpdater || !autoUpdater.isUpdaterActive()) {
+    return openPackage();
+  }
+  autoUpdater.quitAndInstall();
+}
+
+/** Snapshot do estado atual (não reativo). */
+function status() {
+  return { ..._state };
 }
 
 module.exports = {
   init,
   setMainWindow,
   checkForUpdates,
+  downloadUpdate,
+  downloadPackage,
+  quitAndInstall,
+  openPackage,
+  openReleasePage,
+  status,
+  setOptions,
+  checkGithubRelease,
+  checkGithubAndSetState,
 };
