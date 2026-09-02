@@ -37,17 +37,28 @@
 
     <!-- Centro: display do sorteado atual -->
     <div class="sorteio-center" :style="{ padding: `${borderSpacing}px` }">
-      <span
-        :key="showFim ? 'fim' : revealId"
-        :style="numberStyle"
-        :class="{
-          'sorteio-animating': isAnimating,
-          'sorteio-reveal-anim': !isAnimating && !showFim && revealId > 0,
-          'sorteio-fim-anim': showFim,
-        }"
-      >
-        {{ displayCurrent }}
-      </span>
+      <div class="sorteio-result">
+        <div v-if="isRevealed" class="sorteio-winner-label" :style="{ color: fontColor }">
+          {{ winnerLabel }}
+        </div>
+        <span
+          :key="showFim ? 'fim' : revealId"
+          :style="numberStyle"
+          :class="{
+            'sorteio-animating': isAnimating,
+            'sorteio-reveal-anim': isRevealed,
+            'sorteio-fim-anim': showFim,
+          }"
+        >
+          {{ displayCurrent }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Confetti — mesmo efeito usado no modo roleta (ver Popup.vue), disparado
+         a cada novo sorteado pra ficar consistente entre números/nomes/roleta. -->
+    <div v-if="showConfetti" class="sorteio-confetti-wrap" aria-hidden="true">
+      <div v-for="i in 50" :key="i" class="sorteio-confetti" :style="getConfettiStyle(i)" />
     </div>
 
     <!-- Painel direito -->
@@ -76,6 +87,12 @@
 import manifest from "../manifest.json";
 import pt from "../lang/pt.json";
 
+// Mesma paleta usada no confete da roleta (RouletteWheel.vue / Popup.vue).
+const CONFETTI_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#5B9BD5', '#FDCB6E',
+  '#A29BFE', '#FD79A8', '#0984E3', '#6C5CE7',
+];
+
 export default {
   name: "SorteioScreen",
   props: {
@@ -87,6 +104,8 @@ export default {
   data: () => ({
     s_width: 0,
     s_height: 0,
+    showConfetti: false,
+    _confettiTimer: null,
   }),
   computed: {
     module_id() {
@@ -184,6 +203,14 @@ export default {
     },
 
     revealId() { return this.appdata.reveal_id || 0; },
+    isRevealed() {
+      return !this.isAnimating && !this.showFim && this.revealId > 0;
+    },
+    winnerLabel() {
+      const i18nKey = `modules.${this.module_id}.winner_label`;
+      const result = this.$t(i18nKey);
+      return result !== i18nKey ? result : (pt.winner_label || i18nKey);
+    },
 
     // Estilos
     bgColor() {
@@ -241,6 +268,17 @@ export default {
       return this.appdata.fim === true;
     },
   },
+  watch: {
+    // Dispara o confete a cada novo sorteado (números/nomes), igual ao
+    // "showConfetti" de RouletteWheel.vue — some sozinho depois de um tempo.
+    revealId(val) {
+      if (val > 0 && !this.showFim) {
+        this.showConfetti = true;
+        if (this._confettiTimer) clearTimeout(this._confettiTimer);
+        this._confettiTimer = setTimeout(() => { this.showConfetti = false; }, 2200);
+      }
+    },
+  },
   methods: {
     windowResize() {
       const container = this.$refs.container;
@@ -252,6 +290,23 @@ export default {
         }
       }
     },
+    // Mesmo cálculo de Popup.vue#getConfettiStyle, pra ficar visualmente
+    // idêntico ao efeito da roleta.
+    getConfettiStyle(i) {
+      const color = CONFETTI_COLORS[(i - 1) % CONFETTI_COLORS.length];
+      const angle = ((i - 1) / 50) * 360;
+      const delay = ((i - 1) % 10) * 0.05;
+      const size  = 6 + (i % 5) * 4;
+      const dist  = 150 + (i % 4) * 70;
+      return {
+        background: color,
+        width:  size + 'px',
+        height: size + 'px',
+        '--ca':    angle + 'deg',
+        '--dist':  dist  + 'px',
+        '--delay': delay + 's',
+      };
+    },
   },
   mounted() {
     this.windowResize();
@@ -259,6 +314,7 @@ export default {
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
+    if (this._confettiTimer) clearTimeout(this._confettiTimer);
   },
 };
 </script>
@@ -333,6 +389,27 @@ export default {
   z-index: 1;
 }
 
+.sorteio-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+}
+
+.sorteio-winner-label {
+  font-size: clamp(12px, 1.6vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 6px;
+  animation: sorteio-label-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes sorteio-label-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 0.75; transform: translateY(0); }
+}
+
 .sorteio-chip {
   display: inline-block;
   padding: 2px 7px;
@@ -369,5 +446,26 @@ export default {
   78%  { transform: scale(0.96); }
   90%  { transform: scale(1.04); }
   100% { transform: scale(1);    opacity: 1; }
+}
+
+/* Confetti — mesma animação de Popup.vue (modo roleta) */
+.sorteio-confetti-wrap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sorteio-confetti {
+  position: absolute;
+  border-radius: 50%;
+  animation: sorteio-confetti-burst 2.2s var(--delay, 0s) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+@keyframes sorteio-confetti-burst {
+  0%   { transform: rotate(var(--ca)) translateY(0) scale(1);          opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: rotate(var(--ca)) translateY(calc(-1 * var(--dist, 160px))) scale(0.3); opacity: 0; }
 }
 </style>

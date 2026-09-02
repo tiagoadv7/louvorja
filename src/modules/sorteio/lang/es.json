@@ -42,6 +42,7 @@
   "roulette_history": "Historial",
   "roulette_participants": "Participantes",
   "roulette_winner": "Sorteado",
+  "winner_label": "¡Sorteado(a)!",
   "roulette_empty": "Agrega ítems para sortear",
   "roulette_no_more": "Todos los ítems ya fueron sorteados",
   "roulette_item_input": "Nombre o número",

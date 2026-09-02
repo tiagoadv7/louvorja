@@ -33,8 +33,9 @@
           @winner="onWheelWinner"
         />
         <transition name="rp-winner">
-          <div v-if="currentWinner" class="rp-winner-name" :style="winnerNameStyle">
-            {{ currentWinner }}
+          <div v-if="currentWinner" class="rp-winner-wrap">
+            <div class="rp-winner-label" :style="{ color: fontColor }">{{ winnerLabel }}</div>
+            <div class="rp-winner-name" :style="winnerNameStyle">{{ currentWinner }}</div>
           </div>
         </transition>
       </div>
@@ -193,6 +194,14 @@ export default {
 
     historyLabel() {
       return pt.roulette_history || 'Histórico';
+    },
+
+    // Mesmo rótulo mostrado no modo números/nomes (Screen.vue#winnerLabel),
+    // pra ficar consistente entre os três modos de sorteio.
+    winnerLabel() {
+      const i18nKey = `modules.${this.module_id}.winner_label`;
+      const result = this.$t(i18nKey);
+      return result !== i18nKey ? result : (pt.winner_label || i18nKey);
     },
 
     _spinId() { return this.appdata.roulette_spin_id || 0; },
@@ -405,13 +414,29 @@ export default {
   height: 100%;
 }
 
-/* Nome do vencedor — overlay centralizado sobre a roda */
-.rp-winner-name {
+/* Vencedor — overlay centralizado sobre a roda */
+.rp-winner-wrap {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.rp-winner-label {
+  font-size: clamp(13px, 1.8vw, 22px);
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 8px;
+}
+
+.rp-winner-name {
   font-size: clamp(44px, 8vw, 130px);
   font-weight: 900;
   text-align: center;
@@ -423,7 +448,6 @@ export default {
   padding: 16px 40px;
   border-radius: 24px;
   border: 2px solid rgba(255, 255, 255, 0.20);
-  pointer-events: none;
   white-space: nowrap;
 }
 

@@ -411,8 +411,9 @@
             @winner="onRouletteWinner"
           />
           <transition name="rw-top">
-            <div v-if="rouletteCurrentWinner" class="rw-top-winner" :style="winnerTopStyle">
-              {{ rouletteCurrentWinner }}
+            <div v-if="rouletteCurrentWinner" class="rw-top-winner-wrap" :style="{ color: rouletteColor }">
+              <div class="rw-top-winner-label">{{ t('winner_label') }}</div>
+              <div class="rw-top-winner" :style="winnerTopStyle">{{ rouletteCurrentWinner }}</div>
             </div>
           </transition>
         </div>
@@ -1420,12 +1421,26 @@ export default {
 .roulette-qr-mini__count { font-size: 11px; font-weight: 600; color: #2ecc71; }
 
 /* Vencedor em overlay centralizado sobre a roda */
-.rw-top-winner {
+.rw-top-winner-wrap {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.rw-top-winner-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+.rw-top-winner {
   font-size: clamp(16px, 4vh, 40px);
   font-weight: 900;
   text-align: center;
@@ -1438,7 +1453,6 @@ export default {
   padding: 12px 24px;
   border-radius: 16px;
   border: 1.5px solid rgba(255,255,255,0.20);
-  pointer-events: none;
 }
 .rw-top-enter-active { animation: rw-top-in  0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
 .rw-top-leave-active { animation: rw-top-out 0.3s ease forwards; }
