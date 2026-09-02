@@ -113,7 +113,7 @@
           <!-- Book Grid List -->
           <div
             :style="`height: ${height - 65}px`"
-            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2"
+            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2 bb-grid-panel"
           >
             <v-skeleton-loader
               v-for="n in 10"
@@ -168,7 +168,7 @@
           <!-- Chapter Grid List -->
           <div
             :style="`height: ${height - 65}px`"
-            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2"
+            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2 bb-grid-panel"
           >
             <v-skeleton-loader
               v-for="n in 10"
@@ -844,5 +844,9 @@ export default {
   width: 100%;
   border-radius: 10px;
   overflow: hidden;
+}
+.bb-grid-panel {
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
 }
 </style>

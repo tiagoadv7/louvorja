@@ -42,9 +42,14 @@
       </v-tabs>
     </template>
 
-    <template v-slot:customize>
+    <!-- v-if precisa estar no próprio <template #customize>, não só no
+         componente interno — Window.vue decide se mostra o botão de paleta
+         com base em "$slots.customize" existir, o que é verdade mesmo com
+         conteúdo interno vazio (v-if false sem v-else ainda conta como slot
+         fornecido). Sem isso, o botão de paleta aparecia clicável nas abas
+         Vídeo/SoundMaster mesmo sem nada pra customizar ali. -->
+    <template v-if="activeTab === 'overlay'" v-slot:customize>
       <l-customization-tools
-        v-if="activeTab === 'overlay'"
         :module="overlayModule"
         :items="[
           { name: to('customization.adjust'), items: [['image_opacity', 'image_fit']] },
