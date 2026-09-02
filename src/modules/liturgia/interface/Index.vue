@@ -145,12 +145,11 @@
                 </button>
 
                 <div
+                  v-if="item.type !== 'categoria'"
                   class="lt-item-icon-badge"
-                  :style="item.type === 'categoria'
-                    ? { background: categoriaContrastColor(item.color) + '22', color: categoriaContrastColor(item.color) }
-                    : { background: item.color + '22', color: item.color }"
+                  :style="{ background: item.color + '22', color: item.color }"
                 >
-                  <v-icon size="15" :color="item.type === 'categoria' ? categoriaContrastColor(item.color) : item.color">{{ itemIcon(item) }}</v-icon>
+                  <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
                 <div class="lt-item-info">
                   <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
@@ -227,7 +226,7 @@
                   <button class="lt-row-btn" title="Duplicar item" @click="duplicateItemBelow(idx)">
                     <v-icon size="13">mdi-content-duplicate</v-icon>
                   </button>
-                  <button class="lt-row-btn" @click="openEdit(idx)">
+                  <button class="lt-row-btn" :disabled="item.locked" title="Editar" @click="openEdit(idx)">
                     <v-icon size="13">mdi-pencil</v-icon>
                   </button>
                   <button class="lt-row-btn lt-row-btn--del" @click="removeItem(idx)">
@@ -235,7 +234,16 @@
                   </button>
                 </div>
 
-                <v-icon size="16" class="lt-drag-handle" @click.stop>mdi-drag-vertical</v-icon>
+                <!-- Item travado (ver toggleLock) não pode ser arrastado — sem
+                     pointer-events:none aqui, o handle="" do <draggable> abaixo
+                     ainda reconhece esse ícone como início de arraste válido,
+                     mesmo com o cadeado mostrado ao lado (item.locked só mudava
+                     a aparência, nunca bloqueava de fato mover/editar). -->
+                <v-icon
+                  size="16"
+                  :class="['lt-drag-handle', { 'lt-drag-handle--locked': item.locked }]"
+                  @click.stop
+                >mdi-drag-vertical</v-icon>
               </div>
             </template>
           </draggable>
@@ -1554,6 +1562,7 @@ export default {
     },
     openEdit(idx) {
       const item = this.dayItems[idx];
+      if (item?.locked) return;
       this.dialogMode = 'edit';
       this.editingIndex = idx;
       this.form = {
@@ -2315,6 +2324,7 @@ export default {
 }
 .lt-drag-handle:active { cursor: grabbing; }
 .lt-item:hover .lt-drag-handle { opacity: 0.7; }
+.lt-drag-handle--locked { pointer-events: none; cursor: default; opacity: 0.15 !important; }
 
 .lt-status-btn {
   border: none;
