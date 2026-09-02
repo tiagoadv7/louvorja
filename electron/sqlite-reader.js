@@ -371,19 +371,38 @@ class SQLiteReader {
 
     // Pré-constrói mapa albumId → folderName (ex: "2026 - Meu Lugar no Mundo")
     // via files.dir, que é a fonte mais confiável e inclui o ano + nome da pasta.
+    //
+    // Uma música pode aparecer em MAIS de uma coletânea (a mesma faixa
+    // reaproveitada num álbum diferente) — o arquivo dela em files.dir só
+    // aponta pra pasta do álbum ONDE ELA FOI IMPORTADA originalmente, não
+    // necessariamente pra pasta do álbum atual. Escolher com MIN(f.dir)
+    // (ordem alfabética entre TODAS as músicas do álbum) pegava essa música
+    // "emprestada" sempre que o nome da pasta dela vinha antes alfabeticamente
+    // — confirmado na prática: "Somos Tuas Mãos" (2019, 7 de 11 músicas na
+    // pasta certa) empurrado pra "2011 - Amigos da Esperança" só porque 1
+    // música compartilhada ("Vitória em Cristo") apontava pra lá e "2011" <
+    // "2018"/"2019" alfabeticamente. Agora conta quantas músicas do álbum
+    // cada pasta reúne e usa a MAIORIA — a única forma de "vencer" contra o
+    // álbum de verdade seria a coletânea ter mais músicas emprestadas do que
+    // próprias, o que não deveria acontecer no catálogo real.
     const albumFolderMap = new Map();
     if (s.hasAlbMusics && s.hasFiles && s.fi.dir && s.mu.id_file_music) {
       const dirRows = this._query(`
-        SELECT am.id_album, MIN(f.dir) AS dir
+        SELECT am.id_album, f.dir, COUNT(*) AS cnt
         FROM   files f
         JOIN   musics m  ON m.id_file_music  = f.id_file
         JOIN   albums_musics am ON am.id_music = m.id_music
         WHERE  f.dir IS NOT NULL AND f.dir != ''
-        GROUP  BY am.id_album
+        GROUP  BY am.id_album, f.dir
       `);
+      const bestByAlbum = new Map(); // id_album -> { dir, cnt }
       for (const dr of dirRows) {
-        const fn = this._extractAlbumFromDir(dr.dir);
-        if (fn) albumFolderMap.set(dr.id_album, fn);
+        const best = bestByAlbum.get(dr.id_album);
+        if (!best || dr.cnt > best.cnt) bestByAlbum.set(dr.id_album, { dir: dr.dir, cnt: dr.cnt });
+      }
+      for (const [idAlbum, best] of bestByAlbum) {
+        const fn = this._extractAlbumFromDir(best.dir);
+        if (fn) albumFolderMap.set(idAlbum, fn);
       }
     }
 
@@ -450,17 +469,23 @@ class SQLiteReader {
     // Fallback: categories_albums.name (segundo campo mais confiável)
     let folderName = null;
 
-    // 1. Extrai de files.dir da primeira música com áudio deste álbum
+    // 1. Extrai de files.dir — pasta que a MAIORIA das músicas deste álbum usa
+    // (não a primeira linha que a query devolver: sem ORDER BY, uma música
+    // "emprestada" de outra coletânea — a mesma faixa reaproveitada em dois
+    // álbuns — podia vir primeiro e apontar pra pasta errada. Ver mesmo
+    // problema, já corrigido, em _getCategories()/albumFolderMap acima.)
     if (s.hasFiles && s.fi.dir && s.hasAlbMusics && s.mu.id_file_music) {
-      const audioFile = this._query(`
-        SELECT f.dir FROM files f
+      const dirCounts = this._query(`
+        SELECT f.dir, COUNT(*) AS cnt FROM files f
         JOIN   musics m ON m.id_file_music = f.id_file
         JOIN   albums_musics am ON am.id_music = m.id_music
         WHERE  am.id_album = ${idAlbum}
           AND  f.dir IS NOT NULL AND f.dir != ''
+        GROUP BY f.dir
+        ORDER BY cnt DESC
         LIMIT  1
       `)[0];
-      if (audioFile?.dir) folderName = this._extractAlbumFromDir(audioFile.dir);
+      if (dirCounts?.dir) folderName = this._extractAlbumFromDir(dirCounts.dir);
     }
 
     const categories = [];
