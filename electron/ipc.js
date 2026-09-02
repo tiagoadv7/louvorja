@@ -1921,8 +1921,8 @@ function setupIpc(mainWindow) {
   // API. Uma falha passageira aqui fazia o app achar que não havia
   // atualização de conteúdo nenhuma (ver sqlite:check-db-update abaixo, que
   // trata "api-unavailable" como "sem novidade") — igual ao problema já
-  // corrigido no download nativo do instalador (ver downloadUpdateWithRetry
-  // em main.js), só que sem nenhuma tentativa extra até agora.
+  // corrigido no download nativo do instalador (ver _downloadUpdateWithRetry
+  // em electron/updater.js), só que sem nenhuma tentativa extra até agora.
   const DB_VERSION_RETRY_DELAYS_MS = [2000, 5000, 10000];
   async function fetchRemoteDbVersion(dbBaseUrl) {
     const origin = new URL(dbBaseUrl).origin;
