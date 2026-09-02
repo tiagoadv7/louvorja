@@ -275,11 +275,13 @@ function downloadFile(url, destPath, onProgress) {
 // Motivo: um release recém-publicado no GitHub pode levar de segundos a alguns
 // MINUTOS pra terminar de propagar (arquivos grandes de ~150MB passam por
 // verificação antes de ficar baixáveis via browser_download_url) — confirmado
-// na prática: um release apareceu com os assets listados na API mas retornando
-// 404 no download por vários minutos seguidos. Sem isso, um "Baixar agora"
-// clicado logo após o publish falha mesmo o release já estando "publicado".
-// Atraso progressivo (10s, 15s, 20s, 25s, 30s) soma ~100s de tolerância total.
-const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 25000, 30000];
+// na prática duas vezes: um release apareceu com os assets listados na API mas
+// retornando 404 por vários minutos seguidos, e depois (v1.28.20) um "Baixar
+// agora" clicado ~11min após o publish ainda falhou com os ~100s de tolerância
+// que a janela original (10s/15s/20s/25s/30s) cobria — a propagação daquela vez
+// levou mais que isso. Atraso progressivo mais longo (10s, 15s, 20s, 30s, 45s,
+// 60s, 60s, 90s) soma ~5,5min de tolerância total.
+const DOWNLOAD_RETRY_DELAYS_MS = [10000, 15000, 20000, 30000, 45000, 60000, 60000, 90000];
 
 async function downloadInstallerWithRetry(url, destPath, onProgress) {
   const maxAttempts = DOWNLOAD_RETRY_DELAYS_MS.length + 1;
