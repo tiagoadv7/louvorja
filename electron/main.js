@@ -870,9 +870,17 @@ function registerIpcHandlers() {
     // ativa antes de fechar. O module_id é o único dado que falta pra
     // createOutputWindow reabrir igual estava (o monitor já é resolvido via
     // "output_display_id", que createOutputWindow já lê sozinho).
+    //
+    // Só restaura se houver um monitor de saída de verdade (externo)
+    // conectado agora — sem essa checagem, num computador com um só monitor
+    // (projetor desligado/desconectado, ou sessão de admin sem monitor de
+    // saída nenhum), resolveOutputDisplay() caía no fallback pro monitor
+    // PRIMÁRIO e a janela de saída (sem moldura, sempre no topo) cobria a
+    // tela toda do operador sozinha, sem ele ter pedido isso nessa sessão.
     if (Store.get('output_window_was_open')) {
       const lastModule = Store.get('output_window_last_module');
-      if (lastModule) {
+      const hasExternalDisplay = !!largestExternalDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay());
+      if (lastModule && hasExternalDisplay) {
         createOutputWindow(lastModule);
         mainWindow.webContents.send('restore-output-state', lastModule);
       }
@@ -884,8 +892,12 @@ function registerIpcHandlers() {
     // (o retorno não depende de haver um módulo projetado pra existir) e não
     // manda nada pra outputWindow/mainWindow além do evento "return-window-opened"
     // que já dispara normalmente — não toca no slide/módulo que a saída principal
-    // acabou de restaurar acima.
-    if (Store.get('return_window_was_open')) {
+    // acabou de restaurar acima. Mesma checagem de monitor externo real do
+    // bloco da saída acima — createReturnWindow é SEMPRE fullscreen, então
+    // sem essa guarda ela cobriria a tela do operador por completo (sem
+    // moldura, sem como fechar por fora) só por causa do boot, sem monitor
+    // de retorno nenhum conectado.
+    if (Store.get('return_window_was_open') && largestExternalDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay())) {
       createReturnWindow();
     }
 
