@@ -20,6 +20,7 @@
       :loop="config.loop"
       class="vp-video"
       :class="{ 'vp-video--fading': visualFading }"
+      :style="{ transitionDuration: videoFadeMs + 'ms' }"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"
       @ended="onEnded"
@@ -43,6 +44,15 @@ export default {
   data: () => ({
     closingHold:   false, // mantém o <video> montado durante o fade de fechamento
     visualFading:  true,  // começa transparente — só fica visível ao dar play (fade-in)
+    // Duração da transição de opacidade do <video> — RÁPIDA (entrada) por
+    // padrão. _fadeVisualIn() já espera o primeiro quadro estar pronto
+    // (evento "loadeddata") antes de revelar (ver comentário lá) — arrastar
+    // mais 1s inteiro DEPOIS disso só somava um delay perceptível ao iniciar
+    // o vídeo sem motivo (o "suave" já vem do fundo transparente + espera do
+    // frame, não precisa de mais tempo de opacidade). _stopWithFade() troca
+    // pra lenta (1s) só na saída, pra acompanhar o fade de áudio (~1s) e o
+    // crossfade externo entre módulos (ver views/Popup.vue).
+    videoFadeMs:   250,
     imageFading:   true,  // idem, para o modo imagem (sem áudio pra sincronizar)
     pdfFading:     true,  // idem, para o modo PDF (mesma lógica da imagem, uma página por vez)
     // Src de fato ligado no <video> (ver watch de "config.src" abaixo) — não é
@@ -203,6 +213,7 @@ export default {
     _stopWithFade() {
       const el = this.$refs.video;
       if (!el) return;
+      this.videoFadeMs = 1000; // saída lenta — acompanha o fade de áudio (~1s) abaixo
       this.visualFading = true; // sai da projeção junto com o fade de áudio
       this._fadeVolume(el.volume, 0, false, () => {
         el.pause();
@@ -222,11 +233,24 @@ export default {
     // Garante que o navegador registre a opacidade 0 antes de ir para 1 —
     // sem isso, a transição CSS não dispara (mudança de estado no mesmo frame
     // de montagem do elemento não é "observável" para efeito de transition).
+    //
+    // Só inicia o fade quando o <video> já tem um quadro decodificado pra
+    // mostrar (readyState >= 2 / evento "loadeddata") — sem essa espera, a
+    // opacidade ia de 0 a 1 sobre um elemento ainda sem nenhum frame
+    // pintado (preto, o "sem conteúdo ainda" padrão do navegador), e o
+    // resultado visual era o vídeo "nascer" preto e só depois mostrar a
+    // imagem real, em vez de esmaecer direto para o primeiro quadro real.
     _fadeVisualIn() {
+      this.videoFadeMs = 250; // entrada rápida — ver comentário do data() em videoFadeMs
       this.visualFading = true;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => { this.visualFading = false; });
-      });
+      const el = this.$refs.video;
+      const reveal = () => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => { this.visualFading = false; });
+        });
+      };
+      if (!el || el.readyState >= 2) { reveal(); return; }
+      el.addEventListener('loadeddata', reveal, { once: true });
     },
 
     // Imagem não tem áudio pra sincronizar — só o fade visual (opacidade),
@@ -420,7 +444,11 @@ export default {
   height: 100%;
   object-fit: contain;
   opacity: 1;
-  transition: opacity 1s ease-out;
+  /* Duração real vem do :style="transitionDuration" (ver videoFadeMs no
+     script) — rápida ao entrar, lenta ao sair (_stopWithFade) — esta regra
+     só fixa a propriedade/curva, não o tempo. */
+  transition-property: opacity;
+  transition-timing-function: ease-out;
 }
 .vp-video--fading { opacity: 0; }
 

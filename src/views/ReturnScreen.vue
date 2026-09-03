@@ -27,7 +27,7 @@
                   v-if="slide.lyric"
                   class="rs-main-text"
                   :class="{ 'rs-main-cover': slide.cover }"
-                  :style="{ color: mainTextColorFor(slide), fontFamily }"
+                  :style="{ color: mainTextColorFor(slide), fontFamily, fontSize: mainFontSizeFor(slide) }"
                   v-html="slide.lyric"
                 />
                 <v-icon v-else size="96" color="rgba(255,255,255,0.10)">mdi-music-note</v-icon>
@@ -118,6 +118,7 @@ export default {
     stateHandler: null,
     batchHandler: null,
     closingHandler: null,
+    _windowResizeHandler: null,
     visible: false,
     now: new Date(),
     _tickInterval: null,
@@ -126,6 +127,13 @@ export default {
     // linha que sai e a que entra em vez de só trocar o texto no lugar.
     textSlides: [{}, {}],
     repeat: false,
+    // Tamanho real da janela — usado por fontSizePc() (mesma fórmula de
+    // src/components/Slide.vue) pra que o tamanho de fonte configurado no
+    // "Fundo Personalizado" (font_size/cover_font_size, um percentual, não
+    // pixels) escale igual ao que a tela de saída principal mostra, em vez
+    // do clamp() fixo de antes (que ignorava esse ajuste completamente).
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0,
   }),
 
   computed: {
@@ -250,8 +258,8 @@ export default {
 
     // "Fundo Personalizado" (mesma chave slide_global_bg que src/components/
     // Slide.vue lê) — usado aqui só pra herdar cor/fonte do texto, igual ao
-    // que a tela de saída (slide) mostra. O retorno mantém seu próprio fundo
-    // preto de propósito (monitor de palco), só o texto acompanha.
+    // que a tela de saída (slide) mostra. O fundo do retorno em si é sempre
+    // transparente (ver .rs-root/.rs-main no <style>), só o texto acompanha.
     globalBg() {
       return this.$appdata.get('slide_global_bg') || null;
     },
@@ -323,6 +331,25 @@ export default {
       return bg?.font_color || 'rgb(255, 255, 255)';
     },
 
+    // Tamanho do texto principal — mesma fonte de configuração (globalBg) e
+    // mesma fórmula (fontSizePc) que src/components/Slide.vue#style_text()
+    // usa na tela de saída, pra que ajustar o tamanho no "Fundo
+    // Personalizado" mude os dois lugares juntos, do mesmo jeito. Capa usa
+    // cover_font_size (padrão 25); texto normal e repetição usam font_size
+    // (padrão 20) — mesmos defaults de lá.
+    mainFontSizeFor(slide) {
+      const bg = this.globalBg;
+      const pc = slide?.cover ? (bg?.cover_font_size ?? 25) : (bg?.font_size ?? 20);
+      return `${this.fontSizePc(pc)}px`;
+    },
+    // Idêntico a Slide.vue#fontSizePc — percentual relativo ao menor lado da
+    // tela (metade dele), não ao lado inteiro, pra não ficar gigante em
+    // telas muito largas.
+    fontSizePc(pc) {
+      const v = Math.min(this.width, this.height);
+      return (pc * v) / 100 / 2;
+    },
+
     _fmtTime(secs) {
       if (!secs || isNaN(secs)) return '0:00';
       const m = Math.floor(secs / 60);
@@ -390,6 +417,14 @@ export default {
   },
 
   mounted() {
+    // Mantém width/height (usados por fontSizePc) em dia se o monitor de
+    // retorno trocar de resolução com a janela já aberta.
+    this._windowResizeHandler = () => {
+      this.width = window.innerWidth;
+      this.height = window.innerHeight;
+    };
+    window.addEventListener('resize', this._windowResizeHandler);
+
     // Transparência global (mesmo padrão de Popup.vue) — sem isso, o fundo
     // escuro padrão do tema (Vuetify) aparecia atrás da janela transparente
     // enquanto nenhuma música toca (visible=false), em vez de ficar limpo.
@@ -419,6 +454,7 @@ export default {
   beforeUnmount() {
     clearInterval(this._tickInterval);
     document.removeEventListener('keydown', this.handleKeyDown);
+    if (this._windowResizeHandler) window.removeEventListener('resize', this._windowResizeHandler);
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off('state-update',   this.stateHandler);
       if (this.batchHandler)  window.electron.off('state-update-batch', this.batchHandler);
@@ -440,9 +476,12 @@ export default {
 }
 
 /* ── Raiz ────────────────────────────────────────────────────── */
-/* Transparente por padrão — só fica preta (visual de monitor de palco)
-   quando uma música está de fato ativa (.rs-root--active). O relógio/
-   cronômetro tem seu próprio fundo (.rs-widget) e não precisa disso. */
+/* Transparente por padrão — só a área da letra (.rs-main, abaixo) fica
+   preta enquanto uma música/slide está ativo (visual de monitor de palco).
+   Os outros espelhos (vídeo, relógio, cronômetro) continuam sem fundo
+   próprio aqui: cada um já desenha o que precisa (ou é intencionalmente
+   transparente, ver video_player/components/Screen.vue), então forçar
+   preto na raiz voltaria a cobrir esses casos sem motivo. */
 .rs-root {
   position: fixed;
   inset: 0;
@@ -453,9 +492,6 @@ export default {
   font-family: 'DINCondensedBold', 'Roboto Condensed', 'Arial Narrow', Arial, sans-serif;
   overflow: hidden;
   user-select: none;
-}
-.rs-root--active {
-  background: #000;
 }
 
 .rs-slide {
@@ -478,6 +514,10 @@ export default {
 }
 
 /* ── Área principal (letra / título atual) ───────────────────── */
+/* Preta enquanto há letra ativa (música/slide tocando) — mesmo visual de
+   monitor de palco de antes, só que agora restrito a esta área (não ao
+   .rs-root inteiro, que continua transparente pros outros espelhos —
+   vídeo, relógio, cronômetro — ver comentário em .rs-root acima). */
 .rs-main {
   flex: 1;
   min-height: 0;
@@ -499,12 +539,13 @@ export default {
   justify-content: center;
 }
 .rs-main-text {
-  font-size: clamp(38px, 11vh, 148px);
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
-  /* cor e fonte vêm de :style (mainTextColorFor/fontFamily) — mesmas cores
-     e fonte que o "Fundo Personalizado" aplica na tela de saída (slide) */
+  /* cor, fonte e tamanho vêm de :style (mainTextColorFor/fontFamily/
+     mainFontSizeFor) — mesmos valores que o "Fundo Personalizado" aplica na
+     tela de saída (slide), em vez de um clamp() fixo que ignorava esse
+     ajuste. */
   line-height: 1.15;
   letter-spacing: 0.01em;
 }

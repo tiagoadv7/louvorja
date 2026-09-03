@@ -6,10 +6,18 @@
            desmontado (removendo o elemento <video>/<img> da árvore) antes do
            seu próprio fade interno (ver video_player/interface/Popup.vue,
            ~1s) terminar, cortando a saída de forma abrupta, e o módulo novo
-           aparecia sem nenhum fade de entrada. mode="out-in" faz o Vue
-           esperar o fade de SAÍDA (leave, mesma duração do fade interno do
-           vídeo) terminar antes de desmontar o antigo e montar o novo, que
-           então entra com o próprio fade de ENTRADA.
+           aparecia sem nenhum fade de entrada.
+
+           SEM mode="out-in" (removido de propósito): o antigo entra em leave
+           e o novo em enter AO MESMO TEMPO (crossfade real, sobrepostos) —
+           com out-in, o Vue esperava o leave terminar (~1s) para só então
+           montar/esmaecer o novo, deixando essa janela (fundo transparente,
+           ver .popup-root) sem nada desenhado por até 1s, o que aparecia como
+           um flash preto entre uma mídia e outra em vez de um crossfade
+           suave. Os dois <div> ficam com position:absolute (ver
+           .module-crossfade-item abaixo) para se sobreporem exatamente um
+           sobre o outro durante essa janela — sem isso, os dois entrariam no
+           fluxo normal (um embaixo do outro) enquanto ambos existem no DOM.
 
            O <component> fica dentro de um <div> "amortecedor" (em vez de ser
            filho direto desta <transition>) porque o Popup.vue do módulo media
@@ -20,8 +28,8 @@
            álbum está tocando, e o módulo novo (ex. vídeo) nunca chega a
            montar. O <div> dá a esta <transition> um nó próprio, isolado do
            que acontece dentro do módulo filho. -->
-      <transition name="module-crossfade" mode="out-in">
-        <div v-if="moduleComponent" :key="module" style="width: 100%; height: 100%;">
+      <transition name="module-crossfade">
+        <div v-if="moduleComponent" :key="module" class="module-crossfade-item">
           <component :is="moduleComponent" style="width: 100%; height: 100%;" />
         </div>
       </transition>
@@ -288,5 +296,15 @@ export default {
 .module-crossfade-enter-from,
 .module-crossfade-leave-to {
   opacity: 0;
+}
+/* position:absolute para os dois <div> (antigo saindo + novo entrando) se
+   sobreporem exatamente durante o crossfade, em vez de empilhar um embaixo
+   do outro no fluxo normal (ambos existem juntos no DOM nesse intervalo,
+   agora que a transição não usa mais mode="out-in"). */
+.module-crossfade-item {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 </style>

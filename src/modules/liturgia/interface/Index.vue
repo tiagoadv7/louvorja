@@ -1767,7 +1767,7 @@ export default {
       // motivo do vídeo acima) — outros links (Canva etc.) não têm aba própria
       // ali, então continuam só projetando, sem abrir painel nenhum.
       else if (item.type === 'link' && item.url) {
-        this.$webLink.open(item.url);
+        this.$webLink.open(item.url, item.name, { addToPlaylist: false });
         if (this.$webLink.isYoutube(item.url)) this._openMediaPanel('online');
       }
       // PowerPoint não é projetado (ao contrário de vídeo/imagem/PDF) — abre
@@ -1852,7 +1852,7 @@ export default {
     toggleYoutubeItem(item, idx) {
       if (this.isYoutubeItemActive(item)) this.$webLink.togglePlay();
       else {
-        this.$webLink.open(item.url);
+        this.$webLink.open(item.url, item.name, { addToPlaylist: false });
         this._openMediaPanel('online');
       }
       if (idx != null) this.markItemDone(idx);

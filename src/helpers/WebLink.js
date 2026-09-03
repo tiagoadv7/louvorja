@@ -92,7 +92,15 @@ function emptyConfig() {
     duration: 0,
     seekToken: 0,
     seekTime: 0,
+    // Qual item da fila (playlist) está carregado agora — mesmo padrão de
+    // "currentId" em helpers/VideoPlayer.js, usado pela UI pra destacar o
+    // item ativo na lista.
+    currentId: null,
   };
+}
+
+function toPlain(v) {
+  return JSON.parse(JSON.stringify(v));
 }
 
 // Projeta um link (Canva, YouTube, etc.) em tela cheia na janela de saída,
@@ -120,18 +128,100 @@ export default {
     });
   },
 
-  open(rawUrl) {
-    if (!rawUrl) return;
+  // ── Fila de links (Online: YouTube/Canva) ──────────────────────────────
+  // Mesmo padrão de fila do módulo Vídeo (ver helpers/VideoPlayer.js): a
+  // lista fica persistida em appdata, e cada item guarda a URL ORIGINAL
+  // (rawUrl, exatamente como o usuário colou) separada da URL convertida
+  // pro embed (url) — renomear um item (editar só o "name") nunca toca em
+  // nenhuma das duas, então o link em si nunca se perde ao renomear.
+  getPlaylist() {
+    return $appdata.get("modules.web_link.playlist") || [];
+  },
+  setPlaylist(list) {
+    $appdata.set("modules.web_link.playlist", toPlain(list));
+  },
+
+  // Adiciona um link à fila (sem duplicar por URL original) e retorna o item.
+  addToPlaylist(rawUrl, name) {
+    if (!rawUrl) return null;
+    const existing = this.getPlaylist().find((p) => p.rawUrl === rawUrl);
+    if (existing) return existing;
+
     const url = toEmbeddableUrl(rawUrl);
     const videoId = extractYoutubeVideoId(url);
+    const item = {
+      id: Date.now() + Math.random(),
+      rawUrl, url, videoId,
+      name: name || rawUrl,
+    };
+    this.setPlaylist([...this.getPlaylist(), item]);
+    return item;
+  },
+
+  // Remove um item da fila (botão de excluir) — se for o item carregado
+  // agora, encerra a projeção junto (com fade, quando for YouTube) em vez de
+  // deixar um link tocando "órfão", sem mais nenhum item correspondente na
+  // lista.
+  removeFromPlaylist(id) {
+    this.setPlaylist(this.getPlaylist().filter((p) => p.id !== id));
+    const cfg = this.getConfig();
+    if (cfg.currentId !== id) return;
+    if (cfg.videoId) this.stop();
+    else this.setConfig({ url: "", videoId: null, currentId: null });
+  },
+
+  // Renomeia um item da fila SEM recarregar/alterar a URL — o item some da
+  // tela só se o operador clicar nele de novo (selectPlaylistItem), então dá
+  // pra editar o nome com o link já carregado na saída sem interromper nada.
+  renamePlaylistItem(id, name) {
+    this.setPlaylist(this.getPlaylist().map((p) => (p.id === id ? { ...p, name } : p)));
+  },
+
+  // Abre a projeção PRINCIPAL, a menos que o operador já tenha marcado
+  // "Retorno" pra este link ANTES de dar play sem também marcar a Principal
+  // (ver components/buttons/ReturnScreen.vue e Screen.vue) — isso sinaliza
+  // que a intenção é mandar só pro monitor de palco, não pra tela principal.
+  // O espelho do retorno (WebLinkScreen.vue) lê direto de
+  // modules.web_link.config, então funciona sem precisar da janela de saída
+  // principal aberta — só NÃO chamar $popup.open aqui já basta pra não abrir
+  // a principal. Pra mandar pros dois, o operador clica o botão de Tela
+  // também (helpers/Popup.js#open), a qualquer momento.
+  _ensureMainShowing() {
+    const alreadyOpen = $appdata.get("popup") && $appdata.get("popup_module") === "web_link";
+    if (alreadyOpen) return;
+    if ($appdata.get("return_popup_module") === "web_link") return;
+    $popup.open("web_link");
+  },
+
+  // Carrega um item já existente da fila (clique na lista) — mesmo formato
+  // de $videoPlayer.selectPlaylistItem, sem duplicar/readicionar o item.
+  selectPlaylistItem(item) {
     this.setConfig({
-      url,
-      videoId,
+      url: item.url,
+      videoId: item.videoId,
+      currentId: item.id,
+      isPlaying: !!item.videoId,
+    });
+    this._ensureMainShowing();
+  },
+
+  // addToPlaylist:false (padrão true) carrega o link sem gravá-lo na fila —
+  // usado por quem só quer tocar um link avulso (ex.: item "link" da
+  // Liturgia, que já tem seu próprio nome/URL persistidos ali).
+  open(rawUrl, name, { addToPlaylist = true } = {}) {
+    if (!rawUrl) return;
+    const item = addToPlaylist
+      ? this.addToPlaylist(rawUrl, name)
+      : { id: null, url: toEmbeddableUrl(rawUrl), videoId: extractYoutubeVideoId(toEmbeddableUrl(rawUrl)) };
+    this.setConfig({
+      url: item.url,
+      videoId: item.videoId,
+      currentId: item.id,
       // Sem controle de reprodução pra outros sites (Canva etc.) — só liga
       // o vídeo já tocando quando for de fato um YouTube reconhecido.
-      isPlaying: !!videoId,
+      isPlaying: !!item.videoId,
     });
-    $popup.open("web_link");
+    this._ensureMainShowing();
   },
 
   togglePlay() {
