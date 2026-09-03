@@ -2510,6 +2510,18 @@ document.getElementById('f').onsubmit=async(e)=>{
           const allMissing = withMissing.flatMap(a => a.items)
             .sort((a, b) => a.name.localeCompare(b.name));
 
+          // Persiste nos album_*.json/music_*.json os arquivos que este scan
+          // encontrou (mesma função rodada após um download, ver
+          // syncLocalFileUrls acima) — sem isso, o Centro de Downloads
+          // (files:check-albums-complete, que lê fileUrlExists nesses JSONs)
+          // continuava achando os mesmos arquivos "faltando" mesmo depois do
+          // "Localizar Arquivos" já ter confirmado que eles existem no disco
+          // (ex.: instalação legada do LouvorJA Delphi, nunca baixada pelo
+          // app), porque os dois nunca compartilhavam esse resultado.
+          if (foundFiles > 0) {
+            try { await syncLocalFileUrls(getDbDir()); } catch (_) {}
+          }
+
           return {
             total:      uniqueAudioAlbums.size,  // álbuns de áudio únicos (igual ao Delphi)
             totalFiles,
@@ -2666,6 +2678,12 @@ document.getElementById('f').onsubmit=async(e)=>{
 
       withMissing.sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name));
       const allMissing = withMissing.flatMap(a => a.items).sort((a, b) => a.name.localeCompare(b.name));
+
+      // Mesmo motivo do branch Delphi acima — persiste o que este scan achou,
+      // pro Centro de Downloads (files:check-albums-complete) enxergar.
+      if (foundFiles > 0) {
+        try { await syncLocalFileUrls(dbDir); } catch (_) {}
+      }
 
       return {
         total: albumFiles.length, totalFiles, foundFiles,
