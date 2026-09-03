@@ -875,6 +875,14 @@ function isPdfFile(path) {
   return (path || '').split('.').pop()?.toLowerCase() === 'pdf';
 }
 
+// .slja é o pacote do Editor de Músicas (ver helpers/SljaConverter.js) — não é
+// áudio de verdade, então não pode cair no branch genérico de "arquivo" (que
+// toca no SoundMaster, ver playItem/resolvedType abaixo). Precisa abrir no
+// Editor de Músicas, igual à associação de arquivo do Windows (duplo clique).
+function isSljaFile(path) {
+  return (path || '').split('.').pop()?.toLowerCase() === 'slja';
+}
+
 // Parser do formato .ja (INI legado do LouvorJA Delphi): seções [item_<id>]
 // com os campos do item, e uma seção [Geral] cujas chaves numéricas (1-7)
 // listam, em ordem e separados por ";", os ids dos itens de cada dia.
@@ -1351,6 +1359,7 @@ export default {
     itemIcon(item) {
       if (item.type === 'midia' && isImageFile(item.url)) return 'mdi-image-outline';
       if (item.type === 'midia' && isPdfFile(item.url)) return 'mdi-file-pdf-box';
+      if (item.type === 'arquivo' && isSljaFile(item.url)) return 'mdi-file-music-outline';
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'mdi-music-note';
       if (item.type === 'arquivo' && isPowerPointFile(item.url)) return 'mdi-microsoft-powerpoint';
       return this.typeIcon(item.type);
@@ -1359,6 +1368,7 @@ export default {
       if (item.type === 'musica' && !item.id_music) return 'Clique para escolher a música';
       if (item.type === 'midia' && isImageFile(item.url)) return 'Imagem';
       if (item.type === 'midia' && isPdfFile(item.url)) return 'PDF';
+      if (item.type === 'arquivo' && isSljaFile(item.url)) return 'Música (Editor de Músicas)';
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'Áudio';
       if (item.type === 'arquivo' && isPowerPointFile(item.url)) return 'Apresentação (PowerPoint)';
       return this.typeLabel(item.type);
@@ -1522,9 +1532,19 @@ export default {
           { name: 'PDF', extensions: ['pdf'] },
           { name: 'PowerPoint', extensions: ['ppt', 'pptx'] },
           { name: 'Áudio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'] },
+          { name: 'Música (Editor de Músicas)', extensions: ['slja'] },
           { name: 'Todos os arquivos', extensions: ['*'] },
         ],
       });
+      // .slja abre direto no Editor de Músicas em vez de virar item da
+      // Liturgia (ver isSljaFile/playItem) — não faz sentido como "arquivo"
+      // aqui, então nem chega a preencher o formulário.
+      if (fp && isSljaFile(fp)) {
+        this.$appdata.set('modules.slide_editor.pending_slja_path', fp);
+        this.$modules.open('slide_editor');
+        this.addDialog = false;
+        return fp;
+      }
       if (fp) {
         this.form.url = fp;
         this.form.type = this.resolvedType('midia', fp);
@@ -1757,6 +1777,12 @@ export default {
       // "arquivo" abaixo, senão tentaria tocar o .pptx como áudio no
       // SoundMaster.
       else if (item.type === 'arquivo' && item.url && isPowerPointFile(item.url)) this.$electron.shellOpenFolder(item.url);
+      // .slja não é áudio de verdade (é o pacote do Editor de Músicas) — abre
+      // no Editor em vez de tentar tocar no SoundMaster (ver isSljaFile acima).
+      else if (item.type === 'arquivo' && item.url && isSljaFile(item.url)) {
+        this.$appdata.set('modules.slide_editor.pending_slja_path', item.url);
+        this.$modules.open('slide_editor');
+      }
       else if (item.type === 'arquivo' && item.url) this.$soundMaster.play(item.url, item.name);
       // Link (YouTube/Canva/etc.) continua marcando concluído na hora do
       // clique — sem duração conhecida do vídeo, não daria pra cronometrar.
