@@ -1,6 +1,20 @@
 <template>
   <!-- Modo roleta -->
   <div v-if="isActive && isRoulette" class="rp-root" :style="bgStyle">
+    <!-- Imagem de fundo — mesmo padrão de components/Screen.vue (modos
+         Números/Nomes), que a Roleta não tinha: sem isso, uma imagem de
+         fundo configurada pro módulo Sorteio nunca aparecia na projeção da
+         Roleta, só a cor sólida (ou o preto de fallback). -->
+    <img
+      v-if="userdata.image"
+      :src="userdata.image"
+      :style="{
+        top: 0, left: 0, width: '100%', height: '100%', position: 'absolute',
+        objectFit: userdata.image_fit || 'cover',
+        opacity: (userdata.image_opacity ?? 100) / 100,
+        zIndex: 0,
+      }"
+    />
 
     <!-- Painel esquerdo: participantes -->
     <div v-if="showParticipants" class="rp-panel" :style="panelBorderStyle">
@@ -22,6 +36,11 @@
     </div>
 
     <!-- Centro: roda -->
+    <!-- Confetti: NÃO tem um wrapper próprio aqui de propósito — RouletteWheel
+         já dispara o dele mesmo (ver components/RouletteWheel.vue#showConfetti,
+         no evento "winner" abaixo) e usar os dois juntos duplicava a explosão
+         de confete pra cada sorteio (dois bursts sobrepostos, com durações
+         diferentes — 2s vs os 3s do currentWinner). -->
     <div class="rp-wheel-area" ref="wheelAreaEl">
       <div class="rp-wheel-wrap">
         <RouletteWheel
@@ -60,10 +79,6 @@
       </div>
     </div>
 
-    <!-- Confetti -->
-    <div v-if="currentWinner" class="rp-confetti-wrap" aria-hidden="true">
-      <div v-for="i in 50" :key="i" class="rp-confetti" :style="getConfettiStyle(i)" />
-    </div>
   </div>
 
   <!-- Modo números / nomes -->
@@ -75,11 +90,6 @@ import manifest from "../manifest.json";
 import Screen from "../components/Screen.vue";
 import RouletteWheel from "../components/RouletteWheel.vue";
 import pt from "../lang/pt.json";
-
-const CONFETTI_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#5B9BD5', '#FDCB6E',
-  '#A29BFE', '#FD79A8', '#0984E3', '#6C5CE7',
-];
 
 export default {
   name: "SorteioPopup",
@@ -259,22 +269,6 @@ export default {
       this._winnerTimer = setTimeout(() => { this.currentWinner = null; }, 3000);
     },
 
-    getConfettiStyle(i) {
-      const color = CONFETTI_COLORS[(i - 1) % CONFETTI_COLORS.length];
-      const angle = ((i - 1) / 50) * 360;
-      const delay = ((i - 1) % 10) * 0.05;
-      const size  = 6 + (i % 5) * 4;
-      const dist  = 150 + (i % 4) * 70;
-      return {
-        background: color,
-        width:  size + 'px',
-        height: size + 'px',
-        '--ca':    angle + 'deg',
-        '--dist':  dist  + 'px',
-        '--delay': delay + 's',
-      };
-    },
-
     // Mesma técnica de Screen.vue#windowResize.
     rpWindowResize() {
       const el = this.$refs.wheelAreaEl;
@@ -321,6 +315,11 @@ export default {
   overflow: hidden;
   border-right: 1px solid;
   flex-shrink: 0;
+  /* position: precisa disso pra ficar por cima da imagem de fundo (acima,
+     position:absolute) — sem "position" (static), um elemento fica sempre
+     atrás de um irmão posicionado, não importa a ordem no DOM. */
+  position: relative;
+  z-index: 1;
 }
 .rp-panel--right {
   border-right: none;
@@ -405,6 +404,7 @@ export default {
   justify-content: center;
   padding: 16px;
   position: relative;
+  z-index: 1; /* acima da imagem de fundo — ver comentário em .rp-panel */
 }
 
 /* Roda: quadrado que preenche o espaço disponível */
@@ -451,26 +451,8 @@ export default {
   white-space: nowrap;
 }
 
-/* Confetti */
-.rp-confetti-wrap {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-confetti {
-  position: absolute;
-  border-radius: 50%;
-  animation: rp-burst 2.2s var(--delay, 0s) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-}
-@keyframes rp-burst {
-  0%   { transform: rotate(var(--ca)) translateY(0) scale(1);          opacity: 1; }
-  70%  { opacity: 1; }
-  100% { transform: rotate(var(--ca)) translateY(calc(-1 * var(--dist, 160px))) scale(0.3); opacity: 0; }
-}
+/* Confetti: ver comentário no template (Centro: roda) — não tem CSS/wrapper
+   próprio aqui de propósito, RouletteWheel já cuida do dele. */
 
 /* Transições do vencedor */
 .rp-winner-enter-active { animation: rp-in  0.55s cubic-bezier(0.34,1.56,0.64,1) forwards; }

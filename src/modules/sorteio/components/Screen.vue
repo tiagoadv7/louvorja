@@ -256,6 +256,13 @@ export default {
         textAlign: "center",
         wordBreak: "break-word",
         maxWidth: "100%",
+        // "maxWidth" acima não tinha efeito nenhum com o <span> ficando
+        // "display:inline" (padrão) — elemento inline ignora max-width, então
+        // um nome grande (ainda mais com "Tamanho do Texto" aumentado nas
+        // configurações) só continuava numa linha só, vazando pra fora da
+        // tela em vez de quebrar. inline-block respeita o max-width (aqui,
+        // 100% do .sorteio-result) e só então o word-break tem o que fazer.
+        display: "inline-block",
       };
     },
     chipStyle() {
@@ -415,9 +422,13 @@ export default {
   padding: 2px 7px;
   border-radius: 4px;
   font-family: monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Antes: nowrap + ellipsis — um nome grande na lista lateral (ainda mais
+     com "Tamanho do Texto" aumentado) cortava com "..." em vez de quebrar
+     linha, escondendo o resto do nome. Números continuam curtos o bastante
+     pra nunca precisar quebrar, então isso não muda nada pro modo Números. */
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
   max-width: 100%;
 }
 

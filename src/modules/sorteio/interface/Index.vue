@@ -348,7 +348,21 @@
     <Screen v-show="activeTab !== 'roulette'" ref="screen" :override-panels="true" />
 
     <!-- ===== ABA ROLETA ===== -->
-    <div v-show="activeTab === 'roulette'" class="roulette-screen">
+    <div v-show="activeTab === 'roulette'" class="roulette-screen" :style="rouletteScreenStyle">
+      <!-- Imagem de fundo — mesmo padrão de components/Screen.vue (abas
+           Números/Nomes), que a Roleta não tinha: sem isso, configurar uma
+           imagem de fundo pro módulo Sorteio nunca aparecia aqui, só a cor
+           sólida (ou o preto de fallback quando nem cor nem tema resolvem). -->
+      <img
+        v-if="userdata.image"
+        :src="userdata.image"
+        :style="{
+          top: 0, left: 0, width: '100%', height: '100%', position: 'absolute',
+          objectFit: userdata.image_fit || 'cover',
+          opacity: (userdata.image_opacity ?? 100) / 100,
+          zIndex: 0,
+        }"
+      />
 
       <!-- Painel esquerdo: participantes -->
       <div class="roulette-panel">
@@ -748,6 +762,17 @@ export default {
       return this.userdata.background_color
         || this.$vuetify?.theme?.global?.current?.colors?.primary
         || '#1b2a41';
+    },
+    // :style inline em vez do "background: v-bind(...)" que estava só no
+    // <style> — v-bind() em CSS depende de uma custom property injetada no
+    // elemento raiz do componente e propagada por herança de CSS var; nesta
+    // aba (v-show, sempre no DOM, dentro de várias camadas do l-window) essa
+    // propagação não bate de forma confiável, e o fundo ficava sem cor
+    // nenhuma (o quê deixava a superfície escura do próprio v-card do
+    // Vuetify aparecer por baixo, lida como "preto"). components/Screen.vue
+    // (Números/Nomes) já usa :style direto — mesmo padrão aqui agora.
+    rouletteScreenStyle() {
+      return { background: this.rouletteBg, color: this.rouletteColor };
     },
 
     rouletteColor() {
@@ -1299,8 +1324,8 @@ export default {
   height: 100%;
   overflow: hidden;
   position: relative;
-  background: v-bind("rouletteBg");
-  color: v-bind("rouletteColor");
+  /* background/color vêm do :style="rouletteScreenStyle" no template agora
+     (ver comentário no computed) — não daqui. */
 }
 
 .roulette-panel {
@@ -1312,6 +1337,11 @@ export default {
   overflow: hidden;
   border-right: 1px solid v-bind("roulettePanelBorder");
   flex-shrink: 0;
+  /* position: precisa disso pra ficar por cima da imagem de fundo (acima,
+     position:absolute) — sem "position" (static), um elemento fica sempre
+     atrás de um irmão posicionado, não importa a ordem no DOM. */
+  position: relative;
+  z-index: 1;
 }
 .roulette-panel--right {
   border-right: none;
@@ -1381,6 +1411,7 @@ export default {
   justify-content: center;
   min-width: 0;
   padding: 12px;
+  position: relative; /* "z-index" abaixo só funciona com isso — ver .roulette-panel */
   z-index: 1;
 }
 
