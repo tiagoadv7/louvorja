@@ -5,7 +5,7 @@
     </template>
 
     <v-card>
-      <v-card-title class="d-flex align-center gap-2 py-3">
+      <v-card-title class="d-flex align-center ga-2 py-3">
         <v-icon>mdi-store-outline</v-icon>
         Loja / Cache Local
         <v-spacer />
@@ -62,7 +62,7 @@
             :subtitle="pkg.description"
           >
             <template v-slot:append>
-              <div class="d-flex align-center gap-1">
+              <div class="d-flex align-center ga-1">
                 <v-progress-circular
                   v-if="downloading[pkg.id]"
                   indeterminate
@@ -126,7 +126,7 @@
             </div>
 
             <!-- Botões de ação -->
-            <div class="d-flex gap-2 mb-2">
+            <div class="d-flex ga-2 mb-2">
               <v-btn
                 color="primary"
                 variant="tonal"
@@ -211,7 +211,7 @@
               </template>
             </v-text-field>
 
-            <div class="d-flex gap-2 mt-1">
+            <div class="d-flex ga-2 mt-1">
               <v-btn
                 color="primary"
                 variant="tonal"
@@ -275,7 +275,7 @@
               </template>
             </v-text-field>
 
-            <div class="d-flex gap-2 mt-1">
+            <div class="d-flex ga-2 mt-1">
               <v-btn
                 color="primary"
                 variant="tonal"
@@ -348,7 +348,7 @@
               </template>
             </v-text-field>
 
-            <div class="d-flex gap-2 mt-1">
+            <div class="d-flex ga-2 mt-1">
               <v-btn
                 color="primary"
                 variant="tonal"

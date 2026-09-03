@@ -11,7 +11,7 @@
     max-width="420"
     style="margin-bottom: 48px"
   >
-    <div class="d-flex align-start gap-5">
+    <div class="d-flex align-start ga-5">
       <v-icon size="22" class="flex-shrink-0 mt-1 mr-1">{{ snackIcon }}</v-icon>
       <div class="flex-grow-1 min-w-0">
         <div class="text-body-2 font-weight-semibold">{{ snackTitle }}</div>
@@ -27,7 +27,7 @@
       </div>
       <v-btn size="small" variant="text" color="white" density="comfortable" icon="mdi-close" class="flex-shrink-0" @click="snackbar = false" />
     </div>
-    <div v-if="step === 'available' || step === 'downloaded'" class="d-flex justify-end gap-2 mt-4">
+    <div v-if="step === 'available' || step === 'downloaded'" class="d-flex justify-end ga-2 mt-4">
       <template v-if="step === 'available'">
         <v-btn size="small" variant="text" color="white" class="px-2" @click="openDialog">
           Detalhes
@@ -69,13 +69,13 @@
       <v-divider />
 
       <!-- ── Verificando ── -->
-      <v-card-text v-if="step === 'checking'" class="d-flex flex-column align-center py-12 gap-5">
+      <v-card-text v-if="step === 'checking'" class="d-flex flex-column align-center py-12 ga-5">
         <v-progress-circular indeterminate color="primary" size="52" width="4" />
         <div class="text-body-2 text-medium-emphasis">Verificando atualizações...</div>
       </v-card-text>
 
       <!-- ── Sem atualização ── -->
-      <v-card-text v-else-if="step === 'not-available'" class="d-flex flex-column align-center py-12 gap-4">
+      <v-card-text v-else-if="step === 'not-available'" class="d-flex flex-column align-center py-12 ga-4">
         <v-avatar size="72" color="success" variant="tonal">
           <v-icon size="40">mdi-check-circle-outline</v-icon>
         </v-avatar>
@@ -103,7 +103,7 @@
 
       <!-- ── Baixando ── -->
       <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
-        <div class="d-flex align-center gap-5 mb-6">
+        <div class="d-flex align-center ga-5 mb-6">
           <v-progress-circular size="48" width="4" indeterminate color="primary" />
           <div class="flex-grow-1 min-w-0">
             <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
@@ -121,7 +121,7 @@
       </v-card-text>
 
       <!-- ── Pronto para instalar ── -->
-      <v-card-text v-else-if="step === 'downloaded'" class="d-flex flex-column align-center py-12 gap-4">
+      <v-card-text v-else-if="step === 'downloaded'" class="d-flex flex-column align-center py-12 ga-4">
         <v-avatar size="72" color="primary" variant="tonal">
           <v-icon size="40">mdi-download-circle-outline</v-icon>
         </v-avatar>
@@ -135,7 +135,7 @@
       </v-card-text>
 
       <!-- ── Erro ── -->
-      <v-card-text v-else-if="step === 'error'" class="d-flex flex-column align-center py-12 gap-4">
+      <v-card-text v-else-if="step === 'error'" class="d-flex flex-column align-center py-12 ga-4">
         <v-avatar size="72" color="error" variant="tonal">
           <v-icon size="40">mdi-alert-circle-outline</v-icon>
         </v-avatar>

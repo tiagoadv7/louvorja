@@ -80,7 +80,7 @@
           {{ imageFilename }}
         </div>
 
-        <div class="d-flex gap-2 align-center flex-wrap mb-3">
+        <div class="d-flex ga-2 align-center flex-wrap mb-3">
           <v-btn
             color="primary" variant="tonal" size="small"
             prepend-icon="mdi-folder-open-outline"
@@ -120,7 +120,7 @@
           {{ videoFilename }}
         </div>
 
-        <div class="d-flex gap-2 align-center flex-wrap mb-3">
+        <div class="d-flex ga-2 align-center flex-wrap mb-3">
           <v-btn
             color="primary" variant="tonal" size="small"
             prepend-icon="mdi-folder-open-outline"
@@ -163,7 +163,7 @@
 
       <!-- ── Personalização de Texto ──────────────────────────────────── -->
       <v-divider class="my-4" />
-      <div class="text-subtitle-2 mb-3 d-flex align-center gap-2">
+      <div class="text-subtitle-2 mb-3 d-flex align-center ga-2">
         <v-icon size="16">mdi-format-text</v-icon>
         {{ t('text_section') }}
       </div>
@@ -217,7 +217,7 @@
         />
 
         <!-- Tamanho + Cor do título na mesma linha -->
-        <div class="d-flex gap-3 mb-3">
+        <div class="d-flex ga-3 mb-3">
           <div style="flex:1">
             <div class="text-caption text-medium-emphasis mb-1">{{ t('text_title_size') }}: {{ coverFontSize }}</div>
             <v-slider
@@ -241,7 +241,7 @@
 
         <!-- Tamanho (compartilhado com o texto de repetição — mesmo tamanho,
              sem controle duplicado) + Cor do texto + Cor do texto de repetição -->
-        <div class="d-flex gap-3 mb-3">
+        <div class="d-flex ga-3 mb-3">
           <div style="flex:1">
             <div class="text-caption text-medium-emphasis mb-1">{{ t('text_size') }}: {{ fontSize }}</div>
             <v-slider
@@ -251,7 +251,7 @@
               color="primary" hide-details density="compact" :thumb-size="14"
             />
           </div>
-          <div class="d-flex gap-6">
+          <div class="d-flex ga-6">
             <div class="d-flex flex-column align-center" style="width:78px">
               <div class="text-caption text-medium-emphasis mb-1 sbg-color-label">{{ t('text_color') }}</div>
               <input
@@ -276,7 +276,7 @@
         </div>
 
         <!-- Tamanho + Cor do texto auxiliar na mesma linha -->
-        <div class="d-flex gap-3 mb-1">
+        <div class="d-flex ga-3 mb-1">
           <div style="flex:1">
             <div class="text-caption text-medium-emphasis mb-1">{{ t('text_aux_size') }}: {{ panelFontSize }}</div>
             <v-slider

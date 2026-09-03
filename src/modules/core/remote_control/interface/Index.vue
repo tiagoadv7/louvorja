@@ -52,7 +52,7 @@
       </template>
 
       <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
-      <v-card-title class="px-0 text-subtitle-1 d-flex align-center gap-2">
+      <v-card-title class="px-0 text-subtitle-1 d-flex align-center ga-2">
         <v-icon size="18">mdi-broadcast</v-icon>
         <span>{{ t('transmit.title') }}</span>
         <v-switch
@@ -79,7 +79,7 @@
           </v-alert>
         </v-card-text>
 
-        <v-card-text class="px-0 d-flex gap-4 flex-wrap">
+        <v-card-text class="px-0 d-flex ga-4 flex-wrap">
           <div style="flex:1; min-width:280px">
             <v-text-field
               :model-value="serverStatus.token"

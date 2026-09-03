@@ -11,7 +11,7 @@
 
       <!-- Cabeçalho -->
       <div class="fcd-header">
-        <div class="d-flex align-center gap-3">
+        <div class="d-flex align-center ga-3">
           <v-avatar color="primary" variant="tonal" size="40">
             <v-icon size="20">mdi-folder-sync-outline</v-icon>
           </v-avatar>
@@ -29,7 +29,7 @@
         <div :key="step">
 
           <!-- Barra de estatísticas (apenas nos passos com dados) -->
-          <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center flex-wrap gap-2 px-4 py-2">
+          <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center flex-wrap ga-2 px-4 py-2">
             <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle-outline">
               Encontrados: <strong class="ml-1">{{ foundFiles }}</strong>
             </v-chip>
@@ -202,7 +202,7 @@
               <v-icon size="40">mdi-check-circle-outline</v-icon>
             </v-avatar>
             <div class="text-body-2 text-medium-emphasis mb-6">Todos os arquivos da coletânea estão presentes.</div>
-            <div class="d-flex gap-6">
+            <div class="d-flex ga-6">
               <div class="text-center">
                 <div class="text-h4 font-weight-black text-primary">{{ totalScanned }}</div>
                 <div class="text-caption text-medium-emphasis">álbuns</div>
@@ -231,7 +231,7 @@
 
           <!-- ── Baixando ── -->
           <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
-            <div class="d-flex align-center gap-5 mb-6">
+            <div class="d-flex align-center ga-5 mb-6">
               <v-progress-circular size="42" width="3" indeterminate color="primary" />
               <div class="flex-grow-1 min-w-0">
                 <div class="text-body-2 font-weight-semibold mb-2">Baixando arquivos...</div>

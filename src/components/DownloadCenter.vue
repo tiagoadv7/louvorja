@@ -222,7 +222,7 @@
                   <div class="text-body-1 font-weight-medium">{{ b.name }}</div>
                   <div class="text-caption text-medium-emphasis">{{ b.files.join(' + ') }}</div>
                 </div>
-                <div class="d-flex align-center gap-2 flex-shrink-0">
+                <div class="d-flex align-center ga-2 flex-shrink-0">
                   <v-icon v-if="allDownloaded(b.files)" color="success" size="18">mdi-check-circle</v-icon>
                   <v-btn
                     :color="allDownloaded(b.files) ? 'success' : 'primary'"
@@ -319,7 +319,7 @@
                 <div class="text-body-2 font-weight-medium mb-1">
                   {{ scanResult.total }} arquivo(s) em falta
                 </div>
-                <div class="d-flex gap-3 flex-wrap mb-2">
+                <div class="d-flex ga-3 flex-wrap mb-2">
                   <span v-if="scanResult.counts.cover" class="text-caption">
                     🖼 {{ scanResult.counts.cover }} capa(s)
                   </span>
@@ -358,7 +358,7 @@
             </div>
 
             <!-- Botões de ação -->
-            <div class="d-flex gap-2 mb-4 flex-wrap">
+            <div class="d-flex ga-2 mb-4 flex-wrap">
               <v-btn
                 variant="tonal"
                 color="primary"

@@ -22,7 +22,7 @@
 
       <v-progress-linear v-if="loading" indeterminate height="2" class="mb-1" />
 
-      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center gap-2 px-2 pt-1 pb-2">
+      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-2 px-2 pt-1 pb-2">
         <div
           v-for="s in screens"
           :key="s.id"
@@ -82,7 +82,7 @@
       </v-list-item>
 
       <!-- Lista sempre visível — sem v-if="returnOpen" -->
-      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center gap-2 px-2 pt-1 pb-2">
+      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-2 px-2 pt-1 pb-2">
         <div
           v-for="s in screens"
           :key="'ret-' + s.id"

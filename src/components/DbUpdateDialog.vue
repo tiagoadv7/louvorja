@@ -15,7 +15,7 @@
       </div>
       <v-divider />
 
-      <v-card-text class="d-flex flex-column align-center py-8 gap-4 px-6">
+      <v-card-text class="d-flex flex-column align-center py-8 ga-4 px-6">
         <v-avatar size="72" color="primary" variant="tonal">
           <v-icon size="40">mdi-folder-sync-outline</v-icon>
         </v-avatar>
