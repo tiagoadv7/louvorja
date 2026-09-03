@@ -28,6 +28,7 @@
     "electron:build": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder",
     "electron:build:linux": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder --linux",
     "electron:build:linux:wsl": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-wsl.ps1",
+    "electron:build:mac": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && electron-builder --mac",
     "electron:publish": "node scripts/prepare-bundle.js --bundle-only && cross-env ELECTRON_BUILD=true vite build && node scripts/publish.js",
     "electron:preview": "cross-env ELECTRON_BUILD=true vite build && node electron/dev.js",
     "electron:pack": "cross-env ELECTRON_BUILD=true vite build && electron-builder --dir",
@@ -140,8 +141,21 @@
           ]
         }
       ],
-      "icon": "public/ico/favicon.ico",
+      "icon": "public/ico/icon-1024.png",
       "category": "AudioVideo"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/ico/icon-1024.png",
+      "category": "public.app-category.music"
     },
     "asarUnpack": [
       "node_modules/sql.js/**/*",
