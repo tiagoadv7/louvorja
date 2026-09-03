@@ -33,6 +33,7 @@
           <span class="monitor-card__num">{{ monitorNum(s) }}</span>
           <span class="monitor-card__label">{{ s.label }}</span>
           <span class="monitor-card__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
+          <span v-if="s.id === returnSelectedId" class="monitor-card__out monitor-card__out--return">Retorno</span>
         </div>
       </div>
 
@@ -344,5 +345,12 @@ export default {
   border-radius: 3px;
   padding: 1px 5px;
   line-height: 1.4;
+}
+/* Badge "Retorno" no card de Monitor de saída — mesma ideia do badge
+   "Saída" acima (marca ali qual monitor o OUTRO papel está usando), só que
+   na cor verde já usada em todo o resto pro retorno (ver
+   .monitor-card--active-return). */
+.monitor-card__out--return {
+  background: rgba(76, 175, 80, 0.85);
 }
 </style>
