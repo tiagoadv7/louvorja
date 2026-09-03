@@ -102,7 +102,17 @@
     <div class="progress"></div>
     <img class="logo" src="ico/favicon.svg" alt="LouvorJA" draggable="false" />
     <div class="app-name">LouvorJA</div>
-    <div class="loading-text">carregando</div>
+    <div class="loading-text" id="loadingText">carregando</div>
   </main>
+  <script>
+    // Igual ao LouvorJA Delphi original: abrir um .slja (duplo clique/"Abrir
+    // com") mostra "Abrindo arquivo" aqui em vez do "Carregando" genérico —
+    // ver electron/main.js#createLoadingWindow, que já sabe disso antes
+    // mesmo de mostrar esta janela (process.argv, sem esperar a principal).
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'open-file') {
+      document.getElementById('loadingText').textContent = 'abrindo arquivo';
+    }
+  </script>
 </body>
 </html>

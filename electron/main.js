@@ -1,9 +1,17 @@
 const { app, BrowserWindow, ipcMain, screen, session, protocol, dialog, shell } = require('electron');
 
 // Deve ser chamado ANTES de app.whenReady() — registra o esquema como seguro
-// para que <img src="app-local://capas/2026.bmp"> funcione no renderer
+// para que <img src="app-local://capas/2026.bmp"> funcione no renderer.
+// corsEnabled: true — sem isso, supportFetchAPI sozinho deixa a requisição
+// sair, mas o Chromium bloqueia a RESPOSTA como cross-origin (erro "blocked
+// by CORS policy... only supported for protocol schemes: chrome, ... http,
+// https") — quebrava qualquer fetch(app-local://...) feito via JS (ex.:
+// MusicMenuTable.vue#_fetchBlob, ao exportar uma música do catálogo como
+// .slja com imagem de fundo resolvida localmente). <img>/CSS background-image
+// não passam por essa checagem (não são fetch() de JS), por isso só esse
+// caminho específico quebrava, nunca a exibição normal da imagem.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'app-local', privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'app-local', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ]);
 const path = require('path');
 const fs   = require('fs');
@@ -190,7 +198,13 @@ function createLoadingWindow() {
     ? path.join(__dirname, '../public/loading.html')
     : path.join(__dirname, '../dist/loading.html');
 
-  loadingWindow.loadFile(loadingPath);
+  // Igual ao LouvorJA Delphi original: abrir um .slja (duplo clique/"Abrir
+  // com") mostra "Abrindo arquivo" no splash em vez do "Carregando" genérico
+  // — pendingSljaPath já foi resolvido de process.argv antes daqui (ver
+  // extractSljaPath, no topo do arquivo), então dá pra decidir de cara, sem
+  // esperar a janela principal abrir pra só então saber que tem um arquivo
+  // pendente.
+  loadingWindow.loadFile(loadingPath, { query: { mode: pendingSljaPath ? 'open-file' : 'app' } });
 
   loadingWindow.once('ready-to-show', () => {
     if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.show();

@@ -1,11 +1,15 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root" :class="{ 'rs-root--active': mediaActive || clockModuleActive || timersModuleActive || videoPlayerActive || webLinkActive }">
-      <!-- Conteúdo do slide (letra/título, barras de progresso) — só aparece
-           junto com uma música realmente ativa; some com fade quando ela
-           termina. -->
+    <div v-if="visible" class="rs-root">
+      <!-- Conteúdo do slide (letra/título, barras de progresso) — aparece
+           junto com uma música OU uma apresentação do Editor de Músicas
+           (Coletânea Personalizada) realmente ativa; some com fade quando
+           termina. Mesmo bloco pros dois — displayText/nextText/trackProgress/
+           etc. já sabem de qual fonte ler (ver mediaActive/slideEditorActive
+           abaixo), então o retorno mostra a apresentação do Editor
+           exatamente como mostra um slide de música comum. -->
       <transition name="rs-fade">
-        <div v-if="mediaActive" class="rs-slide">
+        <div v-if="mediaActive || slideEditorActive" class="rs-slide">
           <!-- Barra de progresso da faixa (topo) -->
           <div class="rs-track-bar">
             <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
@@ -172,6 +176,24 @@ export default {
       if (this.returnPopupModule) return this.returnPopupModule === 'web_link';
       return this.popupModule === 'web_link';
     },
+    // Apresentação do Editor de Músicas (Coletâneas Personalizadas) — mesmo
+    // padrão de "ativo" dos outros módulos. Ao contrário deles, NÃO ganha um
+    // <div class="rs-module-mirror"> próprio: reaproveita o mesmo bloco
+    // ".rs-slide" de mediaActive (ver template) pra aparecer no retorno
+    // exatamente como uma música comum, com barra de progresso, crossfade de
+    // linha e "próxima letra" — só a FONTE dos dados muda (ver
+    // slideEditorConfig e os computeds displayText/nextText/trackProgress/
+    // slideCounter abaixo, que checam slideEditorActive primeiro).
+    slideEditorActive() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'slide_editor';
+      return this.popupModule === 'slide_editor';
+    },
+    // Campos já vêm "achatados" (um valor por slide, não um array de slides)
+    // — ver slide_editor/interface/Index.vue#broadcastCurrentSlide(), que
+    // reenvia esse objeto inteiro toda vez que a linha ou a música muda.
+    slideEditorConfig() {
+      return this.$appdata.get('modules.slide_editor') || {};
+    },
 
     mediaConfig() {
       return this.$appdata.get('modules.media.config') || {};
@@ -237,14 +259,17 @@ export default {
     },
 
     isCover() {
+      if (this.slideEditorActive) return !!this.slideEditorConfig.cover;
       return this.currentSlide?.cover === true;
     },
     displayText() {
+      if (this.slideEditorActive) return this.slideEditorConfig.text || '';
       const s = this.currentSlide;
       if (!s) return '';
       return s.lyric || '';
     },
     nextText() {
+      if (this.slideEditorActive) return this.slideEditorConfig.next_text || '';
       const s = this.nextSlide;
       if (!s) return '';
       return s.lyric || '';
@@ -252,8 +277,22 @@ export default {
 
     // Snapshot mínimo do slide atual — o watcher abaixo reage a mudanças
     // dele pra empilhar uma nova linha em textSlides (ver pushTextSlide()).
+    // Pro Editor, carrega junto a cor/tamanho PRÓPRIOS do slide (quando
+    // configurados) — mesmos overrides opcionais que src/components/Slide.vue
+    // já aceita na tela de saída (ver comentário ali); mainTextColorFor/
+    // mainFontSizeFor abaixo dão prioridade a eles sobre o "Fundo
+    // Personalizado" global. Música comum não tem esse conceito — os campos
+    // ficam null e o retorno cai no globalBg, como sempre.
     slideSnapshot() {
-      return { lyric: this.displayText, cover: this.isCover };
+      if (this.slideEditorActive) {
+        return {
+          lyric: this.displayText,
+          cover: this.isCover,
+          color: this.slideEditorConfig.color || null,
+          font_size_pct: this.slideEditorConfig.font_size_pct || null,
+        };
+      }
+      return { lyric: this.displayText, cover: this.isCover, color: null, font_size_pct: null };
     },
 
     // "Fundo Personalizado" (mesma chave slide_global_bg que src/components/
@@ -271,14 +310,30 @@ export default {
       return this.mediaConfig.title || '';
     },
     trackProgress() {
+      // Editor: reaproveita o progresso do áudio já calculado por
+      // syncNowPlaying() lá (mesma % 0-100 que o mini-player do rodapé usa).
+      if (this.slideEditorActive) {
+        const p = this.slideEditorConfig?.now_playing?.progress ?? 0;
+        return Math.min(100, Math.max(0, p));
+      }
       const p = this.mediaConfig.progress ?? 0;
       return Math.min(100, Math.max(0, p));
     },
     slideProgress() {
+      // Editor não marca início/fim de cada linha em segundos (só o
+      // "tempo_seconds" de início) — sem uma duração por slide pra calcular
+      // %, a barra fica parada em 0 em vez de inventar um valor.
+      if (this.slideEditorActive) return 0;
       const p = this.mediaConfig.slide_progress ?? 0;
       return Math.min(100, Math.max(0, p));
     },
     slideCounter() {
+      if (this.slideEditorActive) {
+        const idx = (this.slideEditorConfig.slide_number ?? 0) + 1;
+        const total = this.slideEditorConfig.slide_count ?? 0;
+        if (!total) return '';
+        return `${idx} / ${total}`;
+      }
       const idx = (this.mediaConfig.slide_index ?? 0) + 1;
       const total = this.computedSlides.length;
       if (!total) return '';
@@ -323,9 +378,13 @@ export default {
 
     // Cor do texto principal pro slide dado — mesma lógica/mesmos padrões de
     // cor de src/components/Slide.vue#style_text() (capa/repetição/normal),
-    // lendo do mesmo "Fundo Personalizado" (globalBg) que a tela de saída usa.
+    // lendo do mesmo "Fundo Personalizado" (globalBg) que a tela de saída
+    // usa. slide.color (só slide_editor, ver slideSnapshot) tem prioridade
+    // máxima sobre tudo isso — mesma precedência de Slide.vue: cor própria
+    // do slide do Editor vence o Fundo Personalizado.
     mainTextColorFor(slide) {
       const bg = this.globalBg;
+      if (slide?.color)  return slide.color;
       if (slide?.cover)  return bg?.cover_font_color  || bg?.font_color || 'rgb(246, 195, 42)';
       if (this.repeat)   return bg?.repeat_font_color || bg?.font_color || 'rgb(246, 195, 42)';
       return bg?.font_color || 'rgb(255, 255, 255)';
@@ -336,10 +395,11 @@ export default {
     // usa na tela de saída, pra que ajustar o tamanho no "Fundo
     // Personalizado" mude os dois lugares juntos, do mesmo jeito. Capa usa
     // cover_font_size (padrão 25); texto normal e repetição usam font_size
-    // (padrão 20) — mesmos defaults de lá.
+    // (padrão 20) — mesmos defaults de lá. slide.font_size_pct (só
+    // slide_editor) vence os dois, mesma precedência de Slide.vue.
     mainFontSizeFor(slide) {
       const bg = this.globalBg;
-      const pc = slide?.cover ? (bg?.cover_font_size ?? 25) : (bg?.font_size ?? 20);
+      const pc = slide?.font_size_pct ?? (slide?.cover ? (bg?.cover_font_size ?? 25) : (bg?.font_size ?? 20));
       return `${this.fontSizePc(pc)}px`;
     },
     // Idêntico a Slide.vue#fontSizePc — percentual relativo ao menor lado da

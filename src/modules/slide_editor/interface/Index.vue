@@ -547,6 +547,15 @@ export default {
       this.resolvedImages = {};
       await this.rebuildAudioUrl();
       await this.ensureAllImagesResolved();
+      // Reenvia pro output DEPOIS de resolver as imagens — trocar "song"
+      // acima já agenda um broadcast (watch "activeSlide", debounce de
+      // 120ms, ver scheduleProjectionBroadcast), mas ensureAllImagesResolved
+      // (IPC fileExists + leitura em disco) pode não terminar a tempo,
+      // principalmente na primeira vez que as imagens da música são
+      // tocadas. Isso mandava o broadcast com "image" ainda vazio — a
+      // projeção ficava com fundo preto até o operador trocar de slide
+      // (o que dispara um novo broadcast, aí sim já com a imagem pronta).
+      this.broadcastCurrentSlide();
 
       const autoplay = this.$appdata.get(`modules.${this.module_id}.pending_autoplay`, false);
       if (autoplay) {
@@ -575,6 +584,16 @@ export default {
         this.resolvedImages = {};
         await this.rebuildAudioUrl();
         await this.ensureAllImagesResolved();
+        this.broadcastCurrentSlide(); // ver comentário em loadSongById()
+
+        // Mesmo gatilho de autoplay de loadSongById() — setado só pelo
+        // handler "open-slja-file" (duplo clique/"Abrir com" no SO, ver
+        // mounted()), pra abrir já tocando, igual ao LouvorJA Delphi original.
+        const autoplay = this.$appdata.get(`modules.${this.module_id}.pending_autoplay`, false);
+        if (autoplay) {
+          this.$appdata.set(`modules.${this.module_id}.pending_autoplay`, false);
+          this.$nextTick(() => this.togglePlay());
+        }
       } catch (err) {
         this.$alert.error({ title: this.t("data.invalid_file"), text: String(err?.message || err), translate: false });
       }
@@ -649,6 +668,11 @@ export default {
     broadcastCurrentSlide() {
       const s = this.activeSlide;
       const base = `modules.${this.module_id}`;
+      // next.letra: mesma ideia de "Próxima letra" da tela de retorno pro
+      // slide de música (ver ReturnScreen.vue#nextText) — sem isso, o
+      // espelho do retorno pra músicas do Editor não tinha como mostrar a
+      // próxima linha, só a atual.
+      const next = this.slides[this.current + 1] || {};
       this.$appdata.setMultiple([
         [`${base}.text`, s.letra || ""],
         [`${base}.aux_text`, s.letra_aux || ""],
@@ -663,6 +687,8 @@ export default {
         [`${base}.text_bg_transparent`, s.fundo_letra === false],
         [`${base}.text_align`, s.text_align || ""],
         [`${base}.slide_number`, this.current],
+        [`${base}.slide_count`, this.slides.length],
+        [`${base}.next_text`, next.letra || ""],
       ]);
     },
 
@@ -734,6 +760,7 @@ export default {
         this.resolvedImages = {};
         await this.rebuildAudioUrl();
         await this.ensureAllImagesResolved();
+        this.broadcastCurrentSlide(); // ver comentário em loadSongById()
       } catch (err) {
         this.$alert.error({ title: this.t("data.invalid_file"), text: String(err?.message || err), translate: false });
       }
@@ -1163,10 +1190,16 @@ export default {
     // Duplo clique num .slja no SO (ou "Abrir com") — ver electron/main.js
     // #openSljaFile. Abre a janela do editor e marca o handoff (watch
     // "pendingSljaPath" acima) pra carregar o arquivo assim que "show" virar
-    // true, em vez de resetar pra "Nova música".
+    // true, em vez de resetar pra "Nova música". Mesma paridade Delphi do
+    // botão "Apresentar" de Coletâneas Personalizadas (ver
+    // custom_collections/interface/Index.vue#apresentar): já projeta na
+    // tela principal E toca sozinho, sem o operador precisar clicar em Tela
+    // + Play depois de abrir — o Delphi original já abria "executando".
     this._openFileHandler = this.$electron.on("open-slja-file", (filePath) => {
       this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, filePath);
+      this.$appdata.set(`modules.${this.module_id}.pending_autoplay`, true);
       this.$modules.open(this.module_id);
+      this.$popup.open(this.module_id);
     });
   },
   beforeUnmount() {

@@ -9,7 +9,9 @@
  * Convenção de codificação:
  *   - letra/letra_aux: pipe `|` representa quebra de linha (Delphi: \r\n)
  *   - cor: #RRGGBB (HTML hex)
- *   - tempo: HH:MM:SS (campo `tempo_hms`) é source-of-truth; `tempo` em bytes BASS é ignorado
+ *   - tempo: HH:MM:SS (campo `tempo_hms`) é source-of-truth quando presente;
+ *     sem ele (exports do LouvorJA Delphi original), `tempo` é a posição em
+ *     bytes BASS e é convertido pra segundos (ver bassBytesToSeconds)
  *
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
@@ -73,6 +75,24 @@ function hmsToSeconds(hms) {
   return parts[0] || 0;
 }
 
+// LouvorJA Delphi (exports antigos, sem o campo "tempo_hms" — só existia nas
+// versões mais recentes do Delphi/já no Electron) grava "tempo" como posição
+// em BYTES dentro do stream PCM decodificado pela biblioteca BASS, não em
+// segundos. O fallback antigo (hmsToSeconds(sec.tempo), sem separador ":")
+// tratava esse valor bruto como se já fosse "segundos" (ex.: "1438944"
+// virava 1438944 segundos = ~16 dias) — nunca batia com o tempo real de
+// reprodução (no máximo alguns minutos), então nenhuma linha depois da capa
+// sincronizava e a música importada ficava, na prática, sem nenhum tempo
+// gravado. 176400 = 44100 Hz × 2 bytes/amostra × 2 canais — configuração
+// padrão de decodificação PCM do BASS, confirmada batendo (dentro de ~10s,
+// plausível pra um trecho instrumental final) com a duração real do áudio em
+// duas exportações reais conferidas (2019, versão Delphi 17.3.19.2/18.0.19.3).
+const BASS_PCM_BYTES_PER_SECOND = 176400;
+function bassBytesToSeconds(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n / BASS_PCM_BYTES_PER_SECOND : 0;
+}
+
 function secondsToHms(seconds) {
   const total = Math.max(0, Math.floor(seconds || 0));
   const h = Math.floor(total / 3600);
@@ -114,7 +134,12 @@ function parseSlja(iniText) {
       cor_fundo: sec.cor_fundo || "#000000",
       imagem: sec.imagem || "",
       imagem_posicao: parseInt(sec.imagem_posicao || "5", 10),
-      tempo_seconds: hmsToSeconds(sec.tempo_hms || sec.tempo),
+      // tempo_hms (gravado pelo Electron, ver writeSlja abaixo) é a fonte
+      // confiável quando presente. Sem ele, "tempo" é o campo bruto do
+      // LouvorJA Delphi original — posição em bytes BASS, não segundos (ver
+      // bassBytesToSeconds acima) — só cai nesse caminho em imports de
+      // arquivos .slja exportados pelo Delphi antigo.
+      tempo_seconds: sec.tempo_hms ? hmsToSeconds(sec.tempo_hms) : bassBytesToSeconds(sec.tempo),
       text_align: sec.text_align || "center",
     });
   }
