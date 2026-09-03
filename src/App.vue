@@ -345,7 +345,7 @@ export default {
             this.$soundMaster.play(item.url, item.name);
             payload.ok = true;
           } else if (item.type === 'link' && item.url) {
-            this.$webLink.open(item.url);
+            this.$webLink.open(item.url, item.name, { addToPlaylist: false });
             payload.ok = true;
           } else {
             payload.code = 'NOT_PLAYABLE';
@@ -392,21 +392,58 @@ export default {
           else this.$media.close(true);
           payload.ok = true;
         } else if (type === 'get-volume') {
-          const activeModule = this.$appdata.get('popup_module') || 'media';
-          payload.module = activeModule;
-          payload.volume = activeModule === 'video_player' ? this.$appdata.get('modules.video_player.config.volume', 100)
-                          : activeModule === 'web_link'     ? this.$appdata.get('modules.web_link.config.volume', 100)
-                          : this.$appdata.get('modules.media.config.volume', 100);
+          // target="video": volume do vídeo especificamente, sempre — usado
+          // pelo card dedicado "Vídeo" do remoto, que não deve depender do
+          // que estiver "ativo" no momento (a música/YouTube podem estar
+          // projetando por cima, o vídeo continua tendo seu próprio volume).
+          // Sem target: comportamento antigo (volume de quem estiver "ativo"),
+          // usado pelo card genérico de Volume (música/slide ou YouTube).
+          if (params?.target === 'video') {
+            payload.module = 'video_player';
+            payload.volume = this.$appdata.get('modules.video_player.config.volume', 100);
+          } else {
+            const activeModule = this.$appdata.get('popup_module') || 'media';
+            payload.module = activeModule;
+            payload.volume = activeModule === 'video_player' ? this.$appdata.get('modules.video_player.config.volume', 100)
+                            : activeModule === 'web_link'     ? this.$appdata.get('modules.web_link.config.volume', 100)
+                            : this.$appdata.get('modules.media.config.volume', 100);
+          }
           payload.ok = true;
         } else if (type === 'set-volume') {
-          const activeModule = this.$appdata.get('popup_module') || 'media';
           const val = Math.round(Number(params?.value));
           if (Number.isFinite(val)) {
             const v = Math.max(0, Math.min(100, val));
-            if (activeModule === 'video_player') this.$videoPlayer.setVolume(v);
-            else if (activeModule === 'web_link') this.$webLink.setVolume(v);
-            else this.$media.setVolume(v);
+            if (params?.target === 'video') {
+              this.$videoPlayer.setVolume(v);
+            } else {
+              const activeModule = this.$appdata.get('popup_module') || 'media';
+              if (activeModule === 'video_player') this.$videoPlayer.setVolume(v);
+              else if (activeModule === 'web_link') this.$webLink.setVolume(v);
+              else this.$media.setVolume(v);
+            }
           }
+          payload.ok = true;
+        // Controle dedicado do SoundMaster (pads/volume/atenuador) — NUNCA
+        // depende de "popup_module" como os ramos acima: SoundMaster não
+        // projeta nada (é só áudio), então nunca é o módulo "ativo" na
+        // projeção, e precisa do próprio canal de comando (ver
+        // helpers/SoundMaster.js) pra funcionar independente do que estiver
+        // sendo exibido (inclusive nada, ou um PowerPoint fora do LouvorJA —
+        // esse controle é só IPC interno entre a janela do celular e a janela
+        // já aberta do LouvorJA, nunca toca em foco/janela do sistema).
+        } else if (type === 'soundmaster-state') {
+          payload.pads = this.$soundMaster.getPads();
+          payload.nowPlaying = this.$soundMaster.nowPlaying();
+          payload.ok = true;
+        } else if (type === 'soundmaster-control') {
+          const action = params?.action;
+          if (action === 'toggle') this.$soundMaster.togglePlay();
+          else if (action === 'stop') this.$soundMaster.stop();
+          else if (action === 'play_pad' && params?.padId != null) this.$soundMaster.playPad(params.padId);
+          else if (action === 'talkover_toggle') this.$soundMaster.toggleTalkover();
+          else if (action === 'volume' && Number.isFinite(Number(params?.value))) this.$soundMaster.setVolume(Number(params.value));
+          else if (action === 'ducking_level' && Number.isFinite(Number(params?.value))) this.$soundMaster.setDuckingLevel(Number(params.value));
+          else { payload.code = 'INVALID_PARAMS'; this.$electron.sendRemoteResponse(payload); return; }
           payload.ok = true;
         } else {
           payload.code = 'UNKNOWN_TYPE';

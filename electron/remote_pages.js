@@ -94,6 +94,15 @@ input::placeholder{color:rgba(255,255,255,.35)}
   justify-content:center;cursor:pointer}
 .media-row button:active{background:rgba(255,255,255,.22);transform:scale(.96)}
 .media-row button.media-stop{background:rgba(231,76,60,.25)}
+/* SoundMaster: lista de pads — mesmo visual da lista da Liturgia
+   (.lit-list/.lit-item abaixo), só mais baixa (card menor) e com o item
+   tocando destacado. */
+#smPads{max-height:38vh}
+.lit-item.sm-pad-active{background:rgba(52,152,219,.18);border-radius:8px}
+.sm-talkover-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px;margin-bottom:6px}
+.sm-talkover-btn{background:rgba(255,255,255,.09);border:none;border-radius:8px;color:#fff;
+  padding:6px 12px;font-size:13px;cursor:pointer}
+.sm-talkover-btn.on{background:rgba(241,196,15,.85)}
 /* ── Layout de duas colunas: controle de um lado, liturgia do outro ── */
 .layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
 .col{flex:1 1 320px;min-width:280px}
@@ -146,17 +155,50 @@ input::placeholder{color:rgba(255,255,255,.35)}
       </div>
     </div>
 
+    <!-- Vídeo: "Áudio" (SoundMaster) foi pro card dedicado abaixo, com a
+         própria lista de pads — repetir os dois botões aqui virava controle
+         duplicado da mesma coisa. -->
     <div class="card">
-      <div class="lit-title" style="margin-bottom:8px">Vídeo / Áudio</div>
+      <div class="lit-title" style="margin-bottom:8px">Vídeo</div>
       <div class="media-row">
-        <span class="media-label">Vídeo</span>
+        <span class="media-label">Reprodução</span>
         <button data-media-target="video" data-media-action="toggle" title="Play/Pause do vídeo">⏯</button>
         <button data-media-target="video" data-media-action="stop" class="media-stop" title="Fechar vídeo">✕</button>
       </div>
+      <div class="volume-label" style="margin-top:10px">Volume</div>
+      <div class="volume-row">
+        <span class="volume-icon">${ICON_VOLUME}</span>
+        <input id="videoVolume" type="range" min="0" max="100" value="100" />
+        <span class="volume-val" id="videoVolumeVal">100%</span>
+      </div>
+    </div>
+
+    <!-- SoundMaster: pads de áudio de fundo, independente de vídeo/música/
+         PowerPoint — controla só a mesa de som do LouvorJA por IPC interno,
+         nunca a janela ativa do sistema (não precisa focar nada pra funcionar,
+         então não interfere numa apresentação de PowerPoint em execução). -->
+    <div class="card">
+      <div class="lit-title" style="margin-bottom:10px">SoundMaster</div>
+      <div class="lit-list" id="smPads"></div>
       <div class="media-row">
-        <span class="media-label">Áudio</span>
-        <button data-media-target="audio" data-media-action="toggle" title="Play/Pause do áudio">⏯</button>
-        <button data-media-target="audio" data-media-action="stop" class="media-stop" title="Fechar áudio">✕</button>
+        <span class="media-label" id="smNowPlaying">Nada tocando</span>
+        <button id="smToggleBtn" title="Play/Pause">⏯</button>
+        <button id="smStopBtn" class="media-stop" title="Parar áudio">✕</button>
+      </div>
+      <div class="volume-label" style="margin-top:10px">Volume</div>
+      <div class="volume-row">
+        <span class="volume-icon">${ICON_VOLUME}</span>
+        <input id="smVolume" type="range" min="0" max="100" value="100" />
+        <span class="volume-val" id="smVolumeVal">100%</span>
+      </div>
+      <div class="sm-talkover-row">
+        <span class="volume-label" style="margin:0">Atenuar (talkover)</span>
+        <button id="smTalkoverBtn" class="sm-talkover-btn" title="Ligar/desligar atenuador">🎤 Atenuar</button>
+      </div>
+      <div class="volume-row">
+        <span class="volume-icon">${ICON_VOLUME}</span>
+        <input id="smDucking" type="range" min="0" max="100" value="15" />
+        <span class="volume-val" id="smDuckingVal">15%</span>
       </div>
     </div>
 
@@ -286,6 +328,130 @@ volumeInput.addEventListener('change', () => { volumeDragging = false; });
 
 carregarVolume();
 setInterval(carregarVolume, 5000);
+
+// ── Volume dedicado do Vídeo (independente do "módulo ativo" acima —
+// funciona mesmo com música/YouTube sendo o que está projetado agora,
+// mesmo padrão do volume do SoundMaster abaixo) ───────────────────────────
+const videoVolumeInput = document.getElementById('videoVolume');
+const videoVolumeVal    = document.getElementById('videoVolumeVal');
+let videoVolumeDebounce = null;
+let videoVolumeDragging = false;
+
+function carregarVideoVolume() {
+  if (videoVolumeDragging) return;
+  chamarApi('get-volume', { target: 'video' }, (ok, data) => {
+    if (!ok) return;
+    videoVolumeInput.value = data.volume;
+    videoVolumeVal.textContent = data.volume + '%';
+  });
+}
+
+videoVolumeInput.addEventListener('pointerdown', () => { videoVolumeDragging = true; });
+videoVolumeInput.addEventListener('input', (e) => {
+  const v = e.target.value;
+  videoVolumeVal.textContent = v + '%';
+  clearTimeout(videoVolumeDebounce);
+  videoVolumeDebounce = setTimeout(() => chamarApi('set-volume', { target: 'video', value: v }, () => {}), 120);
+});
+videoVolumeInput.addEventListener('change', () => { videoVolumeDragging = false; });
+
+carregarVideoVolume();
+setInterval(carregarVideoVolume, 5000);
+
+// ── SoundMaster ──────────────────────────────────────────────────────────
+const smPadsEl       = document.getElementById('smPads');
+const smVolume       = document.getElementById('smVolume');
+const smVolumeVal    = document.getElementById('smVolumeVal');
+const smDucking      = document.getElementById('smDucking');
+const smDuckingVal   = document.getElementById('smDuckingVal');
+const smTalkoverBtn  = document.getElementById('smTalkoverBtn');
+const smNowPlaying   = document.getElementById('smNowPlaying');
+let smVolumeDragging  = false;
+let smDuckingDragging = false;
+let smVolumeDebounce   = null;
+let smDuckingDebounce  = null;
+let smActivePadId       = null;
+
+function smControl(action, extra) {
+  chamarApi('soundmaster-control', { action, ...extra }, (ok) => { if (!ok) testarApi(); });
+}
+
+// Lista igual à da Liturgia (.lit-item/.lit-list) — só os pads com áudio de
+// verdade aparecem (mesmo critério de lá: nada de mostrar 10 slots vazios
+// numa lista pensada pra itens reais), com o que estiver tocando destacado.
+function renderSmPads(pads) {
+  const withFile = pads.filter((p) => p.hasFile);
+  if (!withFile.length) {
+    smPadsEl.innerHTML = '<div class="lit-empty">Nenhum pad com áudio configurado.</div>';
+    return;
+  }
+  smPadsEl.innerHTML = withFile.map((p) => {
+    const active = p.id === smActivePadId;
+    return '<div class="lit-item' + (active ? ' sm-pad-active' : '') + '">' +
+      '<span class="name">' + escapeHtml(p.name || ('Pad ' + p.id)) + '</span>' +
+      '<button data-pad-id="' + p.id + '">' + (active ? 'Parar' : 'Tocar') + '</button>' +
+      '</div>';
+  }).join('');
+}
+
+function carregarSoundMaster() {
+  // Não sobrescreve enquanto o usuário arrasta os sliders (mesmo motivo do
+  // volume de vídeo/música acima).
+  if (smVolumeDragging || smDuckingDragging) return;
+  chamarApi('soundmaster-state', {}, (ok, data) => {
+    if (!ok) return;
+    const np = data.nowPlaying || {};
+    smActivePadId = np.active_pad_id ?? null;
+    renderSmPads(data.pads || []);
+    smVolume.value = np.volume ?? 100;
+    smVolumeVal.textContent = Math.round(np.volume ?? 100) + '%';
+    smDucking.value = np.ducking_level ?? 15;
+    smDuckingVal.textContent = Math.round(np.ducking_level ?? 15) + '%';
+    smTalkoverBtn.classList.toggle('on', !!np.is_talkover);
+    smNowPlaying.textContent = np.playing && np.name ? np.name : 'Nada tocando';
+  });
+}
+
+smPadsEl.addEventListener('click', (e) => {
+  const id = e.target?.dataset?.padId;
+  if (id === undefined) return;
+  smControl('play_pad', { padId: id });
+  setTimeout(carregarSoundMaster, 250);
+});
+
+document.getElementById('smToggleBtn').addEventListener('click', () => {
+  smControl('toggle', {});
+  setTimeout(carregarSoundMaster, 250);
+});
+
+document.getElementById('smStopBtn').addEventListener('click', () => {
+  smControl('stop', {});
+  setTimeout(carregarSoundMaster, 250);
+});
+
+smTalkoverBtn.addEventListener('click', () => {
+  smControl('talkover_toggle', {});
+  setTimeout(carregarSoundMaster, 250);
+});
+
+smVolume.addEventListener('pointerdown', () => { smVolumeDragging = true; });
+smVolume.addEventListener('input', (e) => {
+  smVolumeVal.textContent = e.target.value + '%';
+  clearTimeout(smVolumeDebounce);
+  smVolumeDebounce = setTimeout(() => smControl('volume', { value: e.target.value }), 120);
+});
+smVolume.addEventListener('change', () => { smVolumeDragging = false; });
+
+smDucking.addEventListener('pointerdown', () => { smDuckingDragging = true; });
+smDucking.addEventListener('input', (e) => {
+  smDuckingVal.textContent = e.target.value + '%';
+  clearTimeout(smDuckingDebounce);
+  smDuckingDebounce = setTimeout(() => smControl('ducking_level', { value: e.target.value }), 120);
+});
+smDucking.addEventListener('change', () => { smDuckingDragging = false; });
+
+carregarSoundMaster();
+setInterval(carregarSoundMaster, 4000);
 
 let searchDebounce = null;
 document.getElementById('search').addEventListener('input', (e) => {

@@ -315,14 +315,43 @@ async function handleRequest(req, res) {
 
   if (p === '/api/get-volume') {
     if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
-    const r = await requestRenderer('get-volume', {});
-    return sendJson(res, 200, r.ok ? { status: 'ok', volume: r.volume ?? 100 } : { status: 'error', code: r.code || 'ERROR' });
+    // target=video: volume do vídeo especificamente (ver App.vue#handleRemoteRequest),
+    // usado pelo card dedicado "Vídeo" — sem target, comportamento antigo
+    // (volume de quem estiver "ativo" na projeção no momento).
+    const target = url.searchParams.get('target') || undefined;
+    const r = await requestRenderer('get-volume', { target });
+    return sendJson(res, 200, r.ok ? { status: 'ok', volume: r.volume ?? 100, module: r.module } : { status: 'error', code: r.code || 'ERROR' });
   }
 
   if (p === '/api/set-volume') {
     if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
     const value = Number(url.searchParams.get('value'));
-    const r = await requestRenderer('set-volume', { value });
+    const target = url.searchParams.get('target') || undefined;
+    const r = await requestRenderer('set-volume', { value, target });
+    return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  // SoundMaster (pads/volume/atenuador) — canal próprio, independente do
+  // "módulo ativo" que os endpoints de vídeo/áudio acima usam (SoundMaster
+  // nunca projeta nada, então nunca é ele). Ver App.vue#handleRemoteRequest.
+  if (p === '/api/soundmaster-state') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const r = await requestRenderer('soundmaster-state', {});
+    return sendJson(res, 200, r.ok
+      ? { status: 'ok', pads: r.pads || [], nowPlaying: r.nowPlaying || {} }
+      : { status: 'error', code: r.code || 'ERROR' });
+  }
+
+  if (p === '/api/soundmaster-control') {
+    if (!isAuthed(url.searchParams)) return sendJson(res, 200, { status: 'error', code: 'INVALID_TOKEN' });
+    const action = url.searchParams.get('action') || '';
+    const padId  = url.searchParams.get('padId');
+    const value  = url.searchParams.get('value');
+    const r = await requestRenderer('soundmaster-control', {
+      action,
+      padId: padId != null ? Number(padId) : undefined,
+      value: value != null ? Number(value) : undefined,
+    });
     return sendJson(res, 200, r.ok ? { status: 'ok' } : { status: 'error', code: r.code || 'ERROR' });
   }
 

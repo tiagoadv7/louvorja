@@ -17,12 +17,16 @@
       <!-- Aba "Online" projeta como o pseudo-módulo "web_link" (ver
            helpers/WebLink.js), não como "video_player" — precisa dos botões
            de tela/retorno próprios, senão eles ficariam mostrando/controlando
-           o estado errado (vídeo local) enquanto um link estivesse ativo. -->
+           o estado errado (vídeo local) enquanto um link estivesse ativo.
+           SoundMaster não tem botões de tela/retorno: é só áudio, não
+           projeta nada na saída (ver SoundMasterPanel.vue) — mostrar
+           "Apresentar"/"Retorno" ali sugeriria que dá pra projetar um pad de
+           áudio, o que nunca fez sentido. -->
       <template v-if="activeTab === 'online'">
         <LScreenBtn module="web_link" />
         <LReturnScreenBtn module="web_link" />
       </template>
-      <template v-else>
+      <template v-else-if="activeTab !== 'soundmaster'">
         <LScreenBtn module="video_player" />
         <LReturnScreenBtn module="video_player" />
       </template>
@@ -246,12 +250,31 @@
         </button>
       </div>
 
-      <div class="vp-online-current" v-if="onlineConfig.url">
-        <v-icon size="16">mdi-youtube</v-icon>
-        <span class="vp-online-current-label">Carregado agora:</span>
-        <span class="vp-online-current-url" :title="onlineConfig.url">{{ onlineConfig.url }}</span>
+      <!-- ── Fila de links (fica salva mesmo depois de carregar outro) ─────── -->
+      <div class="vp-playlist">
+        <div class="vp-playlist-head">
+          <div class="vp-playlist-title">Fila de Links</div>
+          <div class="vp-playlist-sub">Cole o link acima e clique em "Carregar" para adicionar à fila</div>
+        </div>
+
+        <div class="vp-playlist-body">
+          <div v-if="!onlinePlaylist.length" class="vp-playlist-empty">Nenhum link na fila</div>
+          <div
+            v-for="item in onlinePlaylist" :key="item.id"
+            :class="['vp-playlist-item', { 'vp-playlist-item--active': onlineConfig.currentId === item.id }]"
+            @click="selectOnlineItem(item)"
+          >
+            <v-icon size="16" class="vp-playlist-icon">{{ item.videoId ? 'mdi-youtube' : 'mdi-web' }}</v-icon>
+            <div class="vp-playlist-name" :title="item.rawUrl">{{ item.name }}</div>
+            <button class="vp-playlist-rename" title="Renomear" @click.stop="renameOnlineItem(item)">
+              <v-icon size="13">mdi-pencil-outline</v-icon>
+            </button>
+            <button class="vp-playlist-del" title="Remover da fila" @click.stop="removeFromOnlinePlaylist(item)">
+              <v-icon size="13">mdi-close</v-icon>
+            </button>
+          </div>
+        </div>
       </div>
-      <div v-else class="vp-playlist-empty" style="padding-top:40px">Nenhum link carregado</div>
 
       <div class="vp-transport" v-if="onlineConfig.videoId">
         <button class="vp-tp-btn vp-tp-btn--play" @click="toggleOnlinePlay">
@@ -400,6 +423,12 @@ export default {
     // ── Aba "Online" — mesma config compartilhada que a Liturgia já lê/grava
     // via $webLink (modules.web_link.config), ver helpers/WebLink.js.
     onlineConfig() { return this.$webLink.getConfig(); },
+    // Fila de links (YouTube/Canva) — mesmo padrão get/set de "playlist" acima
+    // (vídeo local), só que apoiada em $webLink em vez de $videoPlayer.
+    onlinePlaylist: {
+      get() { return this.$webLink.getPlaylist(); },
+      set(v) { this.$webLink.setPlaylist(v); },
+    },
 
     // "Mídia" (video_player) e "Overlay de Imagem" (image_overlay) continuam
     // sendo dois módulos registrados de verdade, cada um com seu próprio
@@ -564,6 +593,17 @@ export default {
     toggleOnlinePlay() { this.$webLink.togglePlay(); },
     stopOnline() { this.$webLink.stop(); },
     setOnlineVolume(v) { this.$webLink.setVolume(Number(v)); },
+    selectOnlineItem(item) { this.$webLink.selectPlaylistItem(item); },
+    removeFromOnlinePlaylist(item) { this.$webLink.removeFromPlaylist(item.id); },
+    // Mesmo padrão de renameSong/renameCollection (custom_collections/interface/Index.vue#askName)
+    // — edita só o nome exibido na fila, sem tocar na URL guardada no item.
+    async renameOnlineItem(item) {
+      const name = await new Promise((resolve) => {
+        this.$alert.prompt({ title: 'Renomear link', translate: false, input_default: item.name }, resolve);
+      });
+      if (!name) return;
+      this.$webLink.renamePlaylistItem(item.id, name);
+    },
 
     // Prévia de PDF no painel do operador — mesma renderização da projeção
     // (ver PdfRenderer/Popup.vue), só que numa escala menor (é só uma
@@ -629,17 +669,30 @@ export default {
     // fechar (X) ou Esc realmente encerra a reprodução (ver close() acima).
     // O mini player flutuante (PIP) é sempre uma ação manual e separada
     // (botão dedicado) — nunca some/aparece sozinho junto do minimizar, pra
-    // não nascer sem o operador ter pedido. Minimiza o Overlay de Imagem e o
-    // SoundMaster junto — mesma janela agora. Minimizado (ao contrário de
-    // fechado) mantém o overlay ativo na saída mesmo com o painel escondido
-    // (ver isActive em image_overlay/interface/Popup.vue), e mantém
-    // `modules.soundmaster.minimized=true` pra barra do rodapé continuar
-    // mostrando o mini-player enquanto toca (ver Footer.vue#soundmasterActive,
-    // que depende exatamente dessa flag).
+    // não nascer sem o operador ter pedido. Minimiza o Overlay de Imagem
+    // junto — mesma janela agora. Minimizado (ao contrário de fechado)
+    // mantém o overlay ativo na saída mesmo com o painel escondido (ver
+    // isActive em image_overlay/interface/Popup.vue).
     onMinimize() {
       this.$modules.minimize(this.module_id);
       this.$modules.minimize('image_overlay');
-      this.$modules.minimize('soundmaster');
+      // SoundMaster NÃO usa $modules.minimize('soundmaster') aqui de
+      // propósito — esse helper (ver helpers/Modules.js) também cria um
+      // ícone dele na bandeja (TrayArea), e clicar nesse ícone só religava
+      // "modules.soundmaster.show" sem abrir janela nenhuma: SoundMaster não
+      // tem Index.vue próprio (mesmo padrão vazio de
+      // image_overlay/interface/Index.vue) — a UI real dele só existe dentro
+      // desta janela "Mídia", na aba "SoundMaster". Minimizar tinha então o
+      // efeito de "separar" o SoundMaster da Mídia (virava seu próprio ícone
+      // na bandeja, oposto do esperado — SoundMaster deve reabrir junto da
+      // Mídia, igual a Vídeo/Online/Overlay). Grava só os dois campos que o
+      // resto do app realmente lê (`minimized` pro mini-player do rodapé, ver
+      // Footer.vue#soundmasterActive; `show` pro watch de 'module.show'
+      // abaixo religar os dois ao reabrir a Mídia) sem passar pela bandeja.
+      this.$appdata.setMultiple([
+        ['modules.soundmaster.minimized', true],
+        ['modules.soundmaster.show', false],
+      ]);
     },
 
     // ═══════════════ Aba "Overlay de Imagem" ═══════════════════════════════
@@ -988,6 +1041,20 @@ export default {
   text-overflow: ellipsis;
 }
 .vp-playlist-dur { font-size: 11.5px; color: rgba(var(--v-theme-on-surface), 0.5); white-space: nowrap; }
+.vp-playlist-rename {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.vp-playlist-rename:hover { color: rgb(var(--v-theme-primary)); }
 .vp-playlist-del {
   width: 22px;
   height: 22px;

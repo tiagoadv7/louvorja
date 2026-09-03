@@ -17,6 +17,26 @@
       />
     </div>
 
+    <!-- ── Recentes (playlists salvas/carregadas, mais nova primeiro) ────── -->
+    <div v-if="recentPlaylists.length" class="sm-recents-row">
+      <v-icon size="14" class="sm-recents-icon">mdi-clock-outline</v-icon>
+      <span class="sm-recents-label">Recentes:</span>
+      <div class="sm-recents-scroll">
+        <button
+          v-for="rec in recentPlaylists" :key="rec.id"
+          class="sm-recent-chip"
+          :title="rec.name"
+          @click="loadRecent(rec)"
+        >
+          <span class="sm-recent-name">{{ rec.name }}</span>
+          <span class="sm-recent-date">{{ rec.date }}</span>
+          <span class="sm-recent-remove" title="Remover" @click.stop="removeRecent(rec)">
+            <v-icon size="11">mdi-close</v-icon>
+          </span>
+        </button>
+      </div>
+    </div>
+
     <!-- ── FX row ──────────────────────────────────────────────────────── -->
     <div class="sm-fx-row">
       <div
@@ -189,6 +209,28 @@ function fmt(s) {
   return `${String(m).padStart(2, '0')}:${sec}`;
 }
 
+// Aplica um snapshot salvo (ver savePads/_buildSnapshot) por cima dos pads
+// "em branco" de makePads(), casando por id — usado tanto na restauração
+// automática (autosave, ver mounted()) quanto ao carregar uma playlist
+// (arquivo .smp ou "Recentes"). fileUrl é sempre recalculado a partir de
+// filePath (nunca persistido) — mesmo motivo de VideoPlayer.js: é derivado,
+// recalcular é mais barato que manter os dois sincronizados.
+function applySavedPads(basePads, saved) {
+  if (!Array.isArray(saved)) return basePads;
+  return basePads.map((p) => {
+    const s = saved.find((x) => x.id === p.id);
+    if (!s) return p;
+    return {
+      ...p,
+      name: s.name || '',
+      filePath: s.filePath || null,
+      fileUrl: s.filePath ? toFileUrl(s.filePath) : null,
+      volume: s.volume ?? 1,
+      isLooping: s.isLooping ?? false,
+    };
+  });
+}
+
 export default {
   name: 'SoundMasterPanel',
   // "active" = aba SoundMaster selecionada no momento (ver video_player/
@@ -220,6 +262,13 @@ export default {
     isPlaying:     false,
     dragOverId:    null,
     showSettings:  false,
+    // Índice das últimas playlists salvas/carregadas (nome + data), igual à
+    // faixa "Recentes" do soundmaster-pro (ver App.tsx de lá) — cada entrada
+    // só guarda {id,name,date}; os pads de verdade ficam em
+    // "recent_playlist_data_<id>" (ver _addRecent), carregados só quando o
+    // operador clica no item.
+    recentPlaylists: [],
+    _padsSaveTimer: null,
     _mainAudio:    null,
     _fxAudios:     {},
     _fades:        {},
@@ -294,6 +343,26 @@ export default {
         this.masterVolume = Math.max(0, Math.min(1, (cmd.value ?? 100) / 100));
         this.userdata.master_volume = this.masterVolume;
         this.applyVolumes();
+      // Vindos do controle remoto (electron/remote_server.js#soundmaster-control,
+      // ver App.vue#handleRemoteRequest) — mesmo canal de comando de fora, só
+      // com ações novas: tocar um pad específico pelo id (lista visível no
+      // celular) e ligar/ajustar o atenuador (talkover) remotamente.
+      //
+      // "play_pad" NÃO reaproveita onMainPadClick() direto: pad vazio ali abre
+      // o seletor de arquivo nativo (pickFile) — abrir esse diálogo sozinho no
+      // computador só porque alguém tocou num slot vazio no celular seria um
+      // efeito bem inesperado. Silenciosamente ignora pads vazios/inexistentes.
+      } else if (cmd.action === 'play_pad') {
+        const pad = this.mainPads.find(p => p.id === cmd.padId);
+        if (!pad || !pad.fileUrl) return;
+        if (this.activeMainId === pad.id) this.stopMain();
+        else this.playMain(pad);
+      } else if (cmd.action === 'talkover_toggle') {
+        this.toggleTalkover();
+      } else if (cmd.action === 'ducking_level') {
+        this.duckingLevel = Math.max(0, Math.min(1, (cmd.value ?? 0) / 100));
+        this.userdata.ducking_level = this.duckingLevel;
+        if (this.isTalkover || this.activeFxIds.size > 0) this._applySmooth(200);
       }
     },
     // Espelha o essencial do "now playing" em $appdata — os pads/estado de
@@ -305,9 +374,37 @@ export default {
     isPlaying(v) {
       this.$appdata.set('modules.soundmaster.now_playing.playing', v);
     },
+    // activeMainId/isTalkover/duckingLevel: espelhados pelo mesmo motivo — o
+    // controle remoto (aba SoundMaster) precisa saber qual pad está tocando
+    // e o estado do atenuador sem acesso à instância deste componente.
+    activeMainId(id) {
+      this.$appdata.set('modules.soundmaster.now_playing.active_pad_id', id);
+    },
+    isTalkover(v) {
+      this.$appdata.set('modules.soundmaster.now_playing.is_talkover', v);
+    },
+    duckingLevel(v) {
+      this.$appdata.set('modules.soundmaster.now_playing.ducking_level', v * 100);
+    },
     masterVolume(v) {
       this.$appdata.set('modules.soundmaster.now_playing.volume', v * 100);
     },
+    // Autosave dos pads (qual áudio está em cada slot) + espelho pra UI
+    // remota (só o que ela precisa pra mostrar/tocar — nunca o filePath, que
+    // é um caminho local do computador do operador) — um único watcher (não
+    // dois "mainPads" separados: chave de objeto duplicada, o segundo
+    // sobrescreveria o primeiro) — deep porque os pads são mutados em campo
+    // (assignFile/clearPad), não substituídos. immediate: cobre o pad já
+    // preenchido pelo autosave antes deste watch existir (ver mounted()).
+    mainPads: {
+      deep: true,
+      immediate: true,
+      handler(pads) {
+        this._schedulePadsSave();
+        this.$appdata.set('modules.soundmaster.pads_list', pads.map(p => ({ id: p.id, name: p.name, hasFile: !!p.fileUrl })));
+      },
+    },
+    fxPads: { deep: true, handler() { this._schedulePadsSave(); } },
   },
 
   mounted() {
@@ -315,6 +412,14 @@ export default {
     this.fadeOutMs    = this.userdata.fade_out_ms   ?? 2500;
     this.duckingLevel = this.userdata.ducking_level ?? 0.15;
     this.masterVolume = this.userdata.master_volume ?? 1.0;
+
+    // Restaura os pads (qual áudio foi importado em cada um) da última
+    // sessão — sem isso, os 10 pads principais + 10 de FX sempre voltavam
+    // vazios ao reabrir o app, mesmo já tendo sido preenchidos antes (só
+    // playlists salvas explicitamente em .smp sobreviviam a um restart).
+    this.mainPads = applySavedPads(this.mainPads, this.userdata.autosave_main_pads);
+    this.fxPads   = applySavedPads(this.fxPads,   this.userdata.autosave_fx_pads);
+    this.recentPlaylists = this.userdata.recent_playlists || [];
 
     this._keyHandler = (e) => {
       if (!this.active) return;
@@ -353,6 +458,7 @@ export default {
   beforeUnmount() {
     this.stopAllImmediate();
     clearInterval(this._ticker);
+    clearTimeout(this._padsSaveTimer);
     if (this._keyHandler) window.removeEventListener('keydown', this._keyHandler);
     $audioBus.unlisten(this._focusHandler);
   },
@@ -660,18 +766,70 @@ export default {
       else { clearInterval(this._fades[`fx${id}`]); done(); }
     },
 
-    async savePlaylist() {
-      this.userdata.fade_in_ms    = this.fadeInMs;
-      this.userdata.fade_out_ms   = this.fadeOutMs;
-      this.userdata.ducking_level = this.duckingLevel;
-      const data = JSON.stringify({
+    // Grava os pads atuais em userdata (debounced) — restaurado em mounted()
+    // via applySavedPads(), sem precisar de "Salvar playlist" explícito.
+    _schedulePadsSave() {
+      clearTimeout(this._padsSaveTimer);
+      this._padsSaveTimer = setTimeout(() => {
+        this.userdata.autosave_main_pads = this.mainPads.map(p => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping }));
+        this.userdata.autosave_fx_pads   = this.fxPads.map(p  => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping }));
+      }, 400);
+    },
+
+    _buildSnapshot() {
+      return {
         version: '1.0',
+        createdAt: new Date().toISOString(),
         settings: { fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs, duckingLevel: this.duckingLevel, masterVolume: this.masterVolume },
         mainPads: this.mainPads.map(p => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
         fxPads:   this.fxPads.map(p  => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
-      }, null, 2);
-      const fp = await this.$electron.saveDialog({ title: 'Salvar playlist', defaultPath: 'playlist.smp', filters: [{ name: 'SoundMaster', extensions: ['smp'] }] });
-      if (fp) await this.$electron.writeFile(fp, data);
+      };
+    },
+    _applySnapshot(data) {
+      if (data.settings) Object.assign(this, {
+        fadeInMs:     data.settings.fadeInMs     ?? this.fadeInMs,
+        fadeOutMs:    data.settings.fadeOutMs    ?? this.fadeOutMs,
+        duckingLevel: data.settings.duckingLevel ?? this.duckingLevel,
+        masterVolume: data.settings.masterVolume ?? this.masterVolume,
+      });
+      this.mainPads = applySavedPads(this.mainPads, data.mainPads);
+      this.fxPads   = applySavedPads(this.fxPads,   data.fxPads);
+    },
+
+    // Índice "Recentes" (nome + data, mais novo primeiro, máximo 5 — mesmo
+    // limite do soundmaster-pro) — o snapshot completo (pads/settings) fica
+    // guardado à parte, numa chave por id, só carregado quando o operador
+    // clica no item (ver loadRecent), igual ao cache em duas camadas de lá.
+    _addRecent(name) {
+      const id = Date.now().toString();
+      const list = [{ id, name, date: new Date().toLocaleString('pt-BR') }, ...this.recentPlaylists.filter(r => r.name !== name)].slice(0, 5);
+      this.recentPlaylists = list;
+      this.userdata.recent_playlists = list;
+      this.userdata[`recent_playlist_data_${id}`] = this._buildSnapshot();
+    },
+    loadRecent(record) {
+      const data = this.userdata[`recent_playlist_data_${record.id}`];
+      if (!data) { this.$alert?.error?.({ text: `Playlist "${record.name}" não encontrada.` }); return; }
+      this._applySnapshot(data);
+    },
+    removeRecent(record) {
+      this.recentPlaylists = this.recentPlaylists.filter(r => r.id !== record.id);
+      this.userdata.recent_playlists = this.recentPlaylists;
+      this.userdata[`recent_playlist_data_${record.id}`] = null;
+    },
+
+    async savePlaylist() {
+      const name = await new Promise((resolve) => {
+        this.$alert.prompt({ title: 'Salvar playlist', translate: false, input_default: 'Minha Playlist' }, resolve);
+      });
+      if (!name) return;
+      this.userdata.fade_in_ms    = this.fadeInMs;
+      this.userdata.fade_out_ms   = this.fadeOutMs;
+      this.userdata.ducking_level = this.duckingLevel;
+      const snapshot = this._buildSnapshot();
+      this._addRecent(name);
+      const fp = await this.$electron.saveDialog({ title: 'Salvar playlist', defaultPath: `${name}.smp`, filters: [{ name: 'SoundMaster', extensions: ['smp'] }] });
+      if (fp) await this.$electron.writeFile(fp, JSON.stringify(snapshot, null, 2));
     },
 
     async loadPlaylist() {
@@ -679,22 +837,8 @@ export default {
       if (!fp) return;
       try {
         const data = JSON.parse(await this.$electron.readFile(fp, 'utf-8'));
-        if (data.settings) Object.assign(this, {
-          fadeInMs:     data.settings.fadeInMs     ?? this.fadeInMs,
-          fadeOutMs:    data.settings.fadeOutMs    ?? this.fadeOutMs,
-          duckingLevel: data.settings.duckingLevel ?? this.duckingLevel,
-          masterVolume: data.settings.masterVolume ?? this.masterVolume,
-        });
-        (data.mainPads || []).forEach(s => {
-          const p = this.mainPads.find(x => x.id === s.id);
-          if (!p) return;
-          Object.assign(p, { name: s.name || '', filePath: s.filePath || null, fileUrl: s.filePath ? toFileUrl(s.filePath) : null, volume: s.volume ?? 1, isLooping: s.isLooping ?? false });
-        });
-        (data.fxPads || []).forEach(s => {
-          const p = this.fxPads.find(x => x.id === s.id);
-          if (!p) return;
-          Object.assign(p, { name: s.name || '', filePath: s.filePath || null, fileUrl: s.filePath ? toFileUrl(s.filePath) : null, volume: s.volume ?? 1, isLooping: s.isLooping ?? false });
-        });
+        this._applySnapshot(data);
+        this._addRecent(fp.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''));
       } catch (e) { this.$alert?.error?.({ text: 'Erro ao carregar: ' + String(e) }); }
     },
   },
@@ -722,6 +866,72 @@ export default {
   flex-shrink: 0;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
+
+/* ─── Recentes ────────────────────────────────────────────────────── */
+.sm-recents-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  min-width: 0;
+}
+.sm-recents-icon { opacity: 0.45; flex-shrink: 0; }
+.sm-recents-label {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  flex-shrink: 0;
+}
+.sm-recents-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;
+}
+.sm-recent-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 3px 22px 3px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.10);
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 150px;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sm-recent-chip:hover { background: rgba(99, 102, 241, 0.1); border-color: #6366f1; }
+.sm-recent-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.sm-recent-date {
+  font-size: 9.5px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+.sm-recent-remove {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sm-recent-chip:hover .sm-recent-remove { opacity: 1; }
+.sm-recent-remove:hover { color: #e53935; }
 
 /* ─── FX row ──────────────────────────────────────────────────────── */
 .sm-fx-row {

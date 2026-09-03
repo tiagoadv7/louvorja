@@ -65,8 +65,21 @@ export default {
     },
   },
   methods: {
+    // Vídeo e o link do YouTube (Online) têm fade próprio de áudio+visual
+    // (ver stop() em helpers/VideoPlayer.js e helpers/WebLink.js) — sem
+    // chamar isso ANTES do $popup.close() abaixo, o áudio continuava tocando
+    // em volume cheio por baixo do crossfade visual da janela de saída
+    // (~1s, ver views/Popup.vue) e cortava de repente só quando o elemento
+    // era desmontado, em vez de esmaecer junto com a imagem. Outros módulos
+    // (Bíblia, Relógio, Sorteio...) não têm áudio próprio — não precisam
+    // disso.
+    _stopModuleAudioSmoothly() {
+      if (this.module === "video_player") this.$videoPlayer.stop();
+      else if (this.module === "web_link") this.$webLink.stop();
+    },
     popup() {
       if (this.is_selected) {
+        this._stopModuleAudioSmoothly();
         this.$popup.close();
         return;
       }

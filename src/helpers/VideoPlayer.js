@@ -164,9 +164,20 @@ export default {
     return item;
   },
 
+  // Abre a projeção PRINCIPAL, a menos que o operador já tenha marcado
+  // "Retorno" pra este vídeo ANTES de dar play sem também marcar a
+  // Principal (ver components/buttons/ReturnScreen.vue e Screen.vue) — isso
+  // sinaliza que a intenção é mandar só pro monitor de palco, não pra tela
+  // principal. O espelho do retorno (video_player/components/Screen.vue) lê
+  // direto de modules.video_player.config, então funciona sem precisar da
+  // janela de saída principal aberta — só NÃO chamar $popup.open aqui já
+  // basta pra não abrir a principal. Pra mandar pros dois, o operador clica
+  // o botão de Tela também (helpers/Popup.js#open), a qualquer momento.
   ensureOutputShowing() {
     const alreadyOpen = $appdata.get("popup") && $appdata.get("popup_module") === "video_player";
-    if (!alreadyOpen) $popup.open("video_player");
+    if (alreadyOpen) return;
+    if ($appdata.get("return_popup_module") === "video_player") return;
+    $popup.open("video_player");
   },
 
   isMinimized() {
@@ -222,20 +233,20 @@ export default {
   // loop:false — o "Repetir" é por sessão de reprodução, não deve vazar de um
   // vídeo para o próximo só porque ficou marcado em algum item anterior.
   //
-  // Se a projeção já estiver selecionada neste módulo (mesma checagem do
-  // botão de tela — ver Screen.vue "is_selected"), o item aparece/toca direto
-  // na saída ao ser selecionado, sem precisar clicar no botão de novo. Imagem
-  // já aparece sozinha (Popup.vue não depende de isPlaying pra exibi-la); aqui
-  // só falta o vídeo também tocar automaticamente pra ter o mesmo comportamento.
+  // isPlaying sempre false: clicar num item da fila só CARREGA/seleciona ele
+  // (aparece na prévia do painel, some/troca o que estiver sendo mostrado na
+  // saída caso já esteja projetando), mas nunca começa a tocar sozinho — só o
+  // botão de Play explícito (togglePlay) inicia a reprodução de verdade.
+  // Antes, se a projeção já estivesse ligada neste módulo, selecionar
+  // qualquer item disparava o play na hora, sem o operador ter pedido isso.
   selectPlaylistItem(item) {
     const mediaType = item.mediaType || resolveMediaType(item.path);
-    const isProjecting = $appdata.get("popup") && $appdata.get("popup_module") === "video_player";
     this.setConfig({
       src: item.src, path: item.path, name: item.name, currentId: item.id,
       mediaType,
       rotation: item.rotation || 0,
       flip: !!item.flip,
-      isPlaying: isProjecting && mediaType === "video", currentTime: 0, duration: item.duration || 0,
+      isPlaying: false, currentTime: 0, duration: item.duration || 0,
       loop: false,
       pdfPage: 1,
       pdfPageCount: mediaType === "pdf" ? (item.pdfPageCount || 0) : 0,

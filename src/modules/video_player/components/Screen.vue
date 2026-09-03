@@ -12,7 +12,7 @@
       ref="video"
       :src="renderedSrc"
       :loop="config.loop"
-      muted
+      :muted="mainAlsoShowing"
       class="vps-media"
       :style="mediaStyle"
       @loadedmetadata="onLoadedMetadata"
@@ -23,10 +23,9 @@
 <script>
 // Espelho simplificado do módulo Vídeo para o monitor de retorno — mesma
 // config compartilhada de @/helpers/VideoPlayer (ver interface/Popup.vue,
-// que é a janela de saída "de verdade"), mas sem áudio (sempre mudo: quem
-// está no palco já ouve o som pela saída principal) e sem nenhum dos efeitos
-// colaterais dessa janela (fade de volume, pedido de foco no AudioBus, envio
-// de progresso por IPC, ESC fechando a projeção) — aqui é só visualização.
+// que é a janela de saída "de verdade"), sem nenhum dos efeitos colaterais
+// dessa janela (pedido de foco no AudioBus, envio de progresso por IPC, ESC
+// fechando a projeção) — aqui é só visualização. Áudio: ver mainAlsoShowing.
 export default {
   name: 'VideoPlayerScreen',
 
@@ -40,6 +39,17 @@ export default {
     },
     isActive() {
       return !!this.config.src;
+    },
+    // Mudo só quando a saída PRINCIPAL também está mostrando este vídeo
+    // (mesmo appdata, mesma reprodução) — nesse caso o som já sai por lá, e
+    // tocar aqui também duplicaria o áudio. Quando o operador manda o vídeo
+    // SÓ pro retorno (ver helpers/VideoPlayer.js#ensureOutputShowing — botão
+    // de "Retorno" marcado sem "Tela" também marcada), a principal nunca
+    // chega a abrir: este é o ÚNICO lugar tocando o vídeo, então precisa do
+    // próprio som — mudo sempre, nesse caso, tocava a projeção sem áudio em
+    // lugar nenhum.
+    mainAlsoShowing() {
+      return this.$appdata.get('popup_module') === 'video_player';
     },
     mediaStyle() {
       const rotation = this.config.rotation || 0;
@@ -66,6 +76,13 @@ export default {
       el.pause();
       el.currentTime = 0;
     },
+    // Volume nunca importava enquanto o elemento ficava sempre mudo — agora
+    // que ele pode tocar com som de verdade (ver mainAlsoShowing), precisa
+    // acompanhar o volume configurado no painel, igual à saída principal.
+    'config.volume'(v) {
+      const el = this.$refs.video;
+      if (el) el.volume = (v ?? 100) / 100;
+    },
     // Seek vindo do controle remoto (Index.vue) — mesma tolerância de
     // interface/Popup.vue, pra não entrar em loop com o próprio timeupdate.
     'config.currentTime'(t) {
@@ -77,7 +94,9 @@ export default {
   methods: {
     onLoadedMetadata() {
       const el = this.$refs.video;
-      if (el && this.config.isPlaying) el.play().catch(() => {});
+      if (!el) return;
+      el.volume = (this.config.volume ?? 100) / 100;
+      if (this.config.isPlaying) el.play().catch(() => {});
     },
   },
 
@@ -94,7 +113,12 @@ export default {
   position: relative;
   width: 100%;
   height: 100%;
-  background: #000;
+  /* Transparente igual à janela de saída principal (ver .vp-popup-root em
+     interface/Popup.vue) — antes era preto sólido, então a área fora do
+     vídeo (barras do object-fit: contain) e o instante antes de escolher
+     pra onde mandar a reprodução ficavam pretas em vez de deixar ver o que
+     está atrás (monitor de palco). */
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;

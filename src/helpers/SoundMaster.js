@@ -38,10 +38,35 @@ export default {
   // Estado "now playing" espelhado em $appdata pelo próprio componente
   // (os pads vivem como estado local dele) — usado pela barra do rodapé
   // para mostrar faixa/tempo/volume sem precisar da instância do componente.
+  // active_pad_id/is_talkover/ducking_level: usados pelo controle remoto
+  // (ver electron/remote_server.js#soundmaster-state) pra saber qual pad
+  // destacar e o estado do atenuador sem acesso à instância do componente.
   nowPlaying() {
     return $appdata.get("modules.soundmaster.now_playing", {
       name: "", playing: false, current_time: 0, duration: 0, progress: 0, volume: 100,
+      active_pad_id: null, is_talkover: false, ducking_level: 15,
     });
+  },
+
+  // Lista dos 10 pads principais (só id/name/hasFile — nunca o filePath, que
+  // é um caminho local do computador do operador) — espelhada pelo
+  // componente (ver SoundMasterPanel.vue#watch.mainPads) pra alimentar o
+  // controle remoto sem acesso à instância dele.
+  getPads() {
+    return $appdata.get("modules.soundmaster.pads_list", []);
+  },
+  // Toca (ou para, se já for o pad ativo) um pad específico pelo id — usado
+  // pelo controle remoto ao tocar num item da lista de pads no celular.
+  playPad(id) {
+    this._command("play_pad", { padId: id });
+  },
+  toggleTalkover() {
+    this._command("talkover_toggle");
+  },
+  // vol em 0-100 (mesma escala de setVolume) — nível de atenuação aplicado ao
+  // pad principal enquanto o atenuador ou algum FX estiver ativo.
+  setDuckingLevel(vol) {
+    this._command("ducking_level", { value: vol });
   },
 
   isMinimized() {
