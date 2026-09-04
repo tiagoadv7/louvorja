@@ -386,21 +386,21 @@ function resolveOutputDisplay(displayId) {
   const savedBounds  = displayId ? null : Store.get('output_display_bounds');
 
   let target = findSavedDisplay(allDisplays, targetId, savedBounds);
-  const matched = !!target;
-  if (!target) target = largestExternalDisplay(allDisplays, primary) || primary;
-
-  if (displayId) {
-    Store.set('output_display_id', displayId);
-    Store.set('output_display_bounds', target.bounds);
-  } else if (matched && targetId) {
-    // Mantém os bounds salvos atualizados (ex.: monitor mudou de resolução
-    // mas continua sendo fisicamente o mesmo), pro match por bounds continuar
-    // valendo se o id mudar numa próxima reconexão.
-    Store.set('output_display_bounds', target.bounds);
-  } else if (targetId && !matched) {
-    console.warn(`[Display] Monitor de saída salvo (id ${targetId}) não encontrado — usando fallback.`);
-    sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'output' });
+  if (!target) {
+    if (targetId) {
+      console.warn(`[Display] Monitor de saída salvo (id ${targetId}) não encontrado — usando fallback.`);
+      sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'output' });
+    }
+    target = largestExternalDisplay(allDisplays, primary) || primary;
   }
+
+  // Sempre grava o monitor de fato usado (escolhido, reconhecido por bounds
+  // OU fallback) — não só quando há uma escolha explícita. É essa memória
+  // (id + bounds, mesmo critério de findSavedDisplay) que o boot usa pra
+  // "reconhecer" o mesmo arranjo de monitores da vez anterior (ver
+  // ipcMain.once('app:loaded')) e decidir se restaura a projeção sozinho.
+  Store.set('output_display_id', target.id);
+  Store.set('output_display_bounds', target.bounds);
 
   return { target, isExternal: target.id !== primary.id };
 }
@@ -497,8 +497,12 @@ function createOutputWindow(moduleId, displayId) {
 }
 
 // Mesmo papel de resolveOutputDisplay() (mesmo fallback por bounds — ver
-// findSavedDisplay), para o monitor de retorno — mas sem preferência por
-// monitor externo no fallback final: cai direto pro primário.
+// findSavedDisplay E mesma preferência por monitor externo no fallback
+// final, senão primário) — sem isso, a primeira vez que o operador clica
+// em "Ativar Retorno" (ReturnScreen.vue) sem nunca ter escolhido o monitor
+// no seletor caía direto pro monitor primário, cobrindo a tela do próprio
+// operador com uma janela fullscreen sem moldura, mesmo havendo um monitor
+// externo conectado.
 function resolveReturnDisplay(displayId) {
   const allDisplays = screen.getAllDisplays();
   const primary     = screen.getPrimaryDisplay();
@@ -507,18 +511,18 @@ function resolveReturnDisplay(displayId) {
   const savedBounds = displayId ? null : Store.get('return_display_bounds');
 
   let target = findSavedDisplay(allDisplays, targetId, savedBounds);
-  const matched = !!target;
-  if (!target) target = primary;
-
-  if (displayId) {
-    Store.set('return_display_id', displayId);
-    Store.set('return_display_bounds', target.bounds);
-  } else if (matched && targetId) {
-    Store.set('return_display_bounds', target.bounds);
-  } else if (targetId && !matched) {
-    console.warn(`[Display] Monitor de retorno salvo (id ${targetId}) não encontrado — usando fallback.`);
-    sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'return' });
+  if (!target) {
+    if (targetId) {
+      console.warn(`[Display] Monitor de retorno salvo (id ${targetId}) não encontrado — usando fallback.`);
+      sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'return' });
+    }
+    target = largestExternalDisplay(allDisplays, primary) || primary;
   }
+
+  // Sempre grava o monitor de fato usado — mesmo motivo de resolveOutputDisplay
+  // (permite ao boot reconhecer o mesmo arranjo de monitores da vez anterior).
+  Store.set('return_display_id', target.id);
+  Store.set('return_display_bounds', target.bounds);
 
   return { target };
 }
@@ -928,16 +932,24 @@ function registerIpcHandlers() {
     // createOutputWindow reabrir igual estava (o monitor já é resolvido via
     // "output_display_id", que createOutputWindow já lê sozinho).
     //
-    // Só restaura se houver um monitor de saída de verdade (externo)
-    // conectado agora — sem essa checagem, num computador com um só monitor
-    // (projetor desligado/desconectado, ou sessão de admin sem monitor de
-    // saída nenhum), resolveOutputDisplay() caía no fallback pro monitor
-    // PRIMÁRIO e a janela de saída (sem moldura, sempre no topo) cobria a
-    // tela toda do operador sozinha, sem ele ter pedido isso nessa sessão.
+    // Só restaura se o MESMO monitor salvo da vez anterior (por id, com
+    // fallback por posição/resolução — ver findSavedDisplay) estiver
+    // conectado agora, igual ao jeito que o Windows só reaplica um arranjo
+    // de monitores memorizado quando reconhece esse arranjo de volta. Não
+    // basta "existir algum monitor externo": um projetor diferente ou um só
+    // monitor (o de saída desligado/desconectado) não deve fazer a janela de
+    // saída (sem moldura, sempre no topo) cair de fallback e cobrir a tela do
+    // operador sozinha, sem ele ter pedido isso nessa sessão — nesse caso o
+    // app abre só com a janela principal, sem projetar nada.
+    const bootDisplays = screen.getAllDisplays();
     if (Store.get('output_window_was_open')) {
       const lastModule = Store.get('output_window_last_module');
-      const hasExternalDisplay = !!largestExternalDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay());
-      if (lastModule && hasExternalDisplay) {
+      const recognized = !!findSavedDisplay(
+        bootDisplays,
+        Store.get('output_display_id'),
+        Store.get('output_display_bounds')
+      );
+      if (lastModule && recognized) {
         createOutputWindow(lastModule);
         mainWindow.webContents.send('restore-output-state', lastModule);
       }
@@ -949,13 +961,18 @@ function registerIpcHandlers() {
     // (o retorno não depende de haver um módulo projetado pra existir) e não
     // manda nada pra outputWindow/mainWindow além do evento "return-window-opened"
     // que já dispara normalmente — não toca no slide/módulo que a saída principal
-    // acabou de restaurar acima. Mesma checagem de monitor externo real do
-    // bloco da saída acima — createReturnWindow é SEMPRE fullscreen, então
-    // sem essa guarda ela cobriria a tela do operador por completo (sem
-    // moldura, sem como fechar por fora) só por causa do boot, sem monitor
-    // de retorno nenhum conectado.
-    if (Store.get('return_window_was_open') && largestExternalDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay())) {
-      createReturnWindow();
+    // acabou de restaurar acima. Mesmo critério de reconhecimento do bloco da
+    // saída acima — createReturnWindow é SEMPRE fullscreen, então sem essa
+    // guarda ela cobriria a tela do operador por completo (sem moldura, sem
+    // como fechar por fora) só por causa do boot, com um arranjo de monitores
+    // diferente do memorizado.
+    if (Store.get('return_window_was_open')) {
+      const recognized = !!findSavedDisplay(
+        bootDisplays,
+        Store.get('return_display_id'),
+        Store.get('return_display_bounds')
+      );
+      if (recognized) createReturnWindow();
     }
 
     let opacity = 0;
