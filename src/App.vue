@@ -15,6 +15,9 @@
   <!-- Auto-updater -->
   <UpdateDialog ref="updater" />
 
+  <!-- Novidades da versão instalada (uma vez por versão, após atualizar) -->
+  <ReleaseNotesDialog ref="releaseNotes" />
+
   <!-- Aviso de novo conteúdo publicado -->
   <DbUpdateDialog ref="dbUpdater" @sync-requested="onDbUpdateSyncRequested" />
 
@@ -48,10 +51,11 @@ import AppLoading    from "@/layout/Loading.vue";
 import FileCheckDialog from "@/components/FileCheckDialog.vue";
 import UpdateDialog    from "@/components/UpdateDialog.vue";
 import DbUpdateDialog  from "@/components/DbUpdateDialog.vue";
+import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
 
 export default {
   name: "App",
-  components: { AppLoading, FileCheckDialog, UpdateDialog, DbUpdateDialog },
+  components: { AppLoading, FileCheckDialog, UpdateDialog, DbUpdateDialog, ReleaseNotesDialog },
 
   data: () => ({
     autoImportSnack:     false,
@@ -143,6 +147,20 @@ export default {
     //    auto-import). Diferente de antes, não baixa mais silenciosamente — só abre o
     //    diálogo de confirmação quando encontra versão nova (ver DbUpdateDialog.vue).
     setTimeout(() => this.$refs.dbUpdater?.check(), 6000);
+
+    // 4b. Mostra "novidades desta versão" uma vez por atualização — compara a
+    // versão instalada com a última que o operador já viu/dispensou (mesmo
+    // mecanismo do fork mais avançado deste app, louvorja/violin-app,
+    // ReleaseNotesDialog.vue). O check do updater (UpdateDialog, item 6 do
+    // menu) só roda 15s depois do boot em build empacotada (ver electron/
+    // updater.js#init), então não compete com este modal.
+    this.$electron.getVersion().then(async (version) => {
+      if (!version) return;
+      const skipped = await this.$electron.storeGet('skip_release_notes_version', null).catch(() => null);
+      if (skipped === version) return;
+      await this.$nextTick();
+      setTimeout(() => this.$refs.releaseNotes?.open(version), 1500);
+    }).catch(() => {});
 
     // 5. Ouve evento global para abrir o verificador de arquivos (disparado pelo Menu)
     this._syncFilesHandler = () => this.$refs.fileCheck?.open(true);

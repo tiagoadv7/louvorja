@@ -175,6 +175,7 @@ contextBridge.exposeInMainWorld('electron', {
   updaterStatus:          () => ipcRenderer.invoke('updater:status'),
   updaterSetOptions:      (opts) => ipcRenderer.invoke('updater:setOptions', opts),
   updaterOpenReleasePage: () => ipcRenderer.invoke('updater:openReleasePage'),
+  updaterGetReleaseNotes: (version) => ipcRenderer.invoke('updater:getReleaseNotes', version),
 
   // ── Telas / displays ─────────────────────────────────────────────────────
   getScreens: () => ipcRenderer.invoke('screen:get-all'),

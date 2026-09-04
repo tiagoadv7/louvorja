@@ -149,6 +149,8 @@ export default {
     isElectron() ? window.electron.updaterSetOptions(opts) : Promise.resolve(null),
   updaterOpenReleasePage: () =>
     isElectron() && window.electron.updaterOpenReleasePage(),
+  updaterGetReleaseNotes: (version) =>
+    isElectron() ? window.electron.updaterGetReleaseNotes(version) : Promise.resolve(null),
 
   // ── Arquivos de mídia locais ──────────────────────────────────────────
   mediaGetBaseFolder: () =>

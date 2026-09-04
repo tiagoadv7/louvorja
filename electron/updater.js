@@ -361,6 +361,38 @@ async function checkGithubAndSetState() {
 }
 
 /**
+ * Busca os release notes de uma versão específica (tag v<version>) — por
+ * padrão a versão INSTALADA (app.getVersion()). Usado pelo modal de
+ * novidades (ReleaseNotesDialog.vue), que mostra o changelog da versão que o
+ * operador está rodando agora — diferente de checkGithubAndSetState()
+ * acima, que busca o changelog da versão NOVA disponível pra download.
+ * Mesmo desenho do fork mais avançado deste app (louvorja/violin-app,
+ * getCurrentReleaseNotes em electron/main/updater.js).
+ *
+ * Retorna { version, name, body, bodyHtml, url } ou null se a release não
+ * existir (ex.: versão de dev sem tag publicada ainda).
+ */
+async function getCurrentReleaseNotes(version) {
+  const v = String(version || app.getVersion()).replace(/^v/, '');
+  try {
+    const release = await _request(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/v${v}`, { parseJson: true });
+    if (!release || !release.tag_name) return null;
+    const body = release.body || '';
+    const bodyHtml = body ? await renderMarkdown(body) : null;
+    return {
+      version: String(release.tag_name).replace(/^v/, ''),
+      name: release.name || release.tag_name,
+      body,
+      bodyHtml,
+      url: release.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/${release.tag_name}`,
+    };
+  } catch (e) {
+    console.warn('[updater] getCurrentReleaseNotes falhou:', e.message);
+    return null;
+  }
+}
+
+/**
  * Baixa o asset (.exe) da release pra um destino escolhido pelo usuário
  * (dialog.showSaveDialog — ver nota no topo do arquivo sobre por que isso é
  * diferente do violin-app), com progresso e retry.
@@ -574,6 +606,7 @@ function init({ channel = 'latest', autoCheck = true, autoDownload = false, useB
   ipcMain.handle('updater:status', () => status());
   ipcMain.handle('updater:setOptions', (_e, opts) => setOptions(opts));
   ipcMain.handle('updater:openReleasePage', () => openReleasePage());
+  ipcMain.handle('updater:getReleaseNotes', (_e, version) => getCurrentReleaseNotes(version));
 
   // Verifica automaticamente só em build empacotada — em dev (`npm run
   // electron:dev`, app.isPackaged=false) cada restart do processo dispararia
@@ -706,4 +739,5 @@ module.exports = {
   setOptions,
   checkGithubRelease,
   checkGithubAndSetState,
+  getCurrentReleaseNotes,
 };
