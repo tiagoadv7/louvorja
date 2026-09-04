@@ -209,6 +209,8 @@ export default {
     isElectron() ? window.electron.dbGetActualDir() : Promise.resolve(null),
   dbSetLocalFolder: (folderPath) =>
     isElectron() ? window.electron.dbSetLocalFolder(folderPath) : Promise.resolve(false),
+  dbGetVersion: () =>
+    isElectron() ? window.electron.dbGetVersion() : Promise.resolve(0),
   dbLocalExists: (filename) =>
     isElectron() ? window.electron.dbLocalExists(filename) : Promise.resolve(_bGet(filename) !== null),
   dbLocalGet: (filename) =>

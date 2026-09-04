@@ -255,6 +255,18 @@ function setupIpc(mainWindow) {
         transparent: true, backgroundColor: '#00000000',
         hasShadow: false, focusable: false,
         webPreferences: { nodeIntegration: false, contextIsolation: true },
+        show: false,
+      });
+
+      // Reforça a posição antes de exibir — no Linux (X11/Wayland), o WM
+      // costuma ignorar/sobrescrever o x/y passado no construtor pra janelas
+      // sem frame, empilhando todos os cartões no monitor primário (mesmo
+      // padrão já resolvido em createOutputWindow/createReturnWindow, ver
+      // electron/main.js).
+      win.once('ready-to-show', () => {
+        if (win.isDestroyed()) return;
+        win.setBounds({ x: cx, y: cy, width: winW, height: winH });
+        win.show();
       });
 
       const html = `<!DOCTYPE html>
@@ -457,6 +469,15 @@ function setupIpc(mainWindow) {
       console.error('[IPC] db:local-save error:', e.message);
       return false;
     }
+  });
+
+  // Versão do conteúdo já conhecida localmente (gravada por
+  // 'sqlite:check-db-update' acima) — não faz nenhuma chamada de rede, ao
+  // contrário do antigo `$database.get("config")` que dependia de uma rota
+  // remota "/config" que não existe mais na API (só `/params?type=env`, ver
+  // fetchRemoteDbVersion acima). Usado pelo rodapé só para exibição.
+  ipcMain.handle('db:get-version', () => {
+    return Store.get('content_db_version', 0);
   });
 
   ipcMain.handle('db:local-list', () => {

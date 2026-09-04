@@ -65,8 +65,7 @@ export default {
   },
   methods: {
     async loadDBVersion() {
-      const config = await this.$database.get("config");
-      this.db_version = config.version_number;
+      this.db_version = await this.$electron.dbGetVersion().catch(() => 0);
     },
     updateClock() {
       const now = new Date();

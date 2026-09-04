@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld('electron', {
   dbGetActualDir: () => ipcRenderer.invoke('db:get-actual-dir'),
   dbSetLocalFolder: (folderPath) => ipcRenderer.invoke('db:set-local-folder', folderPath),
   dbLocalExists: (filename) => ipcRenderer.invoke('db:local-exists', filename),
+  dbGetVersion: () => ipcRenderer.invoke('db:get-version'),
   dbLocalGet: (filename) => ipcRenderer.invoke('db:local-get', filename),
   dbLocalSave: (filename, data) => ipcRenderer.invoke('db:local-save', filename, data),
   dbLocalList: () => ipcRenderer.invoke('db:local-list'),
