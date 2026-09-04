@@ -294,6 +294,22 @@
           />
           <span class="vp-vol-pct">{{ onlineConfig.volume }}%</span>
         </div>
+
+        <!-- Controle de tempo (posição no vídeo do YouTube) — mesma ideia do
+             seekTo/current_time/duration que WebLink.js já expõe pros
+             atalhos de teclado (ver App.vue), só que agora visível/arrastável
+             aqui direto, igual ao LouvorJA Delphi (v26.10: "Controle de
+             play, pause, tempo e fechamento dos vídeos online"). -->
+        <div class="vp-seek-group" v-if="onlineConfig.duration > 0">
+          <span class="vp-time-text">{{ fmt(onlineConfig.current_time) }}</span>
+          <input
+            type="range" min="0" :max="onlineConfig.duration" step="1"
+            class="vp-vol-slider vp-seek-slider"
+            :value="onlineConfig.current_time"
+            @input="seekOnline($event.target.value)"
+          />
+          <span class="vp-time-text">{{ fmt(onlineConfig.duration) }}</span>
+        </div>
       </div>
     </div>
 
@@ -593,6 +609,7 @@ export default {
     toggleOnlinePlay() { this.$webLink.togglePlay(); },
     stopOnline() { this.$webLink.stop(); },
     setOnlineVolume(v) { this.$webLink.setVolume(Number(v)); },
+    seekOnline(v) { this.$webLink.seekTo(Number(v)); },
     selectOnlineItem(item) { this.$webLink.selectPlaylistItem(item); },
     removeFromOnlinePlaylist(item) { this.$webLink.removeFromPlaylist(item.id); },
     // Mesmo padrão de renameSong/renameCollection (custom_collections/interface/Index.vue#askName)
@@ -1101,6 +1118,13 @@ export default {
 .vp-vol-group { display: flex; align-items: center; gap: 6px; }
 .vp-vol-slider { width: 70px; accent-color: rgb(var(--v-theme-primary)); }
 .vp-vol-pct { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); width: 32px; }
+
+/* ── Controle de tempo (Online/YouTube) — ocupa a linha toda, embaixo dos
+     botões de play/parar/volume, pra caber uma barra mais larga que a de
+     volume (posição do vídeo é mais útil arrastável numa faixa maior). ── */
+.vp-seek-group { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; }
+.vp-seek-slider { width: auto; flex: 1; }
+.vp-time-text { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); font-family: monospace; flex-shrink: 0; }
 
 .vp-talkover-btn {
   width: 26px;
