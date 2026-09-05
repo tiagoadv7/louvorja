@@ -367,7 +367,7 @@
     <SoundMasterPanel
       v-show="activeTab === 'soundmaster'"
       ref="soundMasterPanel"
-      :active="activeTab === 'soundmaster'"
+      :active="activeTab === 'soundmaster' && module.show"
     />
   </Window>
 </template>

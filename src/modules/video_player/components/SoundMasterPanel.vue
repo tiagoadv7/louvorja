@@ -233,10 +233,11 @@ function applySavedPads(basePads, saved) {
 
 export default {
   name: 'SoundMasterPanel',
-  // "active" = aba SoundMaster selecionada no momento (ver video_player/
-  // interface/Index.vue#activeTab) — os atalhos de teclado (F1-F10, 0-9,
-  // Espaço, T, S/Escape) só devem reagir com a aba realmente visível, senão
-  // apertar "1" na aba Vídeo tocaria um pad escondido sem o operador ver.
+  // "active" = aba SoundMaster selecionada E janela "Mídia" não minimizada
+  // (ver video_player/interface/Index.vue, prop :active) — os atalhos de
+  // teclado (F1-F10, 0-9, Espaço, T, S/Escape) só devem reagir com o painel
+  // realmente visível, senão apertar "1" na aba Vídeo (ou com a janela
+  // minimizada) tocaria um pad escondido sem o operador ver.
   props: {
     active: { type: Boolean, default: false },
   },
@@ -272,6 +273,15 @@ export default {
     _mainAudio:    null,
     _fxAudios:     {},
     _fades:        {},
+    // Marca qual slot já está em fade-out de parada (ver stopMain/stopFx) —
+    // sem isso, clicar em "Parar" (ou apertar S) de novo enquanto o fade
+    // anterior ainda estava rolando reiniciava o fadeOutMs inteiro do zero a
+    // cada clique (a interval antiga era cancelada e uma nova criada do
+    // volume atual, já reduzido, até 0) — o áudio nunca terminava de
+    // silenciar se o operador insistisse no botão. Um segundo "Parar" agora
+    // é um no-op enquanto o primeiro fade ainda está em andamento.
+    _stoppingMain:  false,
+    _stoppingFxIds: new Set(),
     _ticker:       null,
     _keyHandler:   null,
     _focusHandler: null,
@@ -473,9 +483,11 @@ export default {
       return tr?.[text] ?? text;
     },
     // Mesmo fade suave do botão "Parar" (stopAll), mas aguardando o fade
-    // terminar antes de devolver — usado tanto por close() (fecha de vez)
-    // quanto por onMinimize() de video_player/interface/Index.vue (minimizar
-    // agora também encerra a reprodução, em vez de deixar tocando escondido).
+    // terminar antes de devolver — usado só por close() (fecha de vez, ver
+    // video_player/interface/Index.vue#close). Minimizar NÃO chama isto de
+    // propósito — o SoundMaster continua tocando normalmente minimizado,
+    // controlável pelo mini-player do rodapé (ver Index.vue#onMinimize e
+    // layout/Footer.vue#soundmasterActive), igual a Vídeo/Mídia.
     async stopSmooth() {
       const hasAudio = this._mainAudio || this.activeFxIds.size > 0;
       if (hasAudio && this.fadeOutMs > 0) {
@@ -688,9 +700,10 @@ export default {
       const audio = new Audio(pad.fileUrl);
       audio.loop   = pad.isLooping;
       audio.volume = 0;
-      this._mainAudio   = audio;
-      this.activeMainId = pad.id;
-      this.isPlaying    = true;
+      this._mainAudio    = audio;
+      this.activeMainId  = pad.id;
+      this.isPlaying     = true;
+      this._stoppingMain = false; // nova faixa — qualquer fade de parada anterior não se aplica mais a ela
 
       audio.addEventListener('ended', () => {
         if (this._mainAudio !== audio) return; // já foi substituído por crossfade
@@ -716,7 +729,14 @@ export default {
     stopMain(fade = true) {
       const audio = this._mainAudio;
       if (!audio) return;
+      // Já tem um fade de parada em andamento pra esta faixa — um novo clique
+      // em "Parar" (ou tecla S) enquanto isso não deve reiniciar o fadeOutMs
+      // do zero, senão insistir no botão nunca deixava o áudio silenciar de
+      // vez (ver _stoppingMain acima). stopAllImmediate() (fade=false, usado
+      // só no beforeUnmount) sempre executa, mesmo com um fade em curso.
+      if (fade && this._stoppingMain) return;
       const done = () => {
+        this._stoppingMain = false;
         audio.pause(); audio.src = '';
         if (this._mainAudio === audio) {
           this._mainAudio = null; this.activeMainId = null; this.isPlaying = false;
@@ -726,8 +746,14 @@ export default {
         }
         this.applyVolumes();
       };
-      if (fade && this.fadeOutMs > 0) this.fade('main', audio, audio.volume, 0, this.fadeOutMs, done);
-      else { clearInterval(this._fades['main']); done(); }
+      if (fade && this.fadeOutMs > 0) {
+        this._stoppingMain = true;
+        this.fade('main', audio, audio.volume, 0, this.fadeOutMs, done);
+      } else {
+        this._stoppingMain = false;
+        clearInterval(this._fades['main']);
+        done();
+      }
     },
 
     applyLoop(pad) {
@@ -748,6 +774,7 @@ export default {
       const audio = new Audio(pad.fileUrl);
       audio.volume = 0;
       this._fxAudios[pad.id] = audio;
+      this._stoppingFxIds.delete(pad.id); // nova instância — qualquer fade de parada anterior não se aplica mais a ela
       const ids = new Set(this.activeFxIds); ids.add(pad.id); this.activeFxIds = ids;
       this.applyVolumes();
       audio.addEventListener('ended', () => this.stopFx(pad.id, false));
@@ -757,13 +784,23 @@ export default {
     stopFx(id, fade = true) {
       const audio = this._fxAudios[id];
       if (!audio) return;
+      // Mesmo motivo do stopMain acima: um segundo clique/tecla enquanto o
+      // fade de parada deste pad já está em andamento é um no-op, não reinicia o timer.
+      if (fade && this._stoppingFxIds.has(id)) return;
       const done = () => {
+        this._stoppingFxIds.delete(id);
         audio.pause(); audio.src = ''; delete this._fxAudios[id];
         const ids = new Set(this.activeFxIds); ids.delete(id); this.activeFxIds = ids;
         this.applyVolumes();
       };
-      if (fade && this.fadeOutMs > 0) this.fade(`fx${id}`, audio, audio.volume, 0, this.fadeOutMs * 0.5, done);
-      else { clearInterval(this._fades[`fx${id}`]); done(); }
+      if (fade && this.fadeOutMs > 0) {
+        this._stoppingFxIds.add(id);
+        this.fade(`fx${id}`, audio, audio.volume, 0, this.fadeOutMs * 0.5, done);
+      } else {
+        this._stoppingFxIds.delete(id);
+        clearInterval(this._fades[`fx${id}`]);
+        done();
+      }
     },
 
     // Grava os pads atuais em userdata (debounced) — restaurado em mounted()

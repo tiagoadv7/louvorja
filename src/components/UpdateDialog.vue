@@ -88,17 +88,14 @@
       </v-card-text>
 
       <!-- ── Atualização disponível ── -->
-      <v-card-text v-else-if="step === 'available'" class="py-6">
-        <div class="text-center mb-5">
-          <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
-            v{{ updateInfo?.version || '?' }}
-          </v-chip>
-          <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
-        </div>
-        <div v-if="updateInfo?.releaseNotes">
-          <h3 class="upd-notes-title">Novidades desta versão</h3>
-          <div class="upd-notes text-body-2" v-html="formatChangelog(updateInfo.releaseNotes)" />
-        </div>
+      <!-- Sem changelog aqui de propósito — as novidades da versão aparecem
+           só no ReleaseNotesDialog (modal separado, exibido no boot após a
+           instalação), pra não duplicar a mesma informação em dois lugares. -->
+      <v-card-text v-else-if="step === 'available'" class="py-12 text-center">
+        <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
+          v{{ updateInfo?.version || '?' }}
+        </v-chip>
+        <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
       </v-card-text>
 
       <!-- ── Baixando ── -->
@@ -372,25 +369,6 @@ export default {
       const i = Math.floor(Math.log(bytes) / Math.log(1024));
       return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
     },
-
-    // Formata o changelog (HTML já renderizado via GitHub /markdown, ver
-    // electron/updater.js — cai pro texto cru se a renderização falhar) pro
-    // mesmo estilo do FreeShow: preserva quebra de linha e troca marcadores
-    // de lista ("- item"/"* item") por "• item" só quando ainda é texto cru
-    // (heurística simples: HTML de verdade já vem com tags "<").
-    formatChangelog(text) {
-      if (!text) return '';
-      if (/<[a-z][\s\S]*>/i.test(text)) return text; // já é HTML (renderMarkdown)
-      const escaped = String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return escaped
-        .replace(/\r\n/g, '\n')
-        .split('\n')
-        .map((line) => line.replace(/^\s*[-*]\s+/, '• '))
-        .join('<br>');
-    },
   },
 };
 </script>
@@ -403,21 +381,4 @@ export default {
   padding: 16px 18px;
 }
 
-.upd-notes-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  text-decoration: underline solid rgb(var(--v-theme-primary));
-  text-underline-offset: 3px;
-}
-
-.upd-notes {
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  border-radius: 8px;
-  padding: 12px 14px;
-  max-height: 220px;
-  overflow-y: auto;
-  line-height: 1.5;
-  word-break: break-word;
-}
 </style>
