@@ -331,6 +331,47 @@ function nudgeRepaint(win) {
   }
 }
 
+// Reforça x/y/width/height (e fullscreen, se aplicável) logo após show() e
+// continua reagindo a qualquer 'move' subsequente por mais alguns segundos.
+// Só necessário no Linux: window managers (GNOME/Mutter em especial) tratam
+// a posição pedida na criação como mera sugestão e aplicam o próprio
+// algoritmo de posicionamento no primeiro map da janela — o que sobrescreve
+// o setBounds() já feito no 'ready-to-show' (que roda ANTES do show(), logo
+// antes do WM assumir o controle) e faz a janela reaparecer no monitor
+// primário mesmo quando x/y apontavam pro monitor externo certo. Um conjunto
+// fixo de retries por tempo não é suficiente porque o WM pode reposicionar
+// em qualquer instante (não num delay previsível) — por isso também
+// escutamos 'move' e reforçamos de novo sempre que o próprio WM tentar
+// mudar a posição, não só em horários fixos. A checagem de bounds atuais
+// evita loop: só chama setBounds() de novo quando a posição realmente
+// divergiu do alvo (senão nosso próprio setBounds() re-disparando 'move'
+// entraria em ciclo). No Windows/macOS esse reforço pós-show não é
+// necessário (o bounds do ready-to-show já é suficiente), por isso restrito
+// a linux.
+function nudgeBounds(win, bounds, fullscreen) {
+  if (process.platform !== 'linux') return;
+
+  const matchesTarget = () => {
+    if (!win || win.isDestroyed()) return true;
+    const b = win.getBounds();
+    return b.x === bounds.x && b.y === bounds.y && b.width === bounds.width && b.height === bounds.height;
+  };
+  const reassert = () => {
+    if (!win || win.isDestroyed() || matchesTarget()) return;
+    win.setBounds(bounds);
+    if (fullscreen) win.setFullScreen(true);
+  };
+
+  for (const delay of [50, 150, 300, 600, 1000, 1500]) {
+    setTimeout(reassert, delay);
+  }
+
+  win.on('move', reassert);
+  setTimeout(() => {
+    if (win && !win.isDestroyed()) win.removeListener('move', reassert);
+  }, 2000);
+}
+
 // Acha o monitor salvo entre os atualmente conectados. `display.id` (gerado
 // pelo Windows) não é garantidamente estável entre reinícios/reconexões — um
 // projetor atrás de switch HDMI/KVM, ou que ainda está "acordando" (handshake
@@ -483,6 +524,11 @@ function createOutputWindow(moduleId, displayId) {
     // Mesmo nudge de repaint do lado do retorno (ver createReturnWindow) —
     // cobre o caso inverso: abrir a saída principal com o retorno já aberto.
     nudgeRepaint(returnWindow);
+    // Linux: reforça bounds pós-show (ver nudgeBounds) — sem isso o WM
+    // (GNOME/Mutter em especial) reposiciona a janela pro monitor primário
+    // logo após o show(), fazendo a saída nunca projetar de fato no monitor
+    // externo escolhido.
+    nudgeBounds(outputWindow, { x, y, width, height }, isExternal);
   });
 
   outputWindow.on('closed', () => {
@@ -593,6 +639,10 @@ function createReturnWindow(displayId) {
     // (repetidas vezes — ver comentário na função) sem esperar o usuário
     // mexer na janela pra "descongelar".
     nudgeRepaint(outputWindow);
+    // Linux: reforça bounds pós-show (ver nudgeBounds) — mesmo motivo da
+    // saída principal, sem isso o WM reposiciona o retorno pro monitor
+    // primário logo após o show().
+    nudgeBounds(returnWindow, { x, y, width, height }, true);
   });
 
   returnWindow.on('closed', () => {

@@ -254,19 +254,50 @@ function setupIpc(mainWindow) {
         frame: false, alwaysOnTop: true, skipTaskbar: true,
         transparent: true, backgroundColor: '#00000000',
         hasShadow: false, focusable: false,
+        // No Linux, o tipo 'notification' (hint EWMH _NET_WM_WINDOW_TYPE_NOTIFICATION)
+        // sinaliza pro WM que essa janela não deve entrar no algoritmo normal de
+        // posicionamento/gerenciamento de janelas — sem isso, o GNOME/Mutter
+        // reposiciona os cartões pro monitor primário ao mapeá-los, empilhando
+        // todos ali e nunca aparecendo de fato no monitor de projeção. Cai bem
+        // semanticamente também: são overlays efêmeros e não-interativos
+        // (focusable:false), igual uma notificação do sistema.
+        ...(process.platform === 'linux' ? { type: 'notification' } : {}),
         webPreferences: { nodeIntegration: false, contextIsolation: true },
         show: false,
       });
 
-      // Reforça a posição antes de exibir — no Linux (X11/Wayland), o WM
-      // costuma ignorar/sobrescrever o x/y passado no construtor pra janelas
-      // sem frame, empilhando todos os cartões no monitor primário (mesmo
+      // Reforça a posição antes de exibir — no Linux, mesmo com o hint 'notification'
+      // acima, alguns WMs ainda tratam o x/y do construtor como sugestão pra
+      // janelas sem frame, empilhando os cartões no monitor primário (mesmo
       // padrão já resolvido em createOutputWindow/createReturnWindow, ver
       // electron/main.js).
       win.once('ready-to-show', () => {
         if (win.isDestroyed()) return;
         win.setBounds({ x: cx, y: cy, width: winW, height: winH });
         win.show();
+        // Linux: o setBounds acima (antes do show()) pode não ser suficiente
+        // sozinho — o WM pode reaplicar o próprio posicionamento a qualquer
+        // momento depois do show(), não num delay previsível. Reforçamos em
+        // alguns horários fixos E reagimos a qualquer 'move' subsequente
+        // (mesmo padrão do nudgeBounds em electron/main.js) — a checagem de
+        // bounds atuais evita loop, só reaplica quando a posição realmente
+        // divergiu do alvo.
+        if (process.platform === 'linux') {
+          const target = { x: cx, y: cy, width: winW, height: winH };
+          const matchesTarget = () => {
+            if (win.isDestroyed()) return true;
+            const b = win.getBounds();
+            return b.x === target.x && b.y === target.y && b.width === target.width && b.height === target.height;
+          };
+          const reassert = () => {
+            if (win.isDestroyed() || matchesTarget()) return;
+            win.setBounds(target);
+          };
+          for (const delay of [50, 150, 300, 600, 1000, 1500]) {
+            setTimeout(reassert, delay);
+          }
+          win.on('move', reassert);
+        }
       });
 
       const html = `<!DOCTYPE html>
