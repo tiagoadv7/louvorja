@@ -674,6 +674,10 @@ function reconcileDisplays() {
       const { x, y, width, height } = target.bounds;
       outputWindow.setBounds({ x, y, width, height });
       outputWindow.setFullScreen(isExternal);
+      // Linux: mesmo risco de o WM sobrescrever a reposição ao vivo (troca de
+      // monitor com a saída já aberta) que existe na abertura inicial — ver
+      // nudgeBounds/createOutputWindow.
+      nudgeBounds(outputWindow, { x, y, width, height }, isExternal);
     } catch (_) {}
   }
 
@@ -683,6 +687,8 @@ function reconcileDisplays() {
       const { x, y, width, height } = target.bounds;
       returnWindow.setBounds({ x, y, width, height });
       returnWindow.setFullScreen(true);
+      // Linux: mesmo motivo acima — ver nudgeBounds/createReturnWindow.
+      nudgeBounds(returnWindow, { x, y, width, height }, true);
     } catch (_) {}
   }
 
