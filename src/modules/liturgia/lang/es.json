@@ -1,0 +1,26 @@
+{
+  "title": "Liturgia",
+  "description": "Orden de alabanza para cultos y eventos",
+  "buttons": {
+    "add": "Agregar música",
+    "clear": "Limpiar lista",
+    "close": "Cerrar"
+  },
+  "table": {
+    "order": "Orden",
+    "name": "Música",
+    "duration": "Duración"
+  },
+  "dialog": {
+    "title": "Agregar música",
+    "search": "Buscar música...",
+    "no_results": "Ninguna música encontrada",
+    "loading": "Cargando...",
+    "add": "Agregar",
+    "cancel": "Cancelar"
+  },
+  "empty": "Ninguna música en la liturgia. Haga clic en 'Agregar música' para comenzar.",
+  "alerts": {
+    "cleared": "Liturgia borrada con éxito."
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "image_overlay",
+  "name": "Overlay de Imagem",
+  "description": "Sobrepõe uma imagem (logo, aviso, quadro) por cima da projeção atual, com posição, tamanho e opacidade livres — sem substituir o que já está sendo exibido. Editado a partir da aba \"Overlay de Imagem\" do módulo Mídia (video_player) — sem tela própria (ver interface/Index.vue).",
+  "category": null,
+  "icon": "mdi-image-multiple-outline",
+  "showInMainMenu": false,
+  "customization": {
+    "image_opacity": { "type": "opacity", "label": "customization.transparency", "default": 100 },
+    "image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "contain" }
+  }
+}

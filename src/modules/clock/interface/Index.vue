@@ -36,6 +36,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="clock" />
+      <LReturnScreenBtn module="clock" />
     </template>
 
     <template v-slot:header>
@@ -68,7 +69,12 @@
       </l-toolbar>
     </template>
 
-    <Screen />
+    <!-- Cantos arredondados só aqui no preview do operador — Screen.vue
+         também é a projeção real em tela cheia (Popup.vue), que não deve
+         ter cantos cortados. -->
+    <div class="cl-preview-frame">
+      <Screen />
+    </div>
   </l-window>
 </template>
 
@@ -77,6 +83,7 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -88,6 +95,7 @@ export default {
     LWindow,
     Screen,
     LScreenBtn,
+    LReturnScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,
@@ -148,7 +156,19 @@ export default {
     /* METHODS OBRIGATÓRIAS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIAS - FIM */
 
@@ -158,8 +178,21 @@ export default {
     },
 
     close() {
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso. Sem essa separação,
+      // fechar essa ferramenta apagaria o que estiver projetado (ex.: o
+      // próprio Relógio) sem o operador ter pedido isso de verdade.
       this.$modules.close(this.module_id);
     },
   },
 };
 </script>
+
+<style scoped>
+.cl-preview-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+</style>

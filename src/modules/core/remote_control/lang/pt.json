@@ -1,5 +1,5 @@
 {
-    "title": "Controle Remoto",
+    "title": "Transmitir",
     "messages": {
         "url_not_provided": "Informe o IP da conexão",
         "failed_to_connect": "Falha ao conectar! Verifique se a url está correta e se o programa está transmitindo.",
@@ -16,5 +16,25 @@
         "test_connection": "Testar Conexão",
         "disconnect": "Desconectar",
         "token": "Token"
+    },
+    "transmit": {
+        "title": "Transmitir",
+        "info": "Ative para permitir que outros dispositivos na mesma rede controlem este programa remotamente, e para gerar uma página de transmissão (letras/fundo) para uso no OBS ou vMix.",
+        "start": "Ativar",
+        "stop": "Desativar",
+        "running": "Ativado",
+        "stopped": "Desativado",
+        "token": "Token de acesso",
+        "regenerate_token": "Gerar novo token",
+        "regenerate_confirm": "Gerar um novo token desconecta os dispositivos já conectados. Continuar?",
+        "address": "Endereço",
+        "control_page": "Página de controle remoto",
+        "mirror_page": "Página de transmissão (OBS/vMix)",
+        "copy": "Copiar",
+        "copied": "Copiado!",
+        "firewall_warning": "Não foi possível liberar a porta automaticamente no Firewall do Windows. Se o QR code não abrir no celular, tente executar o LouvorJA como administrador ou libere a porta manualmente no Firewall do Windows.",
+        "other_ips": "Se o QR code não abrir, seu computador pode ter mais de uma rede — tente um destes endereços manualmente:",
+        "select_network": "Rede/IP a usar",
+        "select_network_hint": "Se o computador tiver mais de uma rede ativa (Wi-Fi, Ethernet, etc.), escolha a que o celular/OBS conseguem alcançar."
     }
 }

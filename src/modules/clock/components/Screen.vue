@@ -1,5 +1,7 @@
 <template>
+  <transition name="cl-visibility">
   <div
+    v-if="isActive"
     ref="container"
     class="d-flex"
     :class="alignClass"
@@ -23,6 +25,7 @@
       {{ time }}
     </span>
   </div>
+  </transition>
 </template>
 
 <script>
@@ -42,6 +45,12 @@ export default {
     },
     module() {
       return this.$modules.get(this.module_id);
+    },
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente), sem afetar o painel do próprio
+    // operador nem o estado "minimizado".
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     userdata() {
       return new Proxy(
@@ -192,3 +201,14 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.cl-visibility-enter-active,
+.cl-visibility-leave-active {
+  transition: opacity 0.4s ease;
+}
+.cl-visibility-enter-from,
+.cl-visibility-leave-to {
+  opacity: 0;
+}
+</style>

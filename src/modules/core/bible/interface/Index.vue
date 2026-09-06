@@ -113,7 +113,7 @@
           <!-- Book Grid List -->
           <div
             :style="`height: ${height - 65}px`"
-            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2"
+            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2 bb-grid-panel"
           >
             <v-skeleton-loader
               v-for="n in 10"
@@ -168,7 +168,7 @@
           <!-- Chapter Grid List -->
           <div
             :style="`height: ${height - 65}px`"
-            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2"
+            class="overflow-auto d-flex flex-row flex-wrap justify-center align-content-start px-2 mt-2 bb-grid-panel"
           >
             <v-skeleton-loader
               v-for="n in 10"
@@ -224,74 +224,79 @@
             />
           </div>
 
-          <div :style="`height: ${height / 2 - 30}px;`" class="mt-2">
-            <v-skeleton-loader
-              v-show="loading_book || loading_verses"
-              type="list-item-two-line"
-            />
-            <v-list class="overflow h-100 ma-0 pa-0 no-select" width="100%">
-              <v-list-item
-                v-for="(verse, num) in verses"
-                :key="num"
-                link
-                variant="flat"
-                :value="verse"
-                :active="bible.verses.includes(+num)"
-                @click="selVerse($event, num)"
-                density="compact"
-                :id="`listVerse_${num}`"
-              >
-                <template v-slot:prepend>
-                  <v-chip class="mr-2">{{ num }}</v-chip>
-                </template>
+          <!-- Cantos arredondados no painel inteiro (lista + toolbar +
+               preview), não só no Screen.vue — que também é a projeção real
+               em tela cheia (Popup.vue) e por isso não recebe isso direto. -->
+          <div class="bb-panel-frame">
+            <div :style="`height: ${height / 2 - 30}px;`" class="mt-2">
+              <v-skeleton-loader
+                v-show="loading_book || loading_verses"
+                type="list-item-two-line"
+              />
+              <v-list class="overflow h-100 ma-0 pa-0 no-select" width="100%">
+                <v-list-item
+                  v-for="(verse, num) in verses"
+                  :key="num"
+                  link
+                  variant="flat"
+                  :value="verse"
+                  :active="bible.verses.includes(+num)"
+                  @click="selVerse($event, num)"
+                  density="compact"
+                  :id="`listVerse_${num}`"
+                >
+                  <template v-slot:prepend>
+                    <v-chip class="mr-2">{{ num }}</v-chip>
+                  </template>
 
-                <div v-html="verse" class="text-caption"></div>
-              </v-list-item>
-            </v-list>
+                  <div v-html="verse" class="text-caption"></div>
+                </v-list-item>
+              </v-list>
+            </div>
+            <div style="height: 48px">
+              <v-toolbar density="compact">
+                <v-spacer />
+                <v-divider vertical />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-chevron-left "
+                  @click="prevVerse()"
+                  @shortkey="prevVerse()"
+                  v-shortkey="['arrowleft']"
+                />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-chevron-right "
+                  @click="nextVerse()"
+                  @shortkey="nextVerse()"
+                  v-shortkey="['arrowright']"
+                />
+                <v-divider vertical />
+                <v-btn
+                  :disabled="
+                    !(select_bible?.verses && select_bible.verses.length > 0)
+                  "
+                  variant="text"
+                  size="small"
+                  icon="mdi-eraser"
+                  @click="clean()"
+                  @shortkey="clean()"
+                  v-shortkey="['del']"
+                />
+                <v-divider vertical />
+                <LScreenBtn module="bible" />
+              </v-toolbar>
+            </div>
+            <Screen :height="compact ? height / 2 - 48 : height / 2 - 88" />
           </div>
-          <div style="height: 48px">
-            <v-toolbar density="compact">
-              <v-spacer />
-              <v-divider vertical />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-chevron-left "
-                @click="prevVerse()"
-                @shortkey="prevVerse()"
-                v-shortkey="['arrowleft']"
-              />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-chevron-right "
-                @click="nextVerse()"
-                @shortkey="nextVerse()"
-                v-shortkey="['arrowright']"
-              />
-              <v-divider vertical />
-              <v-btn
-                :disabled="
-                  !(select_bible?.verses && select_bible.verses.length > 0)
-                "
-                variant="text"
-                size="small"
-                icon="mdi-eraser"
-                @click="clean()"
-                @shortkey="clean()"
-                v-shortkey="['del']"
-              />
-              <v-divider vertical />
-              <LScreenBtn module="bible" />
-            </v-toolbar>
-          </div>
-          <Screen :height="compact ? height / 2 - 48 : height / 2 - 88" />
         </div>
       </div>
     </template>
@@ -346,6 +351,9 @@ export default {
     verses: [],
     last_verse: 1,
     last_bible_file: null,
+    // Evita repetir o alerta de "dados offline faltando" a cada troca de
+    // capítulo/versão enquanto os livros/versões continuarem indisponíveis.
+    _offlineDataMissingNotified: false,
   }),
   computed: {
     /* COMPUTEDS OBRIGATÓRIAS - INÍCIO */
@@ -430,7 +438,7 @@ export default {
   },
   watch: {
     async show() {
-      if (this.show && this.lang != this.$i18n.locale) {
+      if (this.show && this.lang != this.$i18n.locale.value) {
         this.versions = [];
         this.books = [];
         this.verses = [];
@@ -464,7 +472,19 @@ export default {
     /* METHODS OBRIGATÓRIOS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIOS - FIM */
     send(param, value) {
@@ -475,29 +495,50 @@ export default {
 
       if (this.books.length <= 0) {
         this.loading_book = true;
-        this.books = await this.$database.get(
-          `${this.$i18n.locale}_bible_book`,
-        );
-        if (!this.bible.id_bible_book) {
+        // Modo Offline sem esse arquivo baixado ainda → $database.get()
+        // devolve null (ver Database.js) em vez de lançar erro. Sem o "|| []"
+        // aqui, "this.books[0]" abaixo lançava um TypeError não tratado, que
+        // travava o painel pra sempre em "carregando" (o loading=false do fim
+        // do método nunca era alcançado).
+        this.books = (await this.$database.get(
+          `${this.$i18n.locale?.value || this.$i18n.locale}_bible_book`,
+        )) || [];
+        if (!this.bible.id_bible_book && this.books.length) {
           await this.selBook(this.books[0].id_bible_book);
         }
         this.loading_book = false;
       }
 
       if (this.versions.length <= 0) {
-        this.versions = await this.$database.get(
-          `${this.$i18n.locale}_bible_version`,
-        );
-        if (!this.bible.id_bible_version) {
+        this.versions = (await this.$database.get(
+          `${this.$i18n.locale?.value || this.$i18n.locale}_bible_version`,
+        )) || [];
+        if (!this.bible.id_bible_version && this.versions.length) {
           await this.selVersion(this.versions[0].id_bible_version);
         }
+      }
+
+      // Sem livros/versões (ex.: Modo Offline sem esses arquivos baixados
+      // ainda) não há capítulo/versículo pra buscar — some do "carregando"
+      // aqui e avisa o operador (só uma vez) em vez de deixar a tela vazia
+      // sem explicação nenhuma.
+      if (!this.books.length || !this.versions.length) {
+        if (this.$database.isLocalEnabled() && !this._offlineDataMissingNotified) {
+          this._offlineDataMissingNotified = true;
+          this.$alert.info({
+            text: "Os dados da Bíblia ainda não foram baixados para uso offline. Desative o Modo Offline uma vez (com internet) pra baixá-los, ou baixe-os pelo Centro de Downloads.",
+            translate: false,
+          });
+        }
+        this.loading = false;
+        return;
       }
 
       const bible_file = `bible_${this.bible.id_bible_version}_${this.bible.id_bible_book}_${this.bible.chapter}`;
       if (bible_file != this.last_bible_file) {
         this.loading_verses = true;
         this.verses = {};
-        this.verses = await this.$database.get(bible_file);
+        this.verses = (await this.$database.get(bible_file)) || {};
         this.last_bible_file = bible_file;
         this.loading_verses = false;
       }
@@ -510,7 +551,7 @@ export default {
         this.bible.verses = this.select_bible.verses;
       }
 
-      this.lang = this.$i18n.locale;
+      this.lang = this.$i18n.locale.value;
       this.loading = false;
     },
     resize(data) {
@@ -777,7 +818,8 @@ export default {
     },
 
     close() {
-      this.$popup.exit();
+      // Fechar o painel do operador nunca encerra a projeção — só o botão
+      // "Fechar" da tela de saída (Screen.vue) faz isso.
       this.bible.verses = [];
       this.select_bible = {
         id_bible_version: null,
@@ -796,3 +838,15 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.bb-panel-frame {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.bb-grid-panel {
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+</style>

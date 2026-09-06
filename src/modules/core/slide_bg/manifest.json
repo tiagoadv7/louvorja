@@ -1,0 +1,82 @@
+{
+  "id": "slide_bg",
+  "name": "Fundo Personalizado",
+  "description": "Personaliza o fundo, texto e janela dos slides de músicas e apresentações.",
+  "category": null,
+  "showInMainMenu": true,
+  "icon": "mdi-image-multiple-outline",
+  "dependencies": [],
+  "moduleOptions": {
+    "width": 570,
+    "height": 900
+  },
+  "customization": {
+    "bg_type":        { "default": "none" },
+    "background_color": {
+      "type": "color",
+      "label": "customization.color",
+      "default": ""
+    },
+    "image": {
+      "type": "image",
+      "label": "customization.image",
+      "default": ""
+    },
+    "image_opacity": {
+      "type": "opacity",
+      "label": "customization.transparency",
+      "default": 85
+    },
+    "image_fit": {
+      "type": "object-fit",
+      "label": "customization.adjust",
+      "default": "cover"
+    },
+    "video": { "default": "" },
+    "font": {
+      "type": "font",
+      "label": "customization.font",
+      "default": "DINCondensedBold, sans-serif"
+    },
+    "font_size": {
+      "type": "font-size",
+      "label": "customization.size",
+      "default": 20
+    },
+    "font_color": {
+      "type": "color",
+      "label": "customization.font_color",
+      "default": "#FFFFFF"
+    },
+    "cover_font_size": {
+      "type": "font-size",
+      "label": "customization.cover_font_size",
+      "default": 25
+    },
+    "cover_font_color": {
+      "type": "color",
+      "label": "customization.cover_font_color",
+      "default": "#F6C32A"
+    },
+    "repeat_font_color": {
+      "type": "color",
+      "label": "customization.repeat_font_color",
+      "default": "#F6C32A"
+    },
+    "panel_font_size": {
+      "type": "font-size",
+      "label": "customization.panel_size",
+      "default": 14
+    },
+    "panel_font_color": {
+      "type": "color",
+      "label": "customization.panel_font_color",
+      "default": "#F6C32A"
+    },
+    "border_spacing": {
+      "type": "border-spacing",
+      "label": "customization.border",
+      "default": 5
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "slide_editor",
+  "name": "Editor de Músicas",
+  "description": "Crie e projete apresentações com texto, imagens e formatação personalizados, slide a slide.",
+  "category": "utilities",
+  "icon": "mdi-presentation",
+  "showInMainMenu": false,
+  "moduleOptions": {
+    "width": 1200,
+    "height": 760
+  }
+}

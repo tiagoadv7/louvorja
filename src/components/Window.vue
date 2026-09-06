@@ -3,6 +3,7 @@
     v-model="visible"
     scrollable
     persistent
+    :eager="eager"
     @click:outside="minimize"
     @keydown.esc="minimize"
     :width="w_width"
@@ -139,7 +140,22 @@ export default {
     titleClass: String,
     dark: Boolean,
     index: [Boolean, Number, String],
+    // Vuetify (VOverlay/useLazy) destrói o CONTEÚDO do v-dialog de novo toda
+    // vez que ele fecha (inclusive ao minimizar — Window.vue usa
+    // v-model="module.show" direto, e minimizar também vira show:false),
+    // não só antes da primeira abertura — ver node_modules/vuetify/lib/
+    // composables/lazy.js#onAfterLeave. Isso corta na hora qualquer estado
+    // que more DENTRO do componente (ex.: o <audio> do SoundMasterPanel,
+    // dentro da janela "Mídia"), mesmo com minimizar não devendo interromper
+    // nada — ao contrário de mídia/coletâneas, cujo áudio real vive fora
+    // dessa janela. eager=true mantém o conteúdo sempre montado (como os
+    // álbuns/coletâneas do sistema), em vez de recriar do zero a cada
+    // reabertura — só deve ser usado pelos poucos módulos que realmente
+    // guardam estado de reprodução dentro do próprio componente.
+    eager: Boolean,
     size: String,
+    width: [String, Number],
+    height: [String, Number],
     imageSize: Number,
     color: String,
     slotLeftClass: String,
@@ -170,20 +186,20 @@ export default {
       return this.$vuetify.display.height <= 600;
     },
     w_width() {
-      return this.compact_screen
-        ? "100%"
-        : this.size == "small"
-          ? "500px"
-          : this.size == "large"
-            ? "95%"
-            : "90%";
+      if (this.compact_screen) return "100%";
+      if (this.width) return typeof this.width == "number" ? `${this.width}px` : this.width;
+      return this.size == "small"
+        ? "500px"
+        : this.size == "large"
+          ? "95%"
+          : "90%";
     },
     w_height() {
-      return this.compact_screen || this.compact_height
-        ? "100%"
-        : this.size == "small"
-          ? "550px"
-          : "90%";
+      if (this.compact_screen || this.compact_height) return "100%";
+      if (this.height) return typeof this.height == "number" ? `${this.height}px` : this.height;
+      return this.size == "small"
+        ? "550px"
+        : "90%";
     },
   },
   watch: {
@@ -192,7 +208,7 @@ export default {
     },
     index() {
       this.checkScroll();
-      this.windowResize();
+      this.windowResizeDeferred();
     },
     scrollPos(value) {
       const container = this.$refs.main_container;
@@ -242,13 +258,22 @@ export default {
       this.container_height = el.clientHeight;
       this.$emit("resize", data);
     },
+    // O diálogo pode aparecer (visible/index mudando) antes do navegador
+    // terminar o layout dele — medir clientHeight nesse exato instante às
+    // vezes pega 0 (mesmo com o container já no DOM), e nada mais dispara
+    // uma remedida depois, deixando slot-left/slot-right com altura 0 pra
+    // sempre (conteúdo existe mas fica cortado/invisível). nextTick +
+    // requestAnimationFrame garante que o layout já assentou antes de medir.
+    windowResizeDeferred() {
+      this.$nextTick(() => requestAnimationFrame(() => this.windowResize()));
+    },
 
     listenerResize(active) {
       if (active && this.visible) {
         if (this.$refs.container) {
           this.resizeObserver.observe(this.$refs.container.$el);
           window.addEventListener("resize", this.windowResize);
-          this.windowResize();
+          this.windowResizeDeferred();
         } else {
           const self = this;
           setTimeout(function () {

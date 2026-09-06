@@ -1,0 +1,20 @@
+{
+  "title": "SoundMaster",
+  "save_playlist": "Guardar Playlist",
+  "load_playlist": "Cargar Playlist",
+  "settings": "Configuración",
+  "fade_in": "Fade In (ms)",
+  "fade_out": "Fade Out (ms)",
+  "ducking": "Atenuación",
+  "talkover": "Atenuar",
+  "stop_all": "Parar todo",
+  "now_playing": "Reproduciendo ahora",
+  "no_audio": "Sin audio",
+  "drop_audio": "Suelta el audio aquí o haz clic para seleccionar",
+  "master_volume": "Volumen maestro",
+  "mute": "Silencio",
+  "loop": "Loop",
+  "remove": "Eliminar",
+  "pad": "Pad",
+  "fx": "FX"
+}

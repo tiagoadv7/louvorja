@@ -13,6 +13,8 @@ export default {
     $appdata.set("alert.text", data.text || null);
     $appdata.set("alert.error", data.error || null);
     $appdata.set("alert.color", data.color || "");
+    $appdata.set("alert.input", data.input === true);
+    $appdata.set("alert.input_default", data.input_default ?? "");
     $appdata.set(
       "alert.translate",
       data.translate == null || data.translate == undefined
@@ -73,6 +75,29 @@ export default {
       },
       (resp, ret) => {
         callback(resp, ret);
+      }
+    );
+  },
+
+  // Diálogo com campo de texto — resolve com a string digitada (ou "" se
+  // cancelado). `data.input_default` preenche o campo; `data.buttons` pode
+  // customizar os botões, mas o botão de cancelar DEVE ter value:"cancel"
+  // (é o que o Alert.vue usa pra saber que não deve devolver o texto digitado).
+  prompt(data, callback = function () {}) {
+    data = this.getData(data);
+
+    this.show(
+      {
+        ...data,
+        input: true,
+        input_default: data.input_default ?? "",
+        buttons: data.buttons || [
+          { text: "alert.cancel", color: "error", value: "cancel" },
+          { text: "alert.confirm", color: "info", value: "confirm" },
+        ],
+      },
+      (resp) => {
+        callback(resp === "cancel" ? "" : resp);
       }
     );
   },

@@ -1,0 +1,374 @@
+/**
+ * SljaConverter.js — Lê e escreve arquivos .slja (formato Delphi LouvorJA).
+ *
+ * O formato .slja é um ZIP com:
+ *   slides.lja     — INI com seções [Geral] e [Slide:N]
+ *   audio/<file>   — MP3 opcional
+ *   imagens/<file> — imagens opcionais
+ *
+ * Convenção de codificação:
+ *   - letra/letra_aux: pipe `|` representa quebra de linha (Delphi: \r\n)
+ *   - cor: #RRGGBB (HTML hex)
+ *   - tempo: HH:MM:SS (campo `tempo_hms`) é source-of-truth quando presente;
+ *     sem ele (exports do LouvorJA Delphi original), `tempo` é a posição em
+ *     bytes BASS e é convertido pra segundos (ver bassBytesToSeconds)
+ *
+ * @category helper-puro — Sem APIs Vue; sem acesso ao store.
+ */
+
+// Import estático (não dinâmico): um `await import("jszip")` dentro de
+// loadSlja/writeSlja só é resolvido na hora que o usuário importa/exporta um
+// .slja — se o cache de dependências pré-otimizadas do Vite (dev) ficar
+// desatualizado nesse meio-tempo (comum após qualquer reload/HMR maior), o
+// import dinâmico falha com 404/504 "Outdated Optimize Dep", e esse erro
+// aparecia pro usuário como "Arquivo inválido" em vez do problema real.
+// Import estático entra no grafo normal do bundle, sem essa fragilidade.
+import JSZip from "jszip";
+
+function parseIniWithSections(text) {
+  const sections = {};
+  let currentSection = "_default";
+  sections[currentSection] = {};
+
+  text.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) return;
+
+    const sectionMatch = trimmed.match(/^\[(.+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      if (!sections[currentSection]) sections[currentSection] = {};
+      return;
+    }
+
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) return;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+    if (key) sections[currentSection][key] = value;
+  });
+
+  return sections;
+}
+
+function stringifyIni(sections, sectionOrder) {
+  const order = sectionOrder || Object.keys(sections);
+  const lines = [];
+  for (const name of order) {
+    const sec = sections[name];
+    if (!sec) continue;
+    lines.push(`[${name}]`);
+    for (const [k, v] of Object.entries(sec)) {
+      if (v === undefined || v === null || v === "") continue;
+      lines.push(`${k}=${v}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\r\n");
+}
+
+function hmsToSeconds(hms) {
+  if (!hms) return 0;
+  const parts = hms.split(":").map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
+
+// LouvorJA Delphi (exports antigos, sem o campo "tempo_hms" — só existia nas
+// versões mais recentes do Delphi/já no Electron) grava "tempo" como posição
+// em BYTES dentro do stream PCM decodificado pela biblioteca BASS, não em
+// segundos. O fallback antigo (hmsToSeconds(sec.tempo), sem separador ":")
+// tratava esse valor bruto como se já fosse "segundos" (ex.: "1438944"
+// virava 1438944 segundos = ~16 dias) — nunca batia com o tempo real de
+// reprodução (no máximo alguns minutos), então nenhuma linha depois da capa
+// sincronizava e a música importada ficava, na prática, sem nenhum tempo
+// gravado. 176400 = 44100 Hz × 2 bytes/amostra × 2 canais — configuração
+// padrão de decodificação PCM do BASS, confirmada batendo (dentro de ~10s,
+// plausível pra um trecho instrumental final) com a duração real do áudio em
+// duas exportações reais conferidas (2019, versão Delphi 17.3.19.2/18.0.19.3).
+const BASS_PCM_BYTES_PER_SECOND = 176400;
+function bassBytesToSeconds(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n / BASS_PCM_BYTES_PER_SECOND : 0;
+}
+
+function secondsToHms(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+function decodeLetra(letra) {
+  if (!letra) return "";
+  return letra.replace(/\|/g, "\n").replace(/\\n/g, "\n");
+}
+
+function encodeLetra(letra) {
+  if (!letra) return "";
+  return letra.replace(/\r\n/g, "|").replace(/\n/g, "|");
+}
+
+function parseSlja(iniText) {
+  const sections = parseIniWithSections(iniText);
+  const geral = sections["Geral"] || sections["_default"] || {};
+  const slidesCount = parseInt(geral.slides || "0", 10);
+
+  const slides = [];
+  for (let i = 1; i <= slidesCount; i++) {
+    const sec = sections[`Slide:${i}`];
+    if (!sec) continue;
+
+    slides.push({
+      index: i,
+      tipo: sec.tipo || (i === 1 ? "CAPA" : "LETRA"),
+      letra: decodeLetra(sec.letra || ""),
+      letra_aux: decodeLetra(sec.letra_aux || ""),
+      tamanho_letra: parseInt(sec.tamanho_letra || (i === 1 ? "18" : "14"), 10),
+      tamanho_letra_aux: parseInt(sec.tamanho_letra_aux || "10", 10),
+      cor_letra: sec.cor_letra || (i === 1 ? "#efb400" : "#FFFFFF"),
+      cor_letra_aux: sec.cor_letra_aux || "#efb400",
+      fundo_letra: sec.fundo_letra === undefined ? true : sec.fundo_letra === "1",
+      cor_fundo: sec.cor_fundo || "#000000",
+      imagem: sec.imagem || "",
+      imagem_posicao: parseInt(sec.imagem_posicao || "5", 10),
+      // tempo_hms (gravado pelo Electron, ver writeSlja abaixo) é a fonte
+      // confiável quando presente. Sem ele, "tempo" é o campo bruto do
+      // LouvorJA Delphi original — posição em bytes BASS, não segundos (ver
+      // bassBytesToSeconds acima) — só cai nesse caminho em imports de
+      // arquivos .slja exportados pelo Delphi antigo.
+      tempo_seconds: sec.tempo_hms ? hmsToSeconds(sec.tempo_hms) : bassBytesToSeconds(sec.tempo),
+      text_align: sec.text_align || "center",
+    });
+  }
+
+  return {
+    meta: {
+      slides_count: slidesCount,
+      versao: geral.versao || "",
+      url_musica: geral.url_musica || "",
+      audio: geral.audio || "0",
+      // Nome da música gravado pelo LouvorJA no export (pode faltar em
+      // arquivos legados/Delphi).
+      nome: geral.nome || geral.titulo || "",
+    },
+    slides,
+  };
+}
+
+/**
+ * Preenche a imagem dos slides ANTERIORES à primeira imagem do pacote.
+ *
+ * Uso na importação: quando o 1º slide (capa) não tem fundo mas um seguinte
+ * tem, os anteriores herdam essa imagem — igual ao comportamento da capa no
+ * LouvorJA. Slides posteriores à primeira imagem não são alterados (permanecem
+ * sem fundo), e a imagem_posicao original de cada slide é preservada.
+ *
+ * @param {Array<{imagem?: string}>} [slides]
+ * @returns {Array} Mesmo array, com `imagem` preenchida nos slides leading.
+ */
+function fillMissingImages(slides = []) {
+  let first = -1;
+  for (let i = 0; i < slides.length; i++) {
+    if (slides[i] && slides[i].imagem) {
+      first = i;
+      break;
+    }
+  }
+  if (first <= 0) return slides;
+
+  for (let i = 0; i < first; i++) {
+    slides[i].imagem = slides[first].imagem;
+  }
+  return slides;
+}
+
+/**
+ * Resolve o nome da música a partir do pacote .slja importado.
+ *
+ * Prioridade:
+ *   1. [Geral].nome (gravado pelo export do LouvorJA)
+ *   2. Letra do primeiro slide (convenção: a capa traz o nome da música)
+ *   3. Nome do arquivo .slja (sem extensão)
+ *
+ * @param {object} data        Resultado de loadSlja ({ meta, slides }).
+ * @param {string} fileName    Nome do arquivo importado (ex.: "hino.slja").
+ * @returns {string}           Nome resolvido (pode retornar "").
+ */
+function resolveSongName(data = {}, fileName = "") {
+  const iniNome = String((data.meta && data.meta.nome) || "").trim();
+  if (iniNome) return iniNome;
+
+  const firstSlide = Array.isArray(data.slides) ? data.slides[0] : null;
+  const capaNome = String((firstSlide && firstSlide.letra) || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (capaNome) return capaNome;
+
+  return String(fileName || "")
+    .trim()
+    .replace(/\.(slja|lja)$/i, "");
+}
+
+function buildIniFromSlides({ meta = {}, slides = [], audioPath = "" }) {
+  const sections = {};
+  const order = ["Geral"];
+
+  sections["Geral"] = {
+    slides: String(slides.length),
+    audio: meta.audio || (audioPath ? "1" : "0"),
+  };
+  if (audioPath) sections["Geral"].url_musica = audioPath;
+  if (meta.versao) sections["Geral"].versao = meta.versao;
+  if (meta.nome) sections["Geral"].nome = meta.nome;
+
+  slides.forEach((s, idx) => {
+    const i = idx + 1;
+    const name = `Slide:${i}`;
+    order.push(name);
+    const sec = {};
+
+    sec.tipo = s.tipo || (i === 1 ? "CAPA" : "LETRA");
+    if (s.letra) sec.letra = encodeLetra(s.letra);
+    if (s.letra_aux) sec.letra_aux = encodeLetra(s.letra_aux);
+
+    sec.fundo_letra = s.fundo_letra === false ? "0" : "1";
+
+    if (s.tamanho_letra) sec.tamanho_letra = String(s.tamanho_letra);
+    if (s.tamanho_letra_aux) sec.tamanho_letra_aux = String(s.tamanho_letra_aux);
+    if (s.cor_letra) sec.cor_letra = s.cor_letra;
+    if (s.cor_letra_aux) sec.cor_letra_aux = s.cor_letra_aux;
+    if (s.cor_fundo) sec.cor_fundo = s.cor_fundo;
+
+    if (s.imagem) sec.imagem = s.imagem;
+    if (s.imagem_posicao) sec.imagem_posicao = String(s.imagem_posicao);
+    if (s.text_align && s.text_align !== "center") sec.text_align = s.text_align;
+
+    const seconds = Number(s.tempo_seconds || 0);
+    sec.tempo_hms = secondsToHms(seconds);
+    sec.tempo = String(seconds);
+
+    sections[name] = sec;
+  });
+
+  return stringifyIni(sections, order);
+}
+
+async function loadSlja(file) {
+  const zip = await JSZip.loadAsync(file);
+
+  const ljaFile = zip.file("slides.lja");
+  if (!ljaFile) throw new Error("slides.lja não encontrado no arquivo .slja");
+
+  const iniBytes = await ljaFile.async("uint8array");
+  let iniText;
+  try {
+    iniText = new TextDecoder("utf-8", { fatal: true }).decode(iniBytes);
+  } catch {
+    iniText = new TextDecoder("windows-1252").decode(iniBytes);
+  }
+  const parsed = parseSlja(iniText);
+
+  // Varredura da raiz com normalização de separador — zips gerados pelo
+  // Delphi gravam entradas como "imagens\foto.png" (barra invertida), que
+  // zip.folder() não encontra.
+  let audio = null;
+  let audioName = null;
+  const images = new Map();
+  const pending = [];
+
+  zip.forEach((relativePath, zipEntry) => {
+    if (zipEntry.dir) return;
+    const norm = relativePath.replace(/\\/g, "/");
+
+    const imgMatch = norm.match(/^imagens\/(.*)$/i) || norm.match(/^images\/(.*)$/i);
+    if (imgMatch) {
+      pending.push(zipEntry.async("blob").then((b) => images.set(imgMatch[1], b)));
+      return;
+    }
+
+    const audMatch = norm.match(/^audio\/(.*)$/i);
+    if (audMatch && !audio) {
+      pending.push(
+        zipEntry.async("blob").then((b) => {
+          audio = b;
+          audioName = audMatch[1];
+        })
+      );
+    }
+  });
+
+  await Promise.all(pending);
+
+  return { ...parsed, audio, audioName, images };
+}
+
+/**
+ * Escreve um pacote .slja como Blob.
+ *
+ * @param {object} input
+ * @param {object} [input.meta]                 Metadados gerais (versao, audio).
+ * @param {string} [input.nome]                 Nome da música — gravado em [Geral].nome.
+ * @param {Array} input.slides                  Lista de slides (schema CustomSlide).
+ * @param {Blob | null} [input.audio]           Blob do MP3 (será gravado em audio/<audioName>).
+ * @param {string} [input.audioName]            Nome do arquivo de áudio (default: 'audio.mp3').
+ * @param {Map<string, Blob>} [input.images]    Imagens: chave = path no ZIP (`imagens/<name>`), valor = Blob.
+ * @returns {Promise<Blob>}                     Pacote .slja pronto para download/save.
+ */
+async function writeSlja({
+  meta = {},
+  nome = "",
+  slides = [],
+  audio = null,
+  audioName = "audio.mp3",
+  images = null,
+} = {}) {
+  const zip = new JSZip();
+
+  let audioPath = "";
+  if (audio) {
+    audioPath = `audio/${audioName.replace(/^audio\//, "")}`;
+    zip.file(audioPath, audio);
+  }
+
+  const slidesForIni = slides.map((s) => {
+    if (!s.imagem) return s;
+    const path = s.imagem.startsWith("imagens/")
+      ? s.imagem
+      : `imagens/${s.imagem.split(/[\\/]/).pop()}`;
+    return { ...s, imagem: path };
+  });
+
+  const iniText = buildIniFromSlides({
+    meta: { ...meta, ...(nome ? { nome } : {}) },
+    slides: slidesForIni,
+    audioPath,
+  });
+  zip.file("slides.lja", iniText);
+
+  if (images && images.size > 0) {
+    for (const [path, blob] of images.entries()) {
+      const normalized = path.startsWith("imagens/") ? path : `imagens/${path}`;
+      zip.file(normalized, blob);
+    }
+  }
+
+  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+}
+
+export default {
+  parseSlja,
+  loadSlja,
+  writeSlja,
+  buildIniFromSlides,
+  parseIniWithSections,
+  stringifyIni,
+  hmsToSeconds,
+  secondsToHms,
+  decodeLetra,
+  encodeLetra,
+  resolveSongName,
+  fillMissingImages,
+};

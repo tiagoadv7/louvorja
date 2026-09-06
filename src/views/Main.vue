@@ -5,6 +5,7 @@
 
   <AppModules />
   <AppAlert />
+  <MediaChoiceDialog />
 
   <AppsRibbon v-if="this.$userdata.get('layout') == 'ribbon'" />
 
@@ -34,6 +35,7 @@ import AppFooter from "@/layout/Footer.vue";
 import AppMenu from "@/layout/Menu.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
+import MediaChoiceDialog from "@/components/MediaChoiceDialog.vue";
 import Apps from "@/layout/Apps.vue";
 import AppsRibbon from "@/layout/AppsRibbon.vue";
 import AppTrayArea from "@/layout/TrayArea.vue";
@@ -47,6 +49,7 @@ export default {
     AppMenu,
     AppModules,
     AppAlert,
+    MediaChoiceDialog,
     Apps,
     AppsRibbon,
     AppTrayArea,
@@ -58,7 +61,8 @@ export default {
     //Carrega o tema
     let theme = this.$userdata.get("theme");
     if (theme != "") {
-      this.$vuetify.theme.change(theme);
+      this.$vuetify.theme.global.name = theme;
+      this.$appdata.set("theme", theme);
     }
     this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
 
@@ -67,7 +71,7 @@ export default {
     if (lang != "") {
       this.$i18n.locale = lang;
     } else {
-      this.$userdata.set("language", this.$i18n.locale);
+      this.$userdata.set("language", this.$i18n.locale.value);
     }
 
     //Checa se está em modo de desenvolvimento
@@ -89,12 +93,8 @@ export default {
         this.$vuetify.display.platform.ios,
     );
 
-    if (this.$vuetify.display.platform.electron) {
-      this.$appdata.set("is_desktop", true);
-    } else {
-      this.$appdata.set("is_desktop", false);
-      this.$appdata.set("is_online", true);
-    }
+    // is_desktop / is_online já são definidos no estado inicial do Vuex
+    // (src/store/state.js) com base no user-agent — não precisamos sobrescrever aqui.
 
     window.addEventListener("message", (event) => {
       if (event.origin === window.location.origin) {
@@ -111,7 +111,9 @@ export default {
             //popup.postMessage({ all: data }, window.location.origin);
           }
         } else if (event.data == "closed") {
-          this.$popup.close();
+          // A janela (browser) já fechou sozinha — limpa o estado de vez
+          // (não é o "desligamento suave" do botão de tela).
+          this.$popup.shutdown();
         }
       }
     });

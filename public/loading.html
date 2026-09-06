@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>LouvorJA</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #0d1929 0%, #162236 55%, #0b1520 100%);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      -webkit-app-region: drag;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      border-radius: 12px 12px 0 0;
+    }
+
+    .progress::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      height: 100%;
+      width: 45%;
+      background: linear-gradient(90deg, transparent 0%, #4a7fc1 40%, #82b1e8 60%, #4a7fc1 80%, transparent 100%);
+      animation: slide 1.8s infinite ease-in-out;
+    }
+
+    .progress::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      height: 100%;
+      width: 28%;
+      background: linear-gradient(90deg, transparent 0%, #4a7fc1 50%, transparent 100%);
+      animation: slide 1.8s 0.65s infinite ease-in-out;
+    }
+
+    @keyframes slide {
+      0%   { left: -50%; }
+      100% { left: 120%; }
+    }
+
+    .logo {
+      width: 68px;
+      height: 68px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 16px rgba(74, 127, 193, 0.5));
+      animation: appear 0.35s ease-out both;
+    }
+
+    .app-name {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #dde4ef;
+      animation: appear 0.35s 0.08s ease-out both;
+    }
+
+    .loading-text {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.28);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      animation: appear 0.35s 0.16s ease-out both;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="progress"></div>
+    <img class="logo" src="ico/favicon.svg" alt="LouvorJA" draggable="false" />
+    <div class="app-name">LouvorJA</div>
+    <div class="loading-text" id="loadingText">carregando</div>
+  </main>
+  <script>
+    // Igual ao LouvorJA Delphi original: abrir um .slja (duplo clique/"Abrir
+    // com") mostra "Abrindo arquivo" aqui em vez do "Carregando" genérico —
+    // ver electron/main.js#createLoadingWindow, que já sabe disso antes
+    // mesmo de mostrar esta janela (process.argv, sem esperar a principal).
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'open-file') {
+      document.getElementById('loadingText').textContent = 'abrindo arquivo';
+    }
+  </script>
+</body>
+</html>
