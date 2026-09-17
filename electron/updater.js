@@ -33,18 +33,19 @@
  * provider do electron-updater. Só depois dessa segunda tentativa falhar é
  * que reporta "sem atualização".
  *
- * Diferença deliberada do violin-app: o download manual (fallback) aqui
- * SEMPRE pergunta onde salvar antes de baixar (dialog.showSaveDialog) — nunca
- * direto na pasta Downloads. Motivo: a pasta de instalação do Louvor JA
- * também guarda músicas/capas/banco de dados do usuário (ver getWritableBase()
- * em ipc.js e build/installer.nsh); salvar o instalador ali por engano seria
- * fácil de fazer sem esse passo manual. Isso não existe no violin-app porque
- * lá a pasta de instalação não acumula conteúdo do usuário.
+ * Download manual (fallback): igual ao violin-app — vai direto pra pasta
+ * Downloads (app.getPath('downloads')), sem diálogo "salvar como" (ver
+ * downloadPackage abaixo). Antes perguntava sempre onde salvar, com receio de
+ * o usuário mandar o instalador pra pasta de instalação do Louvor JA por
+ * engano (que também guarda músicas/capas/banco local — ver getWritableBase()
+ * em ipc.js e build/installer.nsh) — mas isso deixava o destino imprevisível
+ * ("não sei onde está baixando"), então Downloads fixo (sempre um lugar
+ * conhecido) venceu esse risco.
  */
 
 // Lazy require — electron-updater acessa app.getVersion() na importação,
 // antes do app estar pronto (mesmo cuidado do violin-app).
-const { app, ipcMain, dialog, shell, BrowserWindow } = require('electron');
+const { app, ipcMain, shell, BrowserWindow } = require('electron');
 const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
@@ -393,11 +394,10 @@ async function getCurrentReleaseNotes(version) {
 }
 
 /**
- * Baixa o asset (.exe) da release pra um destino escolhido pelo usuário
- * (dialog.showSaveDialog — ver nota no topo do arquivo sobre por que isso é
- * diferente do violin-app), com progresso e retry.
+ * Baixa o asset (.exe) da release direto pra pasta Downloads, com progresso e
+ * retry — mesmo destino fixo do violin-app (ver nota no topo do arquivo).
  *
- * @param {import('electron').BrowserWindow} [win] janela pra ancorar o diálogo de salvar
+ * @param {import('electron').BrowserWindow} [win] mantido por compatibilidade de assinatura (não usado mais — sem diálogo)
  */
 async function downloadPackage(win) {
   if (!_latestReleaseInfo || !_latestReleaseInfo.assets) {
@@ -411,14 +411,7 @@ async function downloadPackage(win) {
   const asset = info.assets.find((a) => a.name && a.name.toLowerCase().endsWith(`.${ext.toLowerCase()}`));
   if (!asset) throw new Error(`Nenhum instalador .${ext} encontrado na release ${info.tag}`);
 
-  const chosen = await dialog.showSaveDialog(win || _mainWindow, {
-    title: 'Salvar instalador da atualização',
-    defaultPath: path.join(app.getPath('downloads'), asset.name),
-    filters: [{ name: 'Instalador', extensions: [ext] }],
-  });
-  if (chosen.canceled || !chosen.filePath) return { canceled: true };
-
-  const dest = chosen.filePath;
+  const dest = path.join(app.getPath('downloads'), asset.name);
   const tmp = `${dest}.tmp`;
 
   _dlSample = { time: 0, received: 0, rate: 0 };
