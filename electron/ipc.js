@@ -205,10 +205,12 @@ function setupIpc(mainWindow) {
     const allDisplays = screen.getAllDisplays();
     const primary = screen.getPrimaryDisplay();
     const primaryScale = primary.scaleFactor || 1;
+    const isLinux = process.platform === 'linux';
 
-    // Tamanho base da janela em pixels físicos (referência: monitor primário)
-    // — fixo, não cresce com a resolução do monitor de destino, pra o cartão
-    // parecer sempre igual ao que aparece no monitor principal.
+    // Tamanho base do CARTÃO (não da janela) em pixels físicos (referência:
+    // monitor primário) — fixo, não cresce com a resolução do monitor de
+    // destino, pra o cartão parecer sempre igual ao que aparece no monitor
+    // principal.
     const BASE_W_PHYS = 220;
     const BASE_H_PHYS = 140;
 
@@ -219,23 +221,20 @@ function setupIpc(mainWindow) {
 
       // Converte pixels físicos (medidos na escala do monitor primário) para
       // DIP do monitor atual, mantendo o mesmo tamanho físico em qualquer tela.
-      let winW = Math.round(BASE_W_PHYS * primaryScale / scale);
-      let winH = Math.round(BASE_H_PHYS * primaryScale / scale);
+      let cardW = Math.round(BASE_W_PHYS * primaryScale / scale);
+      let cardH = Math.round(BASE_H_PHYS * primaryScale / scale);
 
       // Trava de segurança: o cartão nunca deve passar de metade do monitor
       // de destino (só entra em ação em monitores pequenos/incomuns).
       const maxW = width  / 2;
       const maxH = height / 2;
-      const overflow = Math.max(winW / maxW, winH / maxH, 1);
+      const overflow = Math.max(cardW / maxW, cardH / maxH, 1);
       let fontScale = 1;
       if (overflow > 1) {
-        winW = Math.round(winW / overflow);
-        winH = Math.round(winH / overflow);
+        cardW = Math.round(cardW / overflow);
+        cardH = Math.round(cardH / overflow);
         fontScale = 1 / overflow;
       }
-
-      const cx = x + Math.floor(width  / 2) - Math.floor(winW / 2);
-      const cy = y + Math.floor(height / 2) - Math.floor(winH / 2);
 
       const isPrimary = display.id === primary.id;
       const label = isPrimary ? 'Principal' : `Monitor ${++nonPrimaryIdx}`;
@@ -249,41 +248,54 @@ function setupIpc(mainWindow) {
       const border  = Math.max(2, Math.round(2.5 * fontScale));
       const radius  = Math.round(14  * fontScale);
 
+      // No Linux, uma janela pequena flutuante não tem como pedir posição
+      // global de forma confiável: no Wayland o protocolo simplesmente não dá
+      // ao cliente controle sobre onde a janela aparece (o compositor decide
+      // sozinho — normalmente centralizando no monitor com foco/cursor, daí o
+      // 2º cartão "cascatear" do lado do 1º em vez de ir pro monitor certo); e
+      // mesmo em X11 (GNOME/Mutter), o hint _NET_WM_WINDOW_TYPE_NOTIFICATION +
+      // reforço de bounds não é suficiente pra todos os casos. A ÚNICA via já
+      // comprovada nesse app pra cair no monitor certo no Linux é o mesmo
+      // truque usado em createOutputWindow/createReturnWindow (electron/main.js):
+      // pedir fullscreen NESSE monitor — o pedido de fullscreen carrega o
+      // destino explicitamente, diferente de um simples setBounds/x/y. Por
+      // isso, no Linux a janela cobre o monitor inteiro (transparente) e o
+      // cartão pequeno fica centralizado dentro dela via CSS; no Windows/macOS
+      // (onde o x/y do construtor já funciona) a janela continua do tamanho
+      // exato do cartão, como antes.
+      const winX = isLinux ? x : (x + Math.floor(width  / 2) - Math.floor(cardW / 2));
+      const winY = isLinux ? y : (y + Math.floor(height / 2) - Math.floor(cardH / 2));
+      const winW = isLinux ? width  : cardW;
+      const winH = isLinux ? height : cardH;
+
       const win = new BW({
-        x: cx, y: cy, width: winW, height: winH,
+        x: winX, y: winY, width: winW, height: winH,
         frame: false, alwaysOnTop: true, skipTaskbar: true,
         transparent: true, backgroundColor: '#00000000',
         hasShadow: false, focusable: false,
         // No Linux, o tipo 'notification' (hint EWMH _NET_WM_WINDOW_TYPE_NOTIFICATION)
-        // sinaliza pro WM que essa janela não deve entrar no algoritmo normal de
-        // posicionamento/gerenciamento de janelas — sem isso, o GNOME/Mutter
-        // reposiciona os cartões pro monitor primário ao mapeá-los, empilhando
-        // todos ali e nunca aparecendo de fato no monitor de projeção. Cai bem
-        // semanticamente também: são overlays efêmeros e não-interativos
-        // (focusable:false), igual uma notificação do sistema.
-        ...(process.platform === 'linux' ? { type: 'notification' } : {}),
+        // sinaliza pro WM (em sessões X11) que essa janela não deve entrar no
+        // algoritmo normal de posicionamento/gerenciamento — mantido mesmo com
+        // a janela agora cobrindo o monitor inteiro, pra continuar sem entrar
+        // no alt-tab/gerenciamento normal (focusable:false, overlay efêmero).
+        ...(isLinux ? { type: 'notification' } : {}),
         webPreferences: { nodeIntegration: false, contextIsolation: true },
         show: false,
       });
 
-      // Reforça a posição antes de exibir — no Linux, mesmo com o hint 'notification'
-      // acima, alguns WMs ainda tratam o x/y do construtor como sugestão pra
-      // janelas sem frame, empilhando os cartões no monitor primário (mesmo
-      // padrão já resolvido em createOutputWindow/createReturnWindow, ver
-      // electron/main.js).
       win.once('ready-to-show', () => {
         if (win.isDestroyed()) return;
-        win.setBounds({ x: cx, y: cy, width: winW, height: winH });
+        win.setBounds({ x: winX, y: winY, width: winW, height: winH });
+        if (isLinux) win.setFullScreen(true);
         win.show();
-        // Linux: o setBounds acima (antes do show()) pode não ser suficiente
-        // sozinho — o WM pode reaplicar o próprio posicionamento a qualquer
-        // momento depois do show(), não num delay previsível. Reforçamos em
-        // alguns horários fixos E reagimos a qualquer 'move' subsequente
-        // (mesmo padrão do nudgeBounds em electron/main.js) — a checagem de
-        // bounds atuais evita loop, só reaplica quando a posição realmente
-        // divergiu do alvo.
-        if (process.platform === 'linux') {
-          const target = { x: cx, y: cy, width: winW, height: winH };
+        // Linux: mesmo depois do setBounds/setFullScreen acima, o WM/compositor
+        // pode reaplicar posição a qualquer momento após o show() (não num
+        // delay previsível) — reforçamos em horários fixos E reagimos a
+        // qualquer 'move' subsequente (mesmo padrão do nudgeBounds em
+        // electron/main.js). A checagem de bounds atuais evita loop, só
+        // reaplica quando a posição realmente divergiu do alvo.
+        if (isLinux) {
+          const target = { x: winX, y: winY, width: winW, height: winH };
           const matchesTarget = () => {
             if (win.isDestroyed()) return true;
             const b = win.getBounds();
@@ -292,6 +304,7 @@ function setupIpc(mainWindow) {
           const reassert = () => {
             if (win.isDestroyed() || matchesTarget()) return;
             win.setBounds(target);
+            win.setFullScreen(true);
           };
           for (const delay of [50, 150, 300, 600, 1000, 1500]) {
             setTimeout(reassert, delay);
@@ -305,7 +318,7 @@ function setupIpc(mainWindow) {
 <body style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;
   display:flex;align-items:center;justify-content:center;">
   <div style="
-    width:100%;height:100%;box-sizing:border-box;
+    width:${cardW}px;height:${cardH}px;box-sizing:border-box;
     background:rgba(12,12,14,0.92);
     border:${border}px solid rgba(255,255,255,0.75);
     border-radius:${radius}px;
