@@ -4,6 +4,17 @@ import $dev from "@/helpers/Dev";
 import $storage from "@/helpers/Storage";
 import $electron from "@/helpers/Electron";
 
+// Chaves "<lang>_collections_online" (ex.: "pt_collections_online") não são
+// arquivos estáticos do json_db — são a rota REST do catálogo de vídeos
+// online (canais/playlists/vídeos), servida direto pela API. Tudo mais (cache
+// de sessão, fallback local via $electron.dbLocal*) continua igual pra
+// qualquer chave, então só a URL precisa de tratamento especial aqui.
+function resolveUrl(file) {
+  const m = /^([a-z]{2})_collections_online$/.exec(file);
+  if (m) return `${$path.apiOrigin()}/${m[1]}/collections/online`;
+  return $path.db(`/${file}`);
+}
+
 export default {
   // Returns true when running in Electron with local DB enabled
   isLocalEnabled() {
@@ -39,7 +50,7 @@ export default {
 
       // 3. API remota (modo padrão / online)
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const url = `${$path.db(`/${file}`)}?${date}`;
+      const url = `${resolveUrl(file)}?${date}`;
       $dev.write("Abrindo BD", url);
       const response = await fetch(url, {
         headers: { "Api-Token": import.meta.env.VITE_API_TOKEN },

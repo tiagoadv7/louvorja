@@ -235,43 +235,157 @@
          usa pra tocar link do YouTube — só dá uma UI própria aqui dentro de
          "Mídia" em vez de só existir como botões dentro da linha do item na
          Liturgia. Projeta como pseudo-módulo "web_link" (ver system_buttons
-         acima e views/Popup.vue), não como "video_player". -->
+         acima e views/Popup.vue), não como "video_player".
+
+         Duas subabas: "Catálogo" (canais/playlists/vídeos oficiais, mesmo
+         catálogo consumido pelo módulo online_videos do violin-app — API
+         REST /collections/online, ver helpers/Database.js#resolveUrl) e
+         "Meus Links" (o fluxo original de colar um link avulso). As duas só
+         alimentam o MESMO $webLink.getConfig() — o transporte abaixo (play/
+         volume/seek) e a projeção na saída não sabem nem precisam saber qual
+         das duas carregou o vídeo atual. -->
     <div class="vp-root" v-show="activeTab === 'online'">
-      <div class="vp-online-input-row">
-        <input
-          v-model="onlineUrlInput"
-          class="vp-online-input"
-          placeholder="Cole o link do YouTube..."
-          @keyup.enter="loadOnlineLink"
-        />
-        <button class="vp-search-btn" style="flex:0 0 auto" @click="loadOnlineLink">
-          <v-icon size="18">mdi-tray-arrow-down</v-icon>
-          Carregar
+      <div class="vp-online-subtabs">
+        <button
+          class="vp-online-subtab-btn"
+          :class="{ 'vp-online-subtab-btn--on': onlineSubTab === 'catalog' }"
+          @click="onlineSubTab = 'catalog'"
+        >
+          <v-icon size="15">mdi-youtube-tv</v-icon> Catálogo
+        </button>
+        <button
+          class="vp-online-subtab-btn"
+          :class="{ 'vp-online-subtab-btn--on': onlineSubTab === 'custom' }"
+          @click="onlineSubTab = 'custom'"
+        >
+          <v-icon size="15">mdi-link-variant</v-icon> Meus Links
         </button>
       </div>
 
-      <!-- ── Fila de links (fica salva mesmo depois de carregar outro) ─────── -->
-      <div class="vp-playlist">
-        <div class="vp-playlist-head">
-          <div class="vp-playlist-title">Fila de Links</div>
-          <div class="vp-playlist-sub">Cole o link acima e clique em "Carregar" para adicionar à fila</div>
+      <!-- ── Subaba "Catálogo" ────────────────────────────────────────────── -->
+      <div v-show="onlineSubTab === 'catalog'" class="vp-catalog">
+        <div v-if="!isOnline" class="vp-catalog-msg">
+          <v-icon size="22" style="opacity:0.4">mdi-wifi-off</v-icon>
+          Catálogo indisponível sem conexão com a internet
+        </div>
+        <template v-else>
+          <div class="vp-catalog-search-row">
+            <v-icon size="16" style="opacity:0.5">mdi-magnify</v-icon>
+            <input v-model="catalogSearch" class="vp-catalog-search-input" placeholder="Buscar vídeo no catálogo..." />
+            <button v-if="catalogSearch" class="vp-catalog-search-clear" @click="catalogSearch = ''">
+              <v-icon size="14">mdi-close</v-icon>
+            </button>
+          </div>
+
+          <v-progress-linear v-if="catalogLoading" indeterminate height="2" />
+          <div v-if="catalogError" class="vp-catalog-msg vp-catalog-msg--error">{{ catalogError }}</div>
+
+          <div class="vp-catalog-body">
+            <!-- Resultados de busca (sobrepõe a navegação por canal/playlist) -->
+            <template v-if="catalogSearching">
+              <div class="vp-catalog-section-title">Resultados</div>
+              <div v-if="!catalogSearchResults.length && !catalogLoading" class="vp-catalog-msg">Nenhum vídeo encontrado</div>
+              <div class="vp-catalog-grid">
+                <OnlineVideoCard
+                  v-for="video in catalogSearchResults" :key="video.video_id"
+                  :entity="video" variant="video"
+                  :active="onlineConfig.videoId === video.video_id"
+                  :subtitle="catalogPlaylistTitle(video.playlist_id)"
+                  @select="projectCatalogVideo(video)"
+                />
+              </div>
+            </template>
+
+            <template v-else>
+              <div v-if="catalogLevel > 1" class="vp-catalog-back" @click="catalogGoBack">
+                <v-icon size="16">mdi-arrow-left</v-icon>
+                <span>{{ catalogBackTitle }}</span>
+              </div>
+
+              <template v-if="catalogLevel === 1">
+                <div class="vp-catalog-section-title">Canais</div>
+                <div v-if="!catalogChannels.length && !catalogLoading" class="vp-catalog-msg">Nenhum canal disponível</div>
+                <div class="vp-catalog-grid">
+                  <OnlineVideoCard
+                    v-for="ch in catalogChannels" :key="ch.channel_id"
+                    :entity="ch" variant="channel" play-all
+                    :subtitle="ch.custom_url"
+                    @select="catalogSelectChannel(ch)"
+                    @play-all="catalogPlayChannel(ch.channel_id)"
+                  />
+                </div>
+              </template>
+
+              <template v-else-if="catalogLevel === 2">
+                <div class="vp-catalog-section-title">Playlists</div>
+                <div v-if="!catalogPlaylists.length" class="vp-catalog-msg">Nenhuma playlist neste canal</div>
+                <div class="vp-catalog-grid">
+                  <OnlineVideoCard
+                    v-for="pl in catalogPlaylists" :key="pl.playlist_id"
+                    :entity="pl" variant="playlist" play-all
+                    :first-video-id="catalogFirstVideoIdOf(pl.playlist_id) || ''"
+                    :subtitle="`${catalogVideoCountOf(pl.playlist_id)} vídeo(s)`"
+                    @select="catalogSelectPlaylist(pl)"
+                    @play-all="catalogPlayPlaylist(pl.playlist_id)"
+                  />
+                </div>
+              </template>
+
+              <template v-else-if="catalogLevel === 3">
+                <div class="vp-catalog-section-title">Vídeos</div>
+                <div v-if="!catalogVideos.length" class="vp-catalog-msg">Nenhum vídeo nesta playlist</div>
+                <div class="vp-catalog-grid">
+                  <OnlineVideoCard
+                    v-for="video in catalogVideos" :key="video.video_id"
+                    :entity="video" variant="video"
+                    :active="onlineConfig.videoId === video.video_id"
+                    @select="projectCatalogVideo(video)"
+                  />
+                </div>
+              </template>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Subaba "Meus Links" (fluxo original: colar um link avulso) ────── -->
+      <div v-show="onlineSubTab === 'custom'" class="vp-custom-links">
+        <div class="vp-online-input-row">
+          <input
+            v-model="onlineUrlInput"
+            class="vp-online-input"
+            placeholder="Cole o link do YouTube..."
+            @keyup.enter="loadOnlineLink"
+          />
+          <button class="vp-search-btn" style="flex:0 0 auto" @click="loadOnlineLink">
+            <v-icon size="18">mdi-link-plus</v-icon>
+            Adicionar
+          </button>
         </div>
 
-        <div class="vp-playlist-body">
-          <div v-if="!onlinePlaylist.length" class="vp-playlist-empty">Nenhum link na fila</div>
-          <div
-            v-for="item in onlinePlaylist" :key="item.id"
-            :class="['vp-playlist-item', { 'vp-playlist-item--active': onlineConfig.currentId === item.id }]"
-            @click="selectOnlineItem(item)"
-          >
-            <v-icon size="16" class="vp-playlist-icon">{{ item.videoId ? 'mdi-youtube' : 'mdi-web' }}</v-icon>
-            <div class="vp-playlist-name" :title="item.rawUrl">{{ item.name }}</div>
-            <button class="vp-playlist-rename" title="Renomear" @click.stop="renameOnlineItem(item)">
-              <v-icon size="13">mdi-pencil-outline</v-icon>
-            </button>
-            <button class="vp-playlist-del" title="Remover da fila" @click.stop="removeFromOnlinePlaylist(item)">
-              <v-icon size="13">mdi-close</v-icon>
-            </button>
+        <!-- ── Fila de links (fica salva mesmo depois de carregar outro) ─────── -->
+        <div class="vp-playlist">
+          <div class="vp-playlist-head">
+            <div class="vp-playlist-title">Fila de Links</div>
+            <div class="vp-playlist-sub">Cole o link acima e clique em "Adicionar" para adicionar à fila</div>
+          </div>
+
+          <div class="vp-playlist-body">
+            <div v-if="!onlinePlaylist.length" class="vp-playlist-empty">Nenhum link na fila</div>
+            <div
+              v-for="item in onlinePlaylist" :key="item.id"
+              :class="['vp-playlist-item', { 'vp-playlist-item--active': onlineConfig.currentId === item.id }]"
+              @click="selectOnlineItem(item)"
+            >
+              <v-icon size="16" class="vp-playlist-icon">{{ item.videoId ? 'mdi-youtube' : 'mdi-web' }}</v-icon>
+              <div class="vp-playlist-name" :title="item.rawUrl">{{ item.name }}</div>
+              <button class="vp-playlist-rename" title="Renomear" @click.stop="renameOnlineItem(item)">
+                <v-icon size="13">mdi-pencil-outline</v-icon>
+              </button>
+              <button class="vp-playlist-del" title="Remover da fila" @click.stop="removeFromOnlinePlaylist(item)">
+                <v-icon size="13">mdi-close</v-icon>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -379,8 +493,10 @@ import LScreenBtn from '@/components/buttons/Screen.vue';
 import LReturnScreenBtn from '@/components/buttons/ReturnScreen.vue';
 import LCustomizationTools from '@/components/CustomizationTools.vue';
 import SoundMasterPanel from '../components/SoundMasterPanel.vue';
+import OnlineVideoCard from '../components/OnlineVideoCard.vue';
 import $audioBus from '@/helpers/AudioBus';
 import $pdfRenderer from '@/helpers/PdfRenderer';
+import $database from '@/helpers/Database';
 
 // Posição/tamanho padrão da aba "Overlay de Imagem" — mesmos valores de
 // image_overlay/interface/Index.vue (agora um stub; a UI de verdade vive
@@ -393,7 +509,7 @@ const OVERLAY_STORAGE_DIR = "image_overlay";
 
 export default {
   name: 'VideoPlayerModule',
-  components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel },
+  components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel, OnlineVideoCard },
 
   data: () => ({
     pipOpen: false,
@@ -402,6 +518,22 @@ export default {
 
     // ── Aba "Online" (YouTube/Canva, via $webLink) ──────────────────────────
     onlineUrlInput: '',
+    onlineSubTab: 'catalog', // 'catalog' | 'custom' — não persiste entre aberturas de propósito
+    isOnline: navigator.onLine,
+    _onlineHandler: null,
+    _offlineHandler: null,
+
+    // ── Catálogo de vídeos online (canais/playlists/vídeos) ─────────────────
+    // Mesmo catálogo consumido pelo módulo online_videos do violin-app — ver
+    // helpers/Database.js#resolveUrl (rota REST /collections/online).
+    catalogData: null, // { channels: [], playlists: [], videos: [] }
+    catalogLoading: false,
+    catalogError: '',
+    catalogLoadedLocale: '',
+    catalogLevel: 1, // 1=canais, 2=playlists, 3=vídeos
+    catalogSelectedChannel: null,
+    catalogSelectedPlaylist: null,
+    catalogSearch: '',
 
     // ── Aba "Overlay de Imagem" (módulo independente image_overlay) ────────
     OVERLAY_HANDLES,
@@ -444,6 +576,58 @@ export default {
     onlinePlaylist: {
       get() { return this.$webLink.getPlaylist(); },
       set(v) { this.$webLink.setPlaylist(v); },
+    },
+
+    // ── Catálogo de vídeos online ────────────────────────────────────────────
+    catalogLocale() {
+      return this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+    },
+    catalogKey() { return `${this.catalogLocale}_collections_online`; },
+    catalogChannels() {
+      const list = [...(this.catalogData?.channels || [])];
+      return list.sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    },
+    catalogPlaylists() {
+      if (!this.catalogSelectedChannel) return [];
+      return (this.catalogData?.playlists || [])
+        .filter((p) => p.channel_id === this.catalogSelectedChannel.channel_id)
+        .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    },
+    catalogVideos() {
+      if (!this.catalogSelectedPlaylist) return [];
+      return this._catalogDedupe(
+        (this.catalogData?.videos || [])
+          .filter((v) => v.playlist_id === this.catalogSelectedPlaylist.playlist_id)
+          .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+      );
+    },
+    catalogSearching() { return this.catalogSearch.trim().length > 0; },
+    catalogSearchResults() {
+      const q = this.catalogSearch.trim().toLowerCase();
+      if (!q) return [];
+      let pool = this.catalogData?.videos || [];
+      // Escopo pelo nível de navegação atual — igual à busca do violin-app:
+      // nível 3 → só a playlist aberta; nível 2 → playlists do canal aberto;
+      // nível 1 → catálogo inteiro.
+      if (this.catalogLevel === 3 && this.catalogSelectedPlaylist) {
+        pool = pool.filter((v) => v.playlist_id === this.catalogSelectedPlaylist.playlist_id);
+      } else if (this.catalogLevel === 2 && this.catalogSelectedChannel) {
+        const plIds = new Set(
+          (this.catalogData?.playlists || [])
+            .filter((p) => p.channel_id === this.catalogSelectedChannel.channel_id)
+            .map((p) => p.playlist_id)
+        );
+        pool = pool.filter((v) => plIds.has(v.playlist_id));
+      }
+      return this._catalogDedupe(
+        pool.filter((v) => v.title.toLowerCase().includes(q))
+          .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
+      );
+    },
+    catalogBackTitle() {
+      if (this.catalogLevel === 2) return this.catalogSelectedChannel?.title || '';
+      if (this.catalogLevel === 3) return this.catalogSelectedPlaylist?.title || '';
+      return '';
     },
 
     // "Mídia" (video_player) e "Overlay de Imagem" (image_overlay) continuam
@@ -494,7 +678,18 @@ export default {
       if (val) {
         this.$modules.open('image_overlay');
         this.$modules.open('soundmaster');
+        this._maybeLoadCatalog();
       }
+    },
+    // Catálogo só é buscado (alguns MB) quando o operador realmente vê a
+    // subaba "Catálogo" com a janela aberta — Window usa "eager" (conteúdo
+    // sempre montado, mesmo com a janela fechada — ver Window.vue), então
+    // sem essa checagem explícita o catálogo baixaria sozinho já no boot.
+    activeTab(val) {
+      if (val === 'online') this._maybeLoadCatalog();
+    },
+    onlineSubTab(val) {
+      if (val === 'catalog') this._maybeLoadCatalog();
     },
     // Prévia de PDF no painel do operador — mesmo canvas, escala menor que a
     // da projeção (ver Popup.vue). Também precisa reagir a troca de página,
@@ -504,6 +699,13 @@ export default {
     },
     'config.pdfPage'() {
       if (this.config.mediaType === 'pdf' && this.config.src) this._renderPreviewPdf();
+    },
+    // Catálogo vem por idioma (pt_collections_online, es_collections_online)
+    // — troca de idioma do app com o catálogo já carregado precisa buscar de
+    // novo com a chave nova (se ainda nem carregou, a troca de subaba/aba
+    // acima já cuida disso).
+    catalogLocale() {
+      if (this.catalogLoadedLocale) this._loadCatalog();
     },
   },
 
@@ -622,6 +824,87 @@ export default {
       this.$webLink.renamePlaylistItem(item.id, name);
     },
 
+    // ── Catálogo de vídeos online ─────────────────────────────────────────
+    // Só busca quando a subaba "Catálogo" está de fato visível com a janela
+    // aberta (ver watchers de module.show/activeTab/onlineSubTab acima) —
+    // essencial porque este componente é "eager" (sempre montado, mesmo com
+    // a janela "Mídia" fechada), então sem essa checagem o catálogo (alguns
+    // MB) baixaria sozinho logo no boot do app.
+    _maybeLoadCatalog() {
+      if (this.module.show && this.activeTab === 'online' && this.onlineSubTab === 'catalog') {
+        this._loadCatalog();
+      }
+    },
+    async _loadCatalog() {
+      if (this.catalogLoading) return;
+      this.catalogLoading = true;
+      this.catalogError = '';
+      try {
+        const data = await $database.get(this.catalogKey);
+        if (data) {
+          this.catalogData = data;
+          this.catalogLoadedLocale = this.catalogLocale;
+        } else {
+          this.catalogError = 'Não foi possível carregar o catálogo de vídeos.';
+        }
+      } finally {
+        this.catalogLoading = false;
+      }
+    },
+    // A API retorna uma entrada por (playlist, vídeo) — o mesmo vídeo pode
+    // repetir (ex.: reaproveitado em mais de uma playlist do canal).
+    _catalogDedupe(list) {
+      const seen = new Set();
+      return list.filter((v) => (seen.has(v.video_id) ? false : (seen.add(v.video_id), true)));
+    },
+    catalogPlaylistTitle(playlistId) {
+      return (this.catalogData?.playlists || []).find((p) => p.playlist_id === playlistId)?.title || '';
+    },
+    catalogFirstVideoIdOf(playlistId) {
+      const list = (this.catalogData?.videos || [])
+        .filter((v) => v.playlist_id === playlistId)
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      return list[0]?.video_id || null;
+    },
+    catalogVideoCountOf(playlistId) {
+      return (this.catalogData?.videos || []).filter((v) => v.playlist_id === playlistId).length;
+    },
+    catalogSelectChannel(ch) {
+      this.catalogSelectedChannel = ch;
+      this.catalogLevel = 2;
+    },
+    catalogSelectPlaylist(pl) {
+      this.catalogSelectedPlaylist = pl;
+      this.catalogLevel = 3;
+    },
+    catalogGoBack() {
+      if (this.catalogLevel === 3) this.catalogLevel = 2;
+      else if (this.catalogLevel === 2) this.catalogLevel = 1;
+    },
+    // "Reproduzir todos" (canal/playlist) — só inicia o primeiro vídeo, igual
+    // ao violin-app: dali pra frente o operador segue clicando os próximos
+    // pela lista (não há avanço automático entre vídeos, mesma limitação já
+    // aceita hoje pela fila de "Meus Links").
+    catalogPlayChannel(channelId) {
+      const pls = (this.catalogData?.playlists || []).filter((p) => p.channel_id === channelId);
+      for (const pl of pls) {
+        const first = (this.catalogData?.videos || []).find((v) => v.playlist_id === pl.playlist_id);
+        if (first) { this.projectCatalogVideo(first); return; }
+      }
+    },
+    catalogPlayPlaylist(playlistId) {
+      const list = (this.catalogData?.videos || [])
+        .filter((v) => v.playlist_id === playlistId)
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      if (list[0]) this.projectCatalogVideo(list[0]);
+    },
+    // addToPlaylist:false — vídeos do catálogo tocam na hora sem entrar na
+    // "Fila de Links" (essa fila é só pra links que o próprio operador colou,
+    // ver "Meus Links" acima); o catálogo já é a lista de onde escolher.
+    projectCatalogVideo(video) {
+      this.$webLink.open(`https://www.youtube.com/watch?v=${video.video_id}`, video.title, { addToPlaylist: false });
+    },
+
     // Prévia de PDF no painel do operador — mesma renderização da projeção
     // (ver PdfRenderer/Popup.vue), só que numa escala menor (é só uma
     // miniatura de referência, igual ao <video muted> ao lado pro vídeo).
@@ -692,23 +975,25 @@ export default {
     // isActive em image_overlay/interface/Popup.vue).
     onMinimize() {
       this.$modules.minimize(this.module_id);
-      this.$modules.minimize('image_overlay');
-      // SoundMaster NÃO usa $modules.minimize('soundmaster') aqui de
+      // SoundMaster e Overlay de Imagem NÃO usam $modules.minimize() aqui de
       // propósito — esse helper (ver helpers/Modules.js) também cria um
-      // ícone dele na bandeja (TrayArea), e clicar nesse ícone só religava
-      // "modules.soundmaster.show" sem abrir janela nenhuma: SoundMaster não
-      // tem Index.vue próprio (mesmo padrão vazio de
-      // image_overlay/interface/Index.vue) — a UI real dele só existe dentro
-      // desta janela "Mídia", na aba "SoundMaster". Minimizar tinha então o
-      // efeito de "separar" o SoundMaster da Mídia (virava seu próprio ícone
-      // na bandeja, oposto do esperado — SoundMaster deve reabrir junto da
-      // Mídia, igual a Vídeo/Online/Overlay). Grava só os dois campos que o
-      // resto do app realmente lê (`minimized` pro mini-player do rodapé, ver
-      // Footer.vue#soundmasterActive; `show` pro watch de 'module.show'
-      // abaixo religar os dois ao reabrir a Mídia) sem passar pela bandeja.
+      // ícone na bandeja (TrayArea), e clicar nesse ícone só religava
+      // "show" sem abrir janela nenhuma: nenhum dos dois tem Index.vue
+      // próprio (ambos stubs vazios) — a UI real de ambos só existe dentro
+      // desta janela "Mídia", nas abas "SoundMaster"/"Overlay". Minimizar
+      // pelo helper tinha então o efeito de "separar" cada um da Mídia
+      // (virava um ícone próprio na bandeja — pra Overlay, um ícone morto,
+      // já que clicar nele não reabre nada — oposto do esperado — os dois
+      // devem reabrir junto da Mídia, igual a Vídeo/Online). Grava só os
+      // dois campos que o resto do app realmente lê (`minimized` pro
+      // mini-player do rodapé/isActive da projeção; `show` pro watch de
+      // 'module.show' abaixo religar os dois ao reabrir a Mídia) sem passar
+      // pela bandeja.
       this.$appdata.setMultiple([
         ['modules.soundmaster.minimized', true],
         ['modules.soundmaster.show', false],
+        ['modules.image_overlay.minimized', true],
+        ['modules.image_overlay.show', false],
       ]);
     },
 
@@ -853,6 +1138,20 @@ export default {
       if (this.config.isPlaying) this.stop();
     });
 
+    // Mesmo padrão do indicador de conexão em layout/Header.vue — usado aqui
+    // só pra esconder a subaba "Catálogo" (precisa de rede) sem tentar buscar
+    // e cair no alerta de erro genérico do Database.js à toa.
+    this._onlineHandler  = () => { this.isOnline = true; };
+    this._offlineHandler = () => { this.isOnline = false; };
+    window.addEventListener('online',  this._onlineHandler);
+    window.addEventListener('offline', this._offlineHandler);
+
+    // Cobre o caso da janela "Mídia" já estar aberta na aba/subaba certas no
+    // exato momento em que este componente monta (eager) — ex.: estado
+    // restaurado de uma sessão anterior. As trocas normais (abrir a janela,
+    // trocar de aba/subaba) já são pegas pelos watchers correspondentes.
+    this._maybeLoadCatalog();
+
     if (!this.$electron.isElectron()) return;
     this.pipOpen = await this.$electron.pipIsOpen();
 
@@ -879,6 +1178,8 @@ export default {
     window.removeEventListener('pointermove', this._onOverlayPointerMove);
     this._pipHandlers.forEach(([channel, handler]) => this.$electron.off(channel, handler));
     $audioBus.unlisten(this._focusHandler);
+    window.removeEventListener('online',  this._onlineHandler);
+    window.removeEventListener('offline', this._offlineHandler);
   },
 };
 </script>
@@ -1188,6 +1489,114 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Subabas "Catálogo" / "Meus Links" ── */
+.vp-online-subtabs { display: flex; gap: 8px; flex-shrink: 0; }
+.vp-online-subtab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.vp-online-subtab-btn--on {
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+  border-color: transparent;
+}
+
+/* ── Subaba "Catálogo" ── */
+.vp-catalog {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vp-catalog-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  flex-shrink: 0;
+}
+.vp-catalog-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface));
+}
+.vp-catalog-search-clear {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  display: flex;
+}
+.vp-catalog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vp-catalog-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+.vp-catalog-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+.vp-catalog-back:hover { opacity: 1; }
+.vp-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+.vp-catalog-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  font-size: 12.5px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  padding: 20px 0;
+}
+.vp-catalog-msg--error { color: #e53935; opacity: 1; }
+
+/* ── Subaba "Meus Links" ── */
+.vp-custom-links {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 /* ── Aba "Overlay de Imagem" (ver image_overlay/interface/Index.vue, stub) ── */
