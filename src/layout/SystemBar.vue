@@ -12,6 +12,34 @@
 
     <v-spacer />
 
+    <!-- Alerta de atualização — cor laranja fixa (não usa "primary"/tema
+         atual) de propósito: o próprio app-bar já É a cor primary escolhida
+         pelo usuário (inclusive laranja, em alguns temas — ver vuetify.js),
+         então um alerta "primary" desapareceria de vez em quando. Laranja
+         fixo + contorno/sombra sutil garante contraste em QUALQUER tema
+         claro/escuro/colorido, sem precisar de uma cor por tema. -->
+    <v-tooltip v-if="updateBadge" location="bottom">
+      <template v-slot:activator="{ props }">
+        <button
+          v-bind="props"
+          class="sysbar-update-badge"
+          style="-webkit-app-region: no-drag;"
+          @click="openUpdateDialog"
+        >
+          <v-progress-circular
+            v-if="updateStep === 'downloading'"
+            :model-value="updateDownloadPercent"
+            size="14"
+            width="2"
+            color="white"
+          />
+          <v-icon v-else size="14">{{ updateBadgeIcon }}</v-icon>
+          <span>{{ updateBadgeText }}</span>
+        </button>
+      </template>
+      {{ updateBadgeTooltip }}
+    </v-tooltip>
+
     <!-- Janela de saída: quando fechada abre direto no monitor salvo -->
     <v-tooltip v-if="!outputOpen" location="bottom">
       <template v-slot:activator="{ props }">
@@ -86,10 +114,37 @@ export default {
     outputHandlers: [],
     _f5Handler: null,
     logoUrl: `${import.meta.env.BASE_URL}ico/favicon.svg`,
+
+    // ── Alerta de atualização (ver electron/updater.js) ─────────────────────
+    // Mesmo canal 'updater:state' que UpdateDialog.vue escuta — cada um
+    // mantém seu próprio espelho local do estado (mesmo padrão já usado
+    // pelo mini-player do rodapé em relação aos módulos "donos" do estado).
+    updateStep: 'idle',
+    updateVersion: null,
+    updateDownloadPercent: 0,
+    _updateStateHandler: null,
   }),
   computed: {
     is_desktop() {
       return this.$appdata.get("is_desktop");
+    },
+    updateBadge() {
+      return ['available', 'downloading', 'downloaded'].includes(this.updateStep);
+    },
+    updateBadgeIcon() {
+      if (this.updateStep === 'downloaded') return 'mdi-check-circle';
+      return 'mdi-arrow-up-circle';
+    },
+    updateBadgeText() {
+      if (this.updateStep === 'downloading') return `${this.updateDownloadPercent}%`;
+      if (this.updateStep === 'downloaded') return 'Instalar';
+      return 'Atualizar';
+    },
+    updateBadgeTooltip() {
+      const v = this.updateVersion ? `v${this.updateVersion}` : '';
+      if (this.updateStep === 'downloading') return `Baixando atualização ${v}...`;
+      if (this.updateStep === 'downloaded') return `Atualização ${v} pronta — clique para instalar`;
+      return `Atualização ${v} disponível — clique para ver detalhes`;
     },
     activeModuleTitle() {
       const modules = this.$appdata.get("modules") || {};
@@ -111,6 +166,13 @@ export default {
       if (!this.$electron.isElectron()) return;
       const appName = this.$t('app.name');
       this.$electron.windowSetTitle(moduleTitle ? `${appName} — ${moduleTitle}` : appName);
+    },
+    // Abre o UpdateDialog já existente (App.vue) sem repetir a checagem — o
+    // estado que o badge mostra já É o mesmo que o dialog vai exibir. Mesmo
+    // padrão de "abrir um modal de outro componente via evento" já usado por
+    // Menu.vue/AboutDialog.vue com 'check-updates', só que sem re-checar.
+    openUpdateDialog() {
+      window.dispatchEvent(new CustomEvent('open-update-dialog'));
     },
     async toggleMaximize() {
       await this.$electron.windowMaximize();
@@ -167,6 +229,13 @@ export default {
     };
     window.addEventListener('keydown', this._f5Handler);
 
+    // Alerta de atualização — mesmo canal que UpdateDialog.vue escuta.
+    this._updateStateHandler = this.$electron.on('updater:state', (state) => {
+      this.updateStep = state.status;
+      this.updateVersion = state.newVersion;
+      this.updateDownloadPercent = Math.round(state.progress || 0);
+    });
+
     // Escuta eventos de menu
     this.menuHandler = this.$electron.on("menu:open-output", () => {
       if (!this.outputOpen) this.openOutputOnDisplay(null);
@@ -208,6 +277,7 @@ export default {
   beforeUnmount() {
     if (this._f5Handler) window.removeEventListener('keydown', this._f5Handler);
     if (this.menuHandler) this.$electron.off("menu:open-output", this.menuHandler);
+    if (this._updateStateHandler) this.$electron.off('updater:state', this._updateStateHandler);
     this.outputHandlers.forEach(({ channel, handler }) => this.$electron.off(channel, handler));
   },
 };
@@ -217,5 +287,34 @@ export default {
 #system-bar {
   position: initial !important;
   flex: 0 !important;
+}
+
+/* Cor laranja fixa (não "primary") + sombra pra sempre destacar do app-bar,
+   mesmo nos temas em que "primary" já É um tom de laranja (ver vuetify.js:
+   "orange"/"dark-orange") — sem isso o badge sumiria de vez em quando. */
+.sysbar-update-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  margin: 0 4px;
+  border: none;
+  border-radius: 10px;
+  background: #fb8c00;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: filter 0.12s;
+}
+.sysbar-update-badge:hover {
+  filter: brightness(1.08);
+}
+.sysbar-update-badge :deep(.v-progress-circular) {
+  flex-shrink: 0;
 }
 </style>

@@ -65,6 +65,7 @@ export default {
     _handlers:              [],
     _syncFilesHandler:      null,
     _checkUpdatesHandler:   null,
+    _openUpdateDialogHandler: null,
     _beforeUnloadHandler:   null,
   }),
 
@@ -170,6 +171,13 @@ export default {
     this._checkUpdatesHandler = () => this.$refs.updater?.checkNow();
     window.addEventListener('check-updates', this._checkUpdatesHandler);
 
+    // 5c. Ouve o clique no alerta de atualização da barra de sistema (ver
+    // layout/SystemBar.vue) — abre o MESMO estado já conhecido (a checagem
+    // já rodou, é por isso que o alerta apareceu), sem repetir checkNow()
+    // (que reiniciaria pro passo "Verificando...").
+    this._openUpdateDialogHandler = () => this.$refs.updater?.openDialog();
+    window.addEventListener('open-update-dialog', this._openUpdateDialogHandler);
+
     // 6. Ouve "Verificar atualizações" do menu nativo
     const onCheckUpdates = this.$electron.on('menu:check-updates', () => {
       this.$refs.updater?.checkNow();
@@ -208,6 +216,7 @@ export default {
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
     window.removeEventListener('check-updates', this._checkUpdatesHandler);
+    window.removeEventListener('open-update-dialog', this._openUpdateDialogHandler);
     window.removeEventListener('beforeunload', this._beforeUnloadHandler);
   },
 
