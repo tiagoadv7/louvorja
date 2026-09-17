@@ -43,7 +43,14 @@ function parseIniWithSections(text) {
 
     const idx = trimmed.indexOf("=");
     if (idx === -1) return;
-    const key = trimmed.slice(0, idx).trim();
+    // Chave em minúsculas: o formato INI é case-insensitive por convenção, e
+    // exports do LouvorJA Delphi original variam de versão pra versão — sem
+    // isso, uma chave gravada como "Tempo="/"TEMPO_HMS=" em vez de
+    // "tempo="/"tempo_hms=" (ambas lidas mais abaixo em minúsculas) passava
+    // batido pelo parser (sec.tempo/sec.tempo_hms undefined), a música
+    // importada ficava sem nenhum tempo de sincronismo e o slide nunca
+    // avançava sozinho, mesmo com o áudio tocando normalmente.
+    const key = trimmed.slice(0, idx).trim().toLowerCase();
     const value = trimmed.slice(idx + 1).trim();
     if (key) sections[currentSection][key] = value;
   });

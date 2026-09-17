@@ -1038,7 +1038,43 @@ export default {
     onAudioLoad() {
       const el = this.$refs.audioEl;
       if (el) this.audioDuration = el.duration || 0;
+      this.fixInvalidSyncTimes();
       this.syncNowPlaying();
+    },
+    // Repara marcadores de tempo impossíveis (maiores que a duração real do
+    // áudio) — só acontece em músicas herdadas do LouvorJA Delphi original
+    // (.slja sem o campo tempo_hms, com o tempo convertido a partir da
+    // posição em bytes do stream PCM decodificado pelo BASS — ver
+    // SljaConverter.js#bassBytesToSeconds). Essa conversão assume uma taxa
+    // fixa de bytes/segundo (44.1kHz estéreo); se o áudio original foi
+    // decodificado numa taxa diferente (outra frequência de amostragem,
+    // mono, etc.), os tempos saem inflados além da duração real — cada
+    // marcador nunca é alcançado (syncSlideFromAudio exige `ts <= t`, e `t`
+    // nunca passa de audioDuration) e o slide trava pra sempre, mesmo com o
+    // áudio tocando normalmente até o fim.
+    //
+    // Como o desvio é um fator multiplicativo CONSTANTE (a mesma taxa errada
+    // foi aplicada a todos os marcadores da música), reescalar todos
+    // proporcionalmente pelo maior marcador restaura o espaçamento relativo
+    // original — não é uma adivinhação, é a álgebra inversa do erro. Corrige
+    // uma vez (grava no disco) e nunca mais precisa rodar pra essa música.
+    fixInvalidSyncTimes() {
+      if (!this.audioDuration) return;
+      const withTime = this.slides.filter((s) => s.tempo_seconds > 0);
+      if (!withTime.length) return;
+      const maxTime = Math.max(...withTime.map((s) => s.tempo_seconds));
+      if (maxTime <= this.audioDuration) return; // nenhum marcador impossível
+
+      // 2% de margem antes do fim — o último marcador raramente é o último
+      // instante exato do áudio (costuma sobrar um trecho instrumental).
+      const factor = (this.audioDuration * 0.98) / maxTime;
+      for (const s of withTime) s.tempo_seconds = Math.round(s.tempo_seconds * factor);
+      this.markDirty();
+      CustomSongs.saveSong(this.song).catch(() => {});
+      this.$alert.info({
+        text: "Os tempos de sincronismo desta música (importada do LouvorJA Delphi) estavam além da duração real do áudio — corrigidos automaticamente.",
+        translate: false,
+      });
     },
     // Espelha o essencial (título/tocando/tempo) em $appdata — o mini-player
     // do rodapé (Footer.vue/Player.vue, ver $slideEditor em
