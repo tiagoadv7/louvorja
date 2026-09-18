@@ -11,6 +11,7 @@
       height: height ? height + 'px' : '100%',
     }"
   >
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -84,9 +85,11 @@
 
 <script>
 import manifest from "../manifest.json";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 export default {
   name: "ScreenBiblePage",
+  components: { AnimatedBackground },
   props: {
     height: Number,
   },
@@ -138,6 +141,7 @@ export default {
     horizontalAlign() { return this.userdata.horizontal_align || "center"; },
     imageFit()        { return this.userdata.image_fit || "cover"; },
     imageOpacity()    { return (this.userdata.image_opacity || 100) / 100; },
+    animatedBg()      { return this.userdata.animated_bg || "none"; },
     bible() {
       return this.$appdata.get("modules.bible.data");
     },

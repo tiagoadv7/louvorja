@@ -7,6 +7,7 @@
     :class="alignClass"
     :style="containerStyle"
   >
+    <AnimatedBackground v-if="userdata.animated_bg && userdata.animated_bg !== 'none'" :variant="userdata.animated_bg" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -118,9 +119,11 @@
 
 <script>
 import manifest from "../manifest.json";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 export default {
   name: "StopwatchPage",
+  components: { AnimatedBackground },
   emits: ["start-run", "pause-run", "reset-run", "save-time"],
   data: () => ({
     s_width: 0,

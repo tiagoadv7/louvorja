@@ -1,6 +1,7 @@
 <template>
   <transition name="sr-visibility">
   <div v-if="isActive" ref="container" class="sorteio-screen" :style="containerStyle">
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
     <!-- Imagem de fundo -->
     <img
       v-if="userdata.image"
@@ -86,6 +87,7 @@
 <script>
 import manifest from "../manifest.json";
 import pt from "../lang/pt.json";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 // Mesma paleta usada no confete da roleta (RouletteWheel.vue / Popup.vue).
 const CONFETTI_COLORS = [
@@ -95,6 +97,7 @@ const CONFETTI_COLORS = [
 
 export default {
   name: "SorteioScreen",
+  components: { AnimatedBackground },
   props: {
     overridePanels: {
       type: Boolean,
@@ -225,6 +228,7 @@ export default {
     },
     borderSpacing() { return this.userdata.border_spacing || 10; },
     panelFontSizePx() { return this.userdata.panel_font_size || 14; },
+    animatedBg() { return this.userdata.animated_bg || "none"; },
 
     containerStyle() {
       return {

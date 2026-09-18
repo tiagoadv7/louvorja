@@ -35,11 +35,20 @@
             "restore_configs": "Restaurar Configurações",
             "clear_image": "Remover imagem",
             "restore_dialog": "Deseja restaurar as configurações?",
+            "save_preset": "Salvar como preset",
+            "delete_preset_dialog": "Remover este preset?",
             "fit": {
                 "none": "Nenhum",
                 "fill": "Ampliar",
                 "contain": "Ajustar",
                 "cover": "Preencher"
+            },
+            "animated_bg": {
+                "none": "Nenhum",
+                "three": "Partículas 3D",
+                "gsap": "Gradiente em Movimento",
+                "anime": "Manchas Flutuantes",
+                "motion": "Brilho Pulsante"
             }
         }
     },

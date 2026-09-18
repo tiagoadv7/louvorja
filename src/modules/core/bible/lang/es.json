@@ -20,6 +20,7 @@
         "horizontal": "Horizontal",
         "image": "Imagen",
         "transparency": "Transparencia",
-        "adjust": "Ajuste"
+        "adjust": "Ajuste",
+        "animated_bg": "Fondo Animado"
     }
 }

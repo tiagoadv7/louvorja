@@ -7,6 +7,7 @@
     :class="alignClass"
     :style="containerStyle"
   >
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -30,9 +31,11 @@
 
 <script>
 import manifest from "../manifest.json";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 export default {
   name: "ClockPage",
+  components: { AnimatedBackground },
   data: () => ({
     s_width: 0,
     s_height: 0,
@@ -95,6 +98,9 @@ export default {
     },
     imageFit() {
       return this.userdata.image_fit || "cover";
+    },
+    animatedBg() {
+      return this.userdata.animated_bg || "none";
     },
     hourCycle() {
       return this.userdata.hour_cycle || "24h";

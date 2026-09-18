@@ -54,6 +54,11 @@
       "type": "object-fit",
       "label": "customization.adjust",
       "default": "cover"
+    },
+    "animated_bg": {
+      "type": "animated-bg",
+      "label": "customization.animated_bg",
+      "default": "none"
     }
   }
 }

@@ -16,9 +16,11 @@
         :items="[
           {
             name: t('customization.background'),
+            presetKey: 'background',
             items: [
               'background_color',
               ['image', 'image_opacity', 'image_fit'],
+              'animated_bg',
             ],
           },
           {

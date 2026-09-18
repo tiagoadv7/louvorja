@@ -21,7 +21,8 @@
         :items="[
           {
             name: t('customization.background'),
-            items: ['background_color', ['image', 'image_opacity', 'image_fit']],
+            presetKey: 'background',
+            items: ['background_color', ['image', 'image_opacity', 'image_fit'], 'animated_bg'],
           },
           {
             name: t('customization.align'),
@@ -40,7 +41,8 @@
         :items="[
           {
             name: t('customization.background'),
-            items: ['sw_background_color', ['sw_image', 'sw_image_opacity', 'sw_image_fit']],
+            presetKey: 'sw_background',
+            items: ['sw_background_color', ['sw_image', 'sw_image_opacity', 'sw_image_fit'], 'sw_animated_bg'],
           },
           {
             name: t('customization.align'),

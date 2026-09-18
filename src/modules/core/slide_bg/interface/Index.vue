@@ -10,9 +10,16 @@
         :items="[
           {
             name: t('customization.background'),
+            presetKey: 'background',
+            // bg_type: o seletor de tipo (none/image/video) no topo desta
+            // janela, fora da barra do CustomizationTools — sem incluir aqui,
+            // aplicar um preset com imagem não mudaria nada se o tipo atual
+            // estivesse em none.
+            presetExtraProps: ['bg_type'],
             items: [
               'background_color',
               ['image', 'image_opacity', 'image_fit'],
+              'animated_bg',
             ],
           },
           {
@@ -433,6 +440,12 @@ function syncToLocalStorage() {
       opacity:          imageOpacity.value,
       fit:              ud.get(`modules.${ID}.image_fit`,        'cover')      || 'cover',
       background_color: ud.get(`modules.${ID}.background_color`, '') || '',
+      // Fundo animado (Three.js/GSAP/anime.js/Motion — ver components/
+      // AnimatedBackground.vue) — independente do tipo acima (imagem/vídeo),
+      // pra poder combinar os dois (ex.: fundo animado com um logo em imagem
+      // semi-transparente por cima, já suportado pela ordem de camadas do
+      // Slide.vue).
+      animated_bg:      ud.get(`modules.${ID}.animated_bg`, 'none') || 'none',
       // Texto — independente do fundo; só aplica quando textEnabled (lê refs
       // direto para garantir valor mais recente, sem delay de Vuex)
       font:             textEnabled.value ? (font.value || '')  : '',

@@ -14,8 +14,12 @@
         class="position-absolute top-0 left-0 w-100 h-100"
         :style="bgStyle"
       >
+        <AnimatedBackground
+          v-if="globalBg && globalBg.animated_bg && globalBg.animated_bg !== 'none'"
+          :variant="globalBg.animated_bg"
+        />
         <video
-          v-if="globalBg && globalBg.type === 'video' && globalBg.url"
+          v-if="globalBg && globalBg.type === 'video' && globalBg.url && !(globalBg.animated_bg && globalBg.animated_bg !== 'none')"
           :src="globalBg.url"
           :poster="transparentPixel"
           autoplay loop muted playsinline
@@ -54,6 +58,8 @@
 </template>
 
 <script>
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
+
 // PNG 1x1 transparente — usado como poster do <video> de fundo para que o
 // navegador exiba transparência (em vez do preto padrão de "sem frame ainda")
 // enquanto o vídeo carrega o primeiro quadro.
@@ -84,6 +90,7 @@ function resolveBgPositionIndex(value) {
 
 export default {
   name: "SlideComponent",
+  components: { AnimatedBackground },
   props: {
     slide_number: Number,
     cover: Boolean,
@@ -184,7 +191,7 @@ export default {
       const bg = this.globalBg;
       // type='default': texto personalizado sem fundo próprio — o fundo continua
       // sendo a imagem de cada slide, então a key precisa acompanhá-la também.
-      if (bg && bg.type && bg.type !== 'default') return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}`;
+      if (bg && bg.type && bg.type !== 'default') return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}-${bg.animated_bg || 'none'}`;
       return `bg-default-${this.activeSlide.image || ''}-${resolveBgPositionIndex(this.image_position)}`;
     },
 
@@ -310,6 +317,16 @@ export default {
 
       // ── Fundo personalizado configurado ──────────────────────────────
       if (bg) {
+        // Fundo ANIMADO (Three.js/GSAP/anime.js/Motion — ver
+        // components/AnimatedBackground.vue, renderizado como camada filha
+        // logo abaixo) tem precedência sobre imagem/vídeo: enquanto ativo, a
+        // própria div de fundo fica transparente pra ele aparecer, igual ao
+        // caso type='none'. Selecionar um fundo animado não exige zerar o
+        // tipo (imagem/vídeo) manualmente antes.
+        if (bg.animated_bg && bg.animated_bg !== 'none') {
+          return { overflow: "hidden", backgroundColor: "transparent" };
+        }
+
         // type='none': transparente — letras aparecem sem imagem de fundo
         if (bg.type === 'none') {
           return { overflow: "hidden", backgroundColor: "transparent" };
