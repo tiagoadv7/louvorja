@@ -341,8 +341,26 @@ function setupIpc(mainWindow) {
       return win;
     });
 
+    // Cada cartão criado aqui é uma janela alwaysOnTop nova (uma por monitor,
+    // inclusive o do próprio painel do operador) — igual à saída/retorno (ver
+    // nudgeRepaint/electron/main.js), isso perturba o compositor de GPU
+    // compartilhado por todo o processo e pode deixar o painel do operador
+    // com uma área do conteúdo presa num frame antigo/em branco. Reforça o
+    // repaint tanto logo depois de mostrar os cartões quanto depois que eles
+    // fecham sozinhos (mais uma perturbação, dessa vez de destruição).
+    const nudgeMainRepaint = () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      for (const delay of [0, 60, 150, 300]) {
+        setTimeout(() => {
+          if (!mainWindow.isDestroyed()) mainWindow.webContents.invalidate();
+        }, delay);
+      }
+    };
+    nudgeMainRepaint();
+
     setTimeout(() => {
       wins.forEach((w) => { if (!w.isDestroyed()) w.close(); });
+      nudgeMainRepaint();
     }, 3000);
 
     return true;

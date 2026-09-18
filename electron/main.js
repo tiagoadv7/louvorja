@@ -524,6 +524,13 @@ function createOutputWindow(moduleId, displayId) {
     // Mesmo nudge de repaint do lado do retorno (ver createReturnWindow) —
     // cobre o caso inverso: abrir a saída principal com o retorno já aberto.
     nudgeRepaint(returnWindow);
+    // O painel do operador (mainWindow) não é transparente, então não sofre
+    // o MESMO bug (perda de alpha do DWM) que output/return — mas criar essa
+    // janela alwaysOnTop nova ainda perturba o compositor de GPU compartilhado
+    // por todo processo, podendo deixar uma área do conteúdo do painel (ex.:
+    // o fundo colorido atrás do logo em views/Main.vue) presa num frame
+    // antigo/em branco até o próximo repaint. Mesmo nudge, agora também nela.
+    nudgeRepaint(mainWindow);
     // Linux: reforça bounds pós-show (ver nudgeBounds) — sem isso o WM
     // (GNOME/Mutter em especial) reposiciona a janela pro monitor primário
     // logo após o show(), fazendo a saída nunca projetar de fato no monitor
@@ -639,6 +646,9 @@ function createReturnWindow(displayId) {
     // (repetidas vezes — ver comentário na função) sem esperar o usuário
     // mexer na janela pra "descongelar".
     nudgeRepaint(outputWindow);
+    // Mesmo nudge no painel do operador — ver comentário equivalente em
+    // createOutputWindow logo acima.
+    nudgeRepaint(mainWindow);
     // Linux: reforça bounds pós-show (ver nudgeBounds) — mesmo motivo da
     // saída principal, sem isso o WM reposiciona o retorno pro monitor
     // primário logo após o show().
@@ -695,6 +705,13 @@ function reconcileDisplays() {
   // Avisa o operador pra atualizar a lista de monitores do seletor (MonitorSelector.vue)
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('displays-changed');
+    // Monitor plugado/desplugado/mudando de resolução (projetor "acordando",
+    // switch HDMI/KVM trocando de fonte etc.) mexe no mesmo compositor de GPU
+    // compartilhado por todas as janelas do processo — sem isso, o painel do
+    // operador podia ficar com parte do conteúdo (ex.: o fundo atrás do logo
+    // em views/Main.vue) preso num frame antigo/em branco até o operador
+    // interagir com a janela de algum jeito que force um repaint sozinho.
+    nudgeRepaint(mainWindow);
   }
 }
 
