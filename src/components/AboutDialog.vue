@@ -244,6 +244,7 @@ export default {
 .about-hero {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 
@@ -264,6 +265,7 @@ export default {
   font-size: 0.82rem;
   color: rgba(var(--v-theme-on-surface), 0.7);
   line-height: 1.8;
+  text-align: center;
 }
 .about-meta-note {
   font-style: italic;
