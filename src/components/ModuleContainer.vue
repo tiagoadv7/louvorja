@@ -16,6 +16,12 @@
     @scroll="scroll()"
     @hasScroll="hasScroll()"
   >
+    <template v-if="$slots.system_buttons" v-slot:system_buttons>
+      <slot name="system_buttons" />
+    </template>
+    <template v-if="$slots.customize" v-slot:customize>
+      <slot name="customize" />
+    </template>
     <template v-slot:header>
       <slot name="header" />
     </template>

@@ -495,6 +495,10 @@ function setBgType(v) {
   if (!v) return;
   bgType.value = v;           // reativo imediato → botão ativo atualiza
   proxy?.$userdata?.set(`modules.${ID}.bg_type`, v);
+  // Fundo animado tem precedência sobre tipo (ver Slide.vue style_bg) —
+  // sem isso, escolher Sem Fundo/Imagem/Vídeo aqui não tinha efeito visual
+  // nenhum enquanto um fundo animado já selecionado continuasse "preso".
+  proxy?.$userdata?.set(`modules.${ID}.animated_bg`, 'none');
   // Garante o sync mesmo quando $userdata.set não dispara o watcher
   // (valor igual no store, ex: 'none' → 'none' após um Redefinir).
   syncToLocalStorage();
@@ -609,6 +613,7 @@ function clearVideo() {
 // se não, cai no ramo "neutro" e limpa o localStorage por completo.
 function resetToDefault() {
   bgType.value = null;
+  proxy?.$userdata?.set(`modules.${ID}.animated_bg`, 'none');
   syncToLocalStorage();
 
   // Suprime um possível sync automático subsequente do watcher (bgType mudou
