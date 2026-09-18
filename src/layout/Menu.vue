@@ -27,6 +27,12 @@
       </template>
       <v-divider class="my-1" />
       <v-list-item
+        prepend-icon="mdi-album"
+        @click="$appdata.toogle('menu.show'); openAlbumsManager()"
+      >
+        <v-list-item-title>Gerenciar Álbuns</v-list-item-title>
+      </v-list-item>
+      <v-list-item
         v-if="$electron.isElectron()"
         prepend-icon="mdi-folder-sync-outline"
         @click="$appdata.toogle('menu.show'); dispatchSyncFiles()"
@@ -42,12 +48,20 @@
       </v-list-item>
     </v-list>
   </v-navigation-drawer>
+
+  <AlbumsManagerDialog v-model="albumsManagerOpen" />
 </template>
 
 <script>
+import AlbumsManagerDialog from "@/components/AlbumsManagerDialog.vue";
+
 export default {
   name: "MenuLayout",
+  components: { AlbumsManagerDialog },
   emits: ['sync-files'],
+  data: () => ({
+    albumsManagerOpen: false,
+  }),
   computed: {
     show: {
       get() {
@@ -94,6 +108,12 @@ export default {
     },
   },
   methods: {
+    openAlbumsManager() {
+      // Mesmo motivo do dispatchSyncFiles abaixo — espera o drawer terminar
+      // de fechar antes de abrir o dialog, senão o scrim dele (ainda
+      // fechando) bloqueia clique nos botões do dialog novo.
+      setTimeout(() => { this.albumsManagerOpen = true; }, 300);
+    },
     dispatchSyncFiles() {
       // Aguarda a transição de fechamento do drawer terminar antes de abrir o
       // diálogo — do contrário o scrim do drawer (ainda fechando) pode ficar

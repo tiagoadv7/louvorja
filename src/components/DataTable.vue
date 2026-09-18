@@ -32,6 +32,11 @@ export default {
     filter: Object,
     letter: String,
     sort_by: String,
+    // IDs de álbum desativados pelo operador (ver Menu.vue > "Gerenciar
+    // Álbuns" / AlbumsManagerDialog.vue) — um item some da listagem só
+    // quando TODOS os álbuns dele estão desativados (item sem álbum nenhum,
+    // ou com pelo menos um álbum ainda ativo, continua aparecendo).
+    disabled_albums: { type: Array, default: () => [] },
   },
   data: () => ({
     all_data: [],
@@ -67,6 +72,9 @@ export default {
       this.compareFilterData();
     },
     letter() {
+      this.compareFilterData();
+    },
+    disabled_albums() {
       this.compareFilterData();
     },
     async data() {
@@ -160,7 +168,15 @@ export default {
                   .replace(/[\u0300-\u036f]/g, "")
                   .startsWith(this.letter));
 
-          return searchableCondition && filterCondition && initialLetter;
+          const albumsCondition =
+            !this.disabled_albums.length ||
+            !item.albums ||
+            item.albums.length === 0 ||
+            item.albums.some(
+              (album) => !this.disabled_albums.includes(Number(album.id_album)),
+            );
+
+          return searchableCondition && filterCondition && initialLetter && albumsCondition;
         })
         .slice();
 
@@ -200,6 +216,7 @@ export default {
         searchable_fields: this.searchable_fields,
         filter: this.filter,
         letter: this.letter,
+        disabled_albums: this.disabled_albums,
       };
 
       if (JSON.stringify(filter) === JSON.stringify(this.last_filter)) {
