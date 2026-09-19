@@ -17,6 +17,7 @@
         <AnimatedBackground
           v-if="globalBg && globalBg.animated_bg && globalBg.animated_bg !== 'none'"
           :variant="globalBg.animated_bg"
+          :color="globalBg.animated_bg_color || '#7aa0ff'"
         />
         <video
           v-if="globalBg && globalBg.type === 'video' && globalBg.url && !(globalBg.animated_bg && globalBg.animated_bg !== 'none')"

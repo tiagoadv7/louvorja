@@ -17,6 +17,7 @@
     "image_opacity": { "type": "opacity", "label": "customization.transparency", "default": 100 },
     "image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "cover" },
     "animated_bg": { "type": "animated-bg", "label": "customization.animated_bg", "default": "none" },
+    "animated_bg_color": { "type": "color", "label": "customization.animated_bg_color", "default": "#7aa0ff" },
 
     "sw_font": { "type": "font", "label": "customization.font", "default": "Arial, sans-serif" },
     "sw_font_color": { "type": "color", "label": "customization.color", "default": "#FFFFFF" },
@@ -29,6 +30,7 @@
     "sw_image": { "type": "image", "label": "customization.image", "default": "" },
     "sw_image_opacity": { "type": "opacity", "label": "customization.transparency", "default": 100 },
     "sw_image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "cover" },
-    "sw_animated_bg": { "type": "animated-bg", "label": "customization.animated_bg", "default": "none" }
+    "sw_animated_bg": { "type": "animated-bg", "label": "customization.animated_bg", "default": "none" },
+    "sw_animated_bg_color": { "type": "color", "label": "customization.animated_bg_color", "default": "#7aa0ff" }
   }
 }

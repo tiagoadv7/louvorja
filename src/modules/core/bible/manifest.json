@@ -75,6 +75,11 @@
       "type": "animated-bg",
       "label": "customization.animated_bg",
       "default": "none"
+    },
+    "animated_bg_color": {
+      "type": "color",
+      "label": "customization.animated_bg_color",
+      "default": "#7aa0ff"
     }
   }
 }

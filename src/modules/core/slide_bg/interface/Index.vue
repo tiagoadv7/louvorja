@@ -19,7 +19,7 @@
             items: [
               'background_color',
               ['image', 'image_opacity', 'image_fit'],
-              'animated_bg',
+              ['animated_bg', 'animated_bg_color'],
             ],
           },
           {
@@ -43,6 +43,34 @@
     <!-- ── Conteúdo principal ─────────────────────────────────────────────── -->
     <div class="sbg-root">
 
+      <!-- ── Prévia ao vivo — fundo (cor/imagem/vídeo/animado) + letra de
+           exemplo juntos, no mesmo estilo visual usado pelo resto do sistema
+           (cartão com cantos arredondados) — reflete exatamente o que vai
+           aparecer na projeção, em vez de ícones de placeholder separados. -->
+      <div class="sbg-live-preview mb-4" :style="previewContainerStyle">
+        <AnimatedBackground
+          v-if="animatedBg !== 'none'"
+          :variant="animatedBg"
+          :color="animatedBgColor"
+        />
+        <img
+          v-if="bgType === 'image' && imageUrl"
+          :src="imageUrl"
+          class="sbg-live-preview-media"
+          :style="{ objectFit: imageFit, opacity: imageOpacity / 100 }"
+        />
+        <video
+          v-else-if="bgType === 'video' && videoUrl"
+          :src="videoUrl"
+          class="sbg-live-preview-media"
+          :style="{ objectFit: imageFit, opacity: imageOpacity / 100 }"
+          autoplay loop muted playsinline
+        />
+        <span v-if="textEnabled" class="sbg-live-preview-text" :style="previewTextStyle">
+          EXEMPLO DE LETRA
+        </span>
+      </div>
+
       <!-- Seletor de tipo de fundo -->
       <div class="text-caption text-medium-emphasis mb-2">{{ t('bg_type_label') }}</div>
       <v-btn-toggle
@@ -65,28 +93,12 @@
       </v-btn-toggle>
 
       <!-- ── Estado neutro: nenhum tipo selecionado (padrão inicial) ─── -->
-      <div v-if="bgType === null" class="sbg-empty">
-        <v-icon size="38" style="opacity:0.25">mdi-image-sync-outline</v-icon>
-        <div class="text-caption text-medium-emphasis mt-2 text-center">
-          Usando imagem padrão do slide. Selecione um tipo acima para personalizar.
-        </div>
-      </div>
-
-      <!-- ── Sem fundo ─────────────────────────────────────────────────── -->
-      <div v-else-if="bgType === 'none'" class="sbg-empty">
-        <v-icon size="38" style="opacity:0.25">mdi-image-off-outline</v-icon>
-        <div class="text-caption text-medium-emphasis mt-2 text-center">
-          {{ t('type_none_desc') || 'Apresenta as letras sem imagem de fundo.' }}
-        </div>
+      <div v-if="bgType === null" class="text-caption text-medium-emphasis text-center mb-3">
+        Usando imagem padrão do slide. Selecione um tipo acima para personalizar.
       </div>
 
       <!-- ── Imagem de fundo ───────────────────────────────────────────── -->
       <template v-if="bgType === 'image'">
-        <div class="sbg-preview mb-3">
-          <img v-if="imageUrl" :src="imageUrl" class="sbg-preview-img" alt="preview" />
-          <v-icon v-else size="40" style="opacity:0.20">mdi-image-off-outline</v-icon>
-        </div>
-
         <div v-if="imageUrl" class="text-caption text-medium-emphasis mb-2 sbg-filename">
           {{ imageFilename }}
         </div>
@@ -121,12 +133,6 @@
 
       <!-- ── Vídeo de fundo ─────────────────────────────────────────────── -->
       <template v-if="bgType === 'video'">
-        <div class="sbg-preview sbg-preview--video mb-3">
-          <v-icon size="40" :color="videoUrl ? 'primary' : undefined" style="opacity:0.55">
-            mdi-video-outline
-          </v-icon>
-        </div>
-
         <div v-if="videoUrl" class="text-caption text-medium-emphasis mb-2 sbg-filename">
           {{ videoFilename }}
         </div>
@@ -198,20 +204,12 @@
       </v-btn-toggle>
 
       <!-- ── Texto desativado: usa fonte/tamanho padrão do slide ───────── -->
-      <div v-if="!textEnabled" class="sbg-empty">
-        <v-icon size="38" style="opacity:0.25">mdi-format-text-variant-outline</v-icon>
-        <div class="text-caption text-medium-emphasis mt-2 text-center">
-          {{ t('text_enabled_desc') }}
-        </div>
+      <div v-if="!textEnabled" class="text-caption text-medium-emphasis text-center mb-3">
+        {{ t('text_enabled_desc') }}
       </div>
 
       <!-- ── Texto ativado: controles de fonte, tamanho e cor ──────────── -->
       <template v-else>
-        <!-- Preview do texto -->
-        <div class="sbg-text-preview mb-4" :style="textPreviewStyle">
-          EXEMPLO DE LETRA
-        </div>
-
         <!-- Fonte -->
         <v-select
           :model-value="font"
@@ -383,6 +381,7 @@ import { ref, computed, watch, onMounted, getCurrentInstance } from "vue";
 import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 const mc           = ref(null);
 const pickingImage = ref(false);
@@ -404,6 +403,13 @@ function t(key) {
 
 // ── Módulo para CustomizationTools (guarded com v-if no template) ─────────
 const module = computed(() => proxy?.$modules?.get(ID));
+
+// Lidos direto do $userdata (reativo) em vez de refs próprias — são escritos
+// pelo CustomizationTools genérico (barra de personalização), não por um
+// setter desta tela; usados aqui só pra alimentar a prévia ao vivo.
+const animatedBg      = computed(() => proxy?.$userdata?.get(`modules.${ID}.animated_bg`, 'none') || 'none');
+const animatedBgColor = computed(() => proxy?.$userdata?.get(`modules.${ID}.animated_bg_color`, '#7aa0ff') || '#7aa0ff');
+const imageFit        = computed(() => proxy?.$userdata?.get(`modules.${ID}.image_fit`, 'cover') || 'cover');
 
 // Flag para evitar que o watcher re-escreva o localStorage após um reset
 let _resetPending = false;
@@ -451,13 +457,23 @@ const fontOptions = [
   { label: 'Roboto',         value: 'Roboto, sans-serif' },
 ];
 
-// Preview do estilo de texto em tempo real
-const textPreviewStyle = computed(() => ({
+// ── Prévia ao vivo (fundo + letra) ─────────────────────────────────────────
+// Cor de fundo lida direto do $userdata (mesmo motivo de animatedBg/imageFit
+// acima) — cai por trás da imagem/vídeo/fundo animado, igual ao Slide.vue.
+const previewBgColor = computed(() => proxy?.$userdata?.get(`modules.${ID}.background_color`, '') || '#000000');
+const previewContainerStyle = computed(() => ({ backgroundColor: previewBgColor.value }));
+
+// Estilo da letra de exemplo — mesmos campos usados no slide de verdade
+// (fonte/tamanho/cor + sombra/caixinha), com escala fixa (a prévia é bem
+// menor que a projeção real, então não há um fontSizePc equivalente aqui).
+const previewTextStyle = computed(() => ({
   fontFamily:      font.value || 'DINCondensedBold, sans-serif',
   fontSize:        `${fontSize.value}px`,
   color:           fontColor.value || '#FFFFFF',
   textTransform:   'uppercase',
-  backgroundColor: 'rgba(0,0,0,0.75)',
+  backgroundColor: textBox.value ? `rgba(0, 0, 0, ${boxOpacity.value})` : 'transparent',
+  border:          (textBox.value && boxBorder.value) ? '1px solid rgba(255, 255, 255, 0.25)' : 'none',
+  textShadow:      textShadow.value ? `0 0 ${shadowBlur.value * 3}px rgba(0, 0, 0, ${shadowIntensity.value})` : 'none',
   padding:         '6px 18px',
   borderRadius:    '4px',
   textAlign:       'center',
@@ -533,7 +549,8 @@ function syncToLocalStorage() {
       // pra poder combinar os dois (ex.: fundo animado com um logo em imagem
       // semi-transparente por cima, já suportado pela ordem de camadas do
       // Slide.vue).
-      animated_bg:      ud.get(`modules.${ID}.animated_bg`, 'none') || 'none',
+      animated_bg:       ud.get(`modules.${ID}.animated_bg`, 'none') || 'none',
+      animated_bg_color: ud.get(`modules.${ID}.animated_bg_color`, '#7aa0ff') || '#7aa0ff',
       // Posição da letra em tela — independente de textEnabled (é a posição
       // do bloco de texto, não sua fonte/cor), sempre aplicada como as demais
       // opções de layout (ex.: border_spacing, mais abaixo).
@@ -784,44 +801,40 @@ onMounted(() => {
 .sbg-root  { padding: 16px 8px; max-width: 560px; margin: 0 auto; }
 .sbg-toggle { width: 100%; }
 
-.sbg-preview {
-  width: 100%; height: 110px;
-  border-radius: 10px;
-  background: rgba(128,128,128,0.07);
-  border: 1px solid rgba(128,128,128,0.14);
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-}
-.sbg-preview--video {
-  background: rgba(99,102,241,0.06);
-  border-color: rgba(99,102,241,0.20);
-}
-.sbg-preview-img { width: 100%; height: 100%; object-fit: cover; }
-
-.sbg-empty {
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 22px 8px;
-}
 .sbg-filename {
   max-width: 100%; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── Preview de texto ──────────────────────────────────────────────── */
-.sbg-text-preview {
+/* ── Prévia ao vivo — fundo (cor/imagem/vídeo/animado) + letra, no mesmo
+     estilo de cartão com cantos arredondados usado no resto do sistema
+     (ex.: a barra de personalização, ver CustomizationBar.vue). ──────── */
+.sbg-live-preview {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(128, 128, 128, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+.sbg-live-preview-media {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  min-height: 54px;
-  border-radius: 8px;
-  border: 1px solid rgba(128,128,128,0.14);
-  background: rgba(30,30,30,0.9);
+  height: 100%;
+}
+.sbg-live-preview-text {
+  position: relative;
+  z-index: 1;
   font-weight: 700;
   letter-spacing: 0.04em;
   word-break: break-word;
-  overflow: hidden;
+  max-width: 90%;
+  text-align: center;
 }
 
 /* ── Rótulo dos seletores de cor — quebra em 2 linhas em vez de vazar

@@ -1,11 +1,12 @@
 <template>
-  <div class="anim-bg" aria-hidden="true">
+  <div class="anim-bg" aria-hidden="true" :style="{ '--anim-color': color }">
     <canvas v-if="variant === 'three'" ref="threeCanvas" class="anim-bg-layer" />
     <div v-else-if="variant === 'gsap'" ref="gsapLayer" class="anim-bg-layer anim-bg-gsap" />
     <div v-else-if="variant === 'anime'" ref="animeLayer" class="anim-bg-layer anim-bg-anime">
       <span v-for="n in 5" :key="n" class="anim-bg-blob" />
     </div>
     <div v-else-if="variant === 'motion'" ref="motionLayer" class="anim-bg-layer anim-bg-motion">
+      <span class="anim-bg-glow anim-bg-glow--halo" />
       <span class="anim-bg-glow" />
     </div>
   </div>
@@ -32,16 +33,28 @@ export default {
   props: {
     // 'three' | 'gsap' | 'anime' | 'motion' | 'none'
     variant: { type: String, default: "none" },
+    // Cor base do efeito — escolhida pelo usuário (campo "Cor do Fundo
+    // Animado"). Pra gsap/anime/motion é lida via CSS custom property
+    // (--anim-color, ver <style> abaixo com color-mix()); o three.js não
+    // enxerga CSS vars, então tinge o material das partículas direto em JS.
+    color: { type: String, default: "#7aa0ff" },
   },
   data: () => ({
     _three: null,
     _gsapTween: null,
     _animeAnimations: [],
-    _motionAnimation: null,
+    _motionAnimations: [],
     _resizeHandler: null,
   }),
   watch: {
     variant() {
+      this._teardown();
+      this.$nextTick(() => this._setup());
+    },
+    color() {
+      // Só o three.js precisa recriar a cena pra recolorir (as outras
+      // variantes reagem sozinhas à mudança de --anim-color via CSS).
+      if (this.variant !== "three") return;
       this._teardown();
       this.$nextTick(() => this._setup());
     },
@@ -74,10 +87,8 @@ export default {
       }
       this._animeAnimations.forEach((a) => a.pause?.());
       this._animeAnimations = [];
-      if (this._motionAnimation) {
-        this._motionAnimation.stop?.();
-        this._motionAnimation = null;
-      }
+      this._motionAnimations.forEach((a) => a.stop?.());
+      this._motionAnimations = [];
     },
 
     // ── Three.js: campo de partículas flutuando bem lento ─────────────────
@@ -102,7 +113,10 @@ export default {
       }
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, transparent: true, opacity: 0.55 });
+      // Mistura com branco pra manter as partículas visíveis/brilhantes contra
+      // o fundo escuro fixo, independente de qual matiz o usuário escolheu.
+      const particleColor = new THREE.Color(this.color).lerp(new THREE.Color(0xffffff), 0.5);
+      const material = new THREE.PointsMaterial({ color: particleColor, size: 0.35, transparent: true, opacity: 0.65 });
       const points = new THREE.Points(geometry, material);
       scene.add(points);
 
@@ -164,14 +178,27 @@ export default {
 
     // ── Motion (motion.dev): brilho radial pulsando ────────────────────────
     async _setupMotion() {
-      const el = this.$refs.motionLayer?.querySelector(".anim-bg-glow");
-      if (!el) return;
+      const layer = this.$refs.motionLayer;
+      if (!layer) return;
+      const core = layer.querySelector(".anim-bg-glow:not(.anim-bg-glow--halo)");
+      const halo = layer.querySelector(".anim-bg-glow--halo");
       const { animate } = await import("motion");
-      this._motionAnimation = animate(
-        el,
-        { scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] },
-        { duration: 8, repeat: Infinity, ease: "easeInOut" }
-      );
+      if (core) {
+        this._motionAnimations.push(animate(
+          core,
+          { scale: [1, 1.25, 1], opacity: [0.4, 0.75, 0.4] },
+          { duration: 8, repeat: Infinity, ease: "easeInOut" }
+        ));
+      }
+      // Halo maior e mais lento, levemente fora de fase com o núcleo — dá
+      // profundidade ao "respirar" em vez de um único círculo pulsando.
+      if (halo) {
+        this._motionAnimations.push(animate(
+          halo,
+          { scale: [1.1, 1, 1.1], opacity: [0.5, 0.85, 0.5] },
+          { duration: 11, repeat: Infinity, ease: "easeInOut" }
+        ));
+      }
     },
   },
 };
@@ -196,15 +223,22 @@ export default {
   width: 100%;
   height: 100%;
 }
+/* Todas as variantes usam a cor escolhida pelo usuário (--anim-color, prop
+   `color`) via color-mix() — suportado pelo Chromium desta versão do
+   Electron, mesma técnica usada pelo pianolouvorja/app. */
 .anim-bg-gsap {
-  background: linear-gradient(120deg, #1a2a6c, #2c3e91, #1a2a6c, #0d1533);
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--anim-color) 55%, #0d1117),
+    color-mix(in srgb, var(--anim-color) 85%, #0d1117),
+    color-mix(in srgb, var(--anim-color) 40%, #0d1117),
+    #0d1117
+  );
   background-size: 200% 200%;
 }
 .anim-bg-anime,
 .anim-bg-motion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
 }
 .anim-bg-blob {
   position: absolute;
@@ -213,17 +247,37 @@ export default {
   border-radius: 50%;
   filter: blur(40px);
   opacity: 0.45;
-  background: radial-gradient(circle, rgba(120, 160, 255, 0.9), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 90%, white 10%), transparent 70%);
 }
-.anim-bg-blob:nth-child(1) { top: 10%; left: 15%; background: radial-gradient(circle, rgba(120,160,255,0.9), transparent 70%); }
-.anim-bg-blob:nth-child(2) { top: 55%; left: 60%; background: radial-gradient(circle, rgba(255,160,200,0.8), transparent 70%); }
-.anim-bg-blob:nth-child(3) { top: 30%; left: 70%; background: radial-gradient(circle, rgba(160,255,210,0.8), transparent 70%); }
-.anim-bg-blob:nth-child(4) { top: 65%; left: 10%; background: radial-gradient(circle, rgba(255,220,140,0.8), transparent 70%); }
-.anim-bg-blob:nth-child(5) { top: 5%; left: 50%; background: radial-gradient(circle, rgba(190,150,255,0.8), transparent 70%); }
+/* Variações de mistura (não matizes diferentes) da mesma cor — mantém as
+   manchas "vivas" e com profundidade sem fugir da cor escolhida. */
+.anim-bg-blob:nth-child(1) { top: 10%; left: 15%; }
+.anim-bg-blob:nth-child(2) { top: 55%; left: 60%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 65%, white 35%), transparent 70%); }
+.anim-bg-blob:nth-child(3) { top: 30%; left: 70%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 50%, white 50%), transparent 70%); }
+.anim-bg-blob:nth-child(4) { top: 65%; left: 10%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 80%, black 15%), transparent 70%); }
+.anim-bg-blob:nth-child(5) { top: 5%; left: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 60%, white 25%), transparent 70%); }
+
+/* Brilho Pulsante — núcleo brilhante + halo maior/mais difuso por trás
+   (posicionados um sobre o outro, concêntricos), com box-shadow espalhando
+   luz de verdade pra fora do círculo em vez de só um gradiente com borda
+   nítida — esse é o "efeito de glow" de fato. */
 .anim-bg-glow {
-  width: 45%;
-  height: 45%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40%;
+  height: 40%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.9), rgba(120, 160, 255, 0.25) 60%, transparent 80%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 25%, white 75%), var(--anim-color) 45%, transparent 75%);
+  filter: blur(6px);
+  box-shadow: 0 0 min(18vmin, 140px) min(9vmin, 70px) color-mix(in srgb, var(--anim-color) 45%, transparent);
+}
+.anim-bg-glow--halo {
+  width: 78%;
+  height: 78%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 35%, transparent), transparent 70%);
+  filter: blur(24px);
+  box-shadow: none;
 }
 </style>

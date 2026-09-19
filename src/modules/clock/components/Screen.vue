@@ -7,7 +7,7 @@
     :class="alignClass"
     :style="containerStyle"
   >
-    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" :color="animatedBgColor" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -101,6 +101,9 @@ export default {
     },
     animatedBg() {
       return this.userdata.animated_bg || "none";
+    },
+    animatedBgColor() {
+      return this.userdata.animated_bg_color || "#7aa0ff";
     },
     hourCycle() {
       return this.userdata.hour_cycle || "24h";

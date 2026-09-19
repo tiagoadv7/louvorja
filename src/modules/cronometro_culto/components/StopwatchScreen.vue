@@ -7,7 +7,11 @@
     :class="alignClass"
     :style="containerStyle"
   >
-    <AnimatedBackground v-if="userdata.animated_bg && userdata.animated_bg !== 'none'" :variant="userdata.animated_bg" />
+    <AnimatedBackground
+      v-if="userdata.animated_bg && userdata.animated_bg !== 'none'"
+      :variant="userdata.animated_bg"
+      :color="userdata.animated_bg_color || '#7aa0ff'"
+    />
     <img
       v-if="userdata.image"
       :src="userdata.image"

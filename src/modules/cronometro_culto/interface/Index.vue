@@ -22,7 +22,7 @@
           {
             name: t('customization.background'),
             presetKey: 'background',
-            items: ['background_color', ['image', 'image_opacity', 'image_fit'], 'animated_bg'],
+            items: ['background_color', ['image', 'image_opacity', 'image_fit'], ['animated_bg', 'animated_bg_color']],
           },
           {
             name: t('customization.align'),
@@ -42,7 +42,7 @@
           {
             name: t('customization.background'),
             presetKey: 'sw_background',
-            items: ['sw_background_color', ['sw_image', 'sw_image_opacity', 'sw_image_fit'], 'sw_animated_bg'],
+            items: ['sw_background_color', ['sw_image', 'sw_image_opacity', 'sw_image_fit'], ['sw_animated_bg', 'sw_animated_bg_color']],
           },
           {
             name: t('customization.align'),

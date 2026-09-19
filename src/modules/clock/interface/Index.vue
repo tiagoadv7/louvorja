@@ -20,7 +20,7 @@
             items: [
               'background_color',
               ['image', 'image_opacity', 'image_fit'],
-              'animated_bg',
+              ['animated_bg', 'animated_bg_color'],
             ],
           },
           {

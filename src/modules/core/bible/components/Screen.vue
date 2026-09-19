@@ -11,7 +11,7 @@
       height: height ? height + 'px' : '100%',
     }"
   >
-    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" :color="animatedBgColor" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -142,6 +142,7 @@ export default {
     imageFit()        { return this.userdata.image_fit || "cover"; },
     imageOpacity()    { return (this.userdata.image_opacity || 100) / 100; },
     animatedBg()      { return this.userdata.animated_bg || "none"; },
+    animatedBgColor() { return this.userdata.animated_bg_color || "#7aa0ff"; },
     bible() {
       return this.$appdata.get("modules.bible.data");
     },

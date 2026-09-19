@@ -21,6 +21,7 @@
         "image": "Imagem",
         "transparency": "Transparência",
         "adjust": "Ajuste",
-        "animated_bg": "Fundo Animado"
+        "animated_bg": "Fundo Animado",
+        "animated_bg_color": "Cor do Fundo Animado"
     }
 }

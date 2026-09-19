@@ -1,7 +1,7 @@
 <template>
   <transition name="sr-visibility">
   <div v-if="isActive" ref="container" class="sorteio-screen" :style="containerStyle">
-    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" />
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" :color="animatedBgColor" />
     <!-- Imagem de fundo -->
     <img
       v-if="userdata.image"
@@ -229,6 +229,7 @@ export default {
     borderSpacing() { return this.userdata.border_spacing || 10; },
     panelFontSizePx() { return this.userdata.panel_font_size || 14; },
     animatedBg() { return this.userdata.animated_bg || "none"; },
+    animatedBgColor() { return this.userdata.animated_bg_color || "#7aa0ff"; },
 
     containerStyle() {
       return {
