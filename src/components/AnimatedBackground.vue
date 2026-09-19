@@ -183,6 +183,12 @@ export default {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  /* Base opaca por trás de TODAS as variantes — sem isso, "three" (partículas
+     sobre canvas com alpha:true), "anime" (manchas isoladas) e "motion"
+     (brilho central único) deixam a maior parte da área transparente,
+     mostrando o que estiver atrás da janela em vez de um fundo de verdade.
+     "gsap" já cobre 100% sozinho, então essa base fica coberta e não se nota. */
+  background: linear-gradient(135deg, #0d1117 0%, #1a2035 60%, #0d1117 100%);
 }
 .anim-bg-layer {
   position: absolute;
