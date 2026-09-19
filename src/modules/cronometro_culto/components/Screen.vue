@@ -104,6 +104,15 @@ export default {
     fontColor() {
       return this.userdata.font_color || "#000000";
     },
+    // Cor do relógio (canto pequeno, ver <span class="cc-clock">) — campo
+    // PRÓPRIO, separado de font_color (que é só do cronômetro principal).
+    // Antes o relógio nem lia nenhum campo do usuário: ficava fixo na cor
+    // "primary" do tema, então mudar a única cor disponível (font_color) só
+    // parecia mudar o cronômetro — o relógio nunca respondia mesmo, dando a
+    // impressão de estarem acoplados.
+    clockColor() {
+      return this.userdata.clock_color || "#7aa0ff";
+    },
     fontSize() {
       return this.userdata.font_size || 30;
     },
@@ -157,7 +166,7 @@ export default {
     clockStyle() {
       return {
         fontFamily: this.font,
-        color: "rgb(var(--v-theme-primary))",
+        color: this.clockColor,
         zIndex: 1,
         fontSize: `${this.fontSizePc(this.fontSize * 0.6)}px`,
         textAlign: this.horizontalAlign,

@@ -18,6 +18,7 @@
     "image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "cover" },
     "animated_bg": { "type": "animated-bg", "label": "customization.animated_bg", "default": "none" },
     "animated_bg_color": { "type": "color", "label": "customization.animated_bg_color", "default": "#7aa0ff" },
+    "clock_color": { "type": "color", "label": "customization.clock_color", "default": "#7aa0ff" },
 
     "sw_font": { "type": "font", "label": "customization.font", "default": "Arial, sans-serif" },
     "sw_font_color": { "type": "color", "label": "customization.color", "default": "#FFFFFF" },

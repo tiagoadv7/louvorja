@@ -284,8 +284,8 @@ function setupIpc(mainWindow) {
       const fsLabel = Math.round(13  * visualScale);
       const fsRes   = Math.round(11  * visualScale);
       const fsDevice = Math.round(10.5 * visualScale);
-      const border  = Math.max(1, Math.round(2.5 * visualScale));
-      const radius  = Math.round(14  * visualScale);
+      const border  = Math.max(1, Math.round(3  * visualScale));
+      const radius  = Math.round(20  * visualScale);
 
       // No Linux, uma janela pequena flutuante não tem como pedir posição
       // global de forma confiável: no Wayland o protocolo simplesmente não dá
@@ -358,10 +358,10 @@ function setupIpc(mainWindow) {
   display:flex;align-items:center;justify-content:center;">
   <div style="
     width:${cardW}px;height:${cardH}px;box-sizing:border-box;
-    background:rgba(12,12,14,0.92);
-    border:${border}px solid rgba(255,255,255,0.75);
+    background:rgba(10,10,12,0.97);
+    border:${border}px solid rgba(255,255,255,0.85);
     border-radius:${radius}px;
-    box-shadow:0 0 0 1px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);
+    box-shadow:0 0 0 ${Math.max(1, Math.round(1.5 * visualScale))}px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.1);
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
     <div style="font-size:${fsNum}px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>

@@ -32,6 +32,10 @@
             name: t('customization.text'),
             items: [['font', 'font_size', 'font_color']],
           },
+          {
+            name: t('customization.clock'),
+            items: ['clock_color'],
+          },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
       />

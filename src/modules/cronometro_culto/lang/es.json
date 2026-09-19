@@ -48,6 +48,8 @@
         "align": "Alineación",
         "font": "Fuente",
         "text": "Texto",
+        "clock": "Reloj",
+        "clock_color": "Color del Reloj",
         "alert": "Alerta",
         "window": "Ventana",
         "vertical": "Vertical",
