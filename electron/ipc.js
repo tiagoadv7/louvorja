@@ -105,6 +105,14 @@ function setupIpc(mainWindow) {
       return {
         id: d.id,
         label,
+        // Nome real do monitor (fabricante/modelo), quando o Chromium
+        // conseguir ler via EDID/driver — mesma fonte que o Gerenciador de
+        // Dispositivos do Windows usa. Cai pra string vazia (nunca 'Principal'/
+        // 'Monitor N' sintético) quando o driver não expõe nada útil — a UI
+        // decide se mostra ou não. Não decidimos "TV" vs "Monitor" vs
+        // "Projetor" aqui: não existe um jeito confiável de detectar isso via
+        // EDID/API do SO, então só mostramos o nome real quando disponível.
+        deviceName: d.label || '',
         bounds: d.bounds,
         workArea: d.workArea,
         scaleFactor: d.scaleFactor,

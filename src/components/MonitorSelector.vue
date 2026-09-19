@@ -28,6 +28,7 @@
           :key="s.id"
           class="monitor-tile"
           :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-output': selectedId === s.id }"
+          :title="s.deviceName || undefined"
           @click="lock(s.id)"
         >
           <div class="monitor-tile__screen">
@@ -99,6 +100,7 @@
           :key="'ret-' + s.id"
           class="monitor-tile"
           :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-return': returnSelectedId === s.id }"
+          :title="s.deviceName || undefined"
           @click="lockReturn(s.id)"
         >
           <div class="monitor-tile__screen">
@@ -347,9 +349,11 @@ export default {
   color: #fff;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
+/* Só brilho no hover (filter, não background/border-color) — sem isso,
+   passar o mouse sobre o card "Principal" (ou qualquer um já selecionado)
+   apagava o gradiente/cor de destaque, deixando só um contorno neutro. */
 .monitor-tile:hover .monitor-tile__screen {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(30, 30, 38, 0.95);
+  filter: brightness(1.18);
 }
 .monitor-tile--active-output .monitor-tile__screen {
   border-color: #2196F3;

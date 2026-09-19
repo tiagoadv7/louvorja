@@ -64,6 +64,9 @@
             </div>
             <div class="marr-tile__stand" />
             <div class="marr-tile__base" />
+            <div v-if="tile.deviceName" class="marr-tile__device" :title="tile.deviceName">
+              {{ tile.deviceName }}
+            </div>
           </div>
         </div>
 
@@ -132,6 +135,7 @@ export default {
           width: s.bounds.width,
           height: s.bounds.height,
           isPrimary: s.primary,
+          deviceName: s.deviceName || '',
         };
       });
     },
@@ -168,6 +172,7 @@ export default {
           isPrimary: v.isPrimary,
           index: v.isPrimary ? 0 : ++extIdx,
           resolutionLabel: `${v.width}×${v.height}`,
+          deviceName: v.deviceName,
         };
       });
     },
@@ -384,5 +389,17 @@ export default {
 }
 .marr-tile--primary .marr-tile__base {
   background: rgb(var(--v-theme-primary));
+}
+/* Nome real do monitor (fabricante/modelo, via Display.label do Electron) —
+   só aparece quando o driver/EDID expõe algo; truncado com "..." se não
+   couber, texto completo disponível via title (tooltip nativo). */
+.marr-tile__device {
+  margin-top: 4px;
+  max-width: 90%;
+  font-size: 10px;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
