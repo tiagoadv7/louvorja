@@ -176,19 +176,26 @@
                   item-value="value"
                   hide-details
                 />
-                <v-select
+                <div
                   v-else-if="item?.type == 'animated-bg'"
-                  v-model="userdata[item.property]"
-                  :label="item?.label"
-                  :width="200"
-                  prepend-inner-icon="mdi-motion-outline"
-                  density="compact"
-                  variant="outlined"
-                  :items="animatedBackgrounds"
-                  item-title="label"
-                  item-value="value"
-                  hide-details
-                />
+                  class="px-1"
+                  style="width: 200px"
+                >
+                  <span
+                    class="text-label-small px-2"
+                    style="
+                      opacity: var(--v-medium-emphasis-opacity);
+                      font-size: 12px;
+                    "
+                  >
+                    {{ item?.label }}
+                  </span>
+                  <l-animated-bg-picker
+                    v-model="userdata[item.property]"
+                    :color="userdata[item.property + '_color']"
+                    :options="animatedBackgrounds"
+                  />
+                </div>
                 <div
                   v-else-if="item?.type == 'opacity'"
                   class="px-1"
@@ -228,8 +235,13 @@
 </template>
 
 <script>
+import AnimatedBgPicker from "@/components/AnimatedBgPicker.vue";
+
 export default {
   name: "CustomizationToolsComponent",
+  components: {
+    LAnimatedBgPicker: AnimatedBgPicker,
+  },
   props: {
     module: Object,
     items: Array,
