@@ -37,6 +37,16 @@
       "label": "customization.animated_bg",
       "default": "none"
     },
+    "horizontal_align": {
+      "type": "h-align",
+      "label": "customization.horizontal",
+      "default": "center"
+    },
+    "vertical_align": {
+      "type": "v-align",
+      "label": "customization.vertical",
+      "default": "center"
+    },
     "video": { "default": "" },
     "font": {
       "type": "font",

@@ -22,6 +22,9 @@
   "text_aux_color": "Color del texto auxiliar",
   "customization": {
     "background": "Fondo",
+    "align": "Posición de la Letra",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
     "text": "Texto",
     "window": "Ventana",
     "color": "Color de fondo",

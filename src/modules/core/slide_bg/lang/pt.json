@@ -22,6 +22,9 @@
   "text_aux_color": "Cor do texto auxiliar",
   "customization": {
     "background": "Fundo",
+    "align": "Posição da Letra",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
     "text": "Texto",
     "window": "Janela",
     "color": "Cor de fundo",

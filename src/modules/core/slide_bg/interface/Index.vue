@@ -23,6 +23,10 @@
             ],
           },
           {
+            name: t('customization.align'),
+            items: [['horizontal_align', 'vertical_align']],
+          },
+          {
             name: t('customization.text'),
             items: [
               ['font', 'font_size', 'font_color'],
@@ -446,6 +450,11 @@ function syncToLocalStorage() {
       // semi-transparente por cima, já suportado pela ordem de camadas do
       // Slide.vue).
       animated_bg:      ud.get(`modules.${ID}.animated_bg`, 'none') || 'none',
+      // Posição da letra em tela — independente de textEnabled (é a posição
+      // do bloco de texto, não sua fonte/cor), sempre aplicada como as demais
+      // opções de layout (ex.: border_spacing, mais abaixo).
+      horizontal_align: ud.get(`modules.${ID}.horizontal_align`, 'center') || 'center',
+      vertical_align:   ud.get(`modules.${ID}.vertical_align`,   'center') || 'center',
       // Texto — independente do fundo; só aplica quando textEnabled (lê refs
       // direto para garantir valor mais recente, sem delay de Vuex)
       font:             textEnabled.value ? (font.value || '')  : '',

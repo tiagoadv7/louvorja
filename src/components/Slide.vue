@@ -38,7 +38,8 @@
       <div
         v-if="!slide.destroy"
         v-show="slide.active"
-        class="position-absolute top-0 left-0 w-100 h-100 d-flex justify-center align-center"
+        class="position-absolute top-0 left-0 w-100 h-100 d-flex"
+        :style="textLayoutStyle"
       >
         <div>
           <div
@@ -198,6 +199,20 @@ export default {
     // Estilo do fundo calculado a partir do slide ativo (sem depender do slide em transição)
     bgStyle() {
       return this.style_bg(this.activeSlide);
+    },
+
+    // Posição da letra em tela (Fundo Personalizado > Posição da Letra) —
+    // container de texto é flex-row (sem flex-direction:column), então o
+    // eixo principal é o horizontal (justifyContent) e o cruzado é o
+    // vertical (alignItems). 'start'/'center'/'end' vêm dos campos h-align/
+    // v-align do CustomizationTools (ver src/modules/core/slide_bg).
+    textLayoutStyle() {
+      const bg = this.globalBg;
+      const map = { start: "flex-start", center: "center", end: "flex-end" };
+      return {
+        justifyContent: map[bg?.horizontal_align] || "center",
+        alignItems:     map[bg?.vertical_align]   || "center",
+      };
     },
 
   },
