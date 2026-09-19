@@ -13,16 +13,18 @@
         :module="module"
         :items="[
           {
+            // Cor/imagem/vídeo/opacidade/ajuste saíram daqui — já têm UI
+            // própria na janela principal (aba Tipo de fundo), então ficar
+            // também nessa barra só duplicava os mesmos controles em dois
+            // lugares. Fundo Animado é o oposto — só existe aqui.
             name: t('customization.background'),
             presetKey: 'background',
             // bg_type: o seletor de tipo (none/image/video) no topo desta
             // janela, fora da barra do CustomizationTools — sem incluir aqui,
-            // aplicar um preset com imagem não mudaria nada se o tipo atual
-            // estivesse em none.
-            presetExtraProps: ['bg_type'],
+            // aplicar um preset com fundo animado não mudaria nada se o tipo
+            // atual estivesse em outro valor.
+            presetExtraProps: ['bg_type', 'background_color', 'image', 'image_opacity', 'image_fit'],
             items: [
-              'background_color',
-              ['image', 'image_opacity', 'image_fit'],
               ['animated_bg', 'animated_bg_color'],
             ],
           },
@@ -96,6 +98,20 @@
         </v-btn>
       </v-btn-toggle>
 
+      <!-- Cor de fundo — usada como fundo sólido em "Sem Fundo" e como cor
+           de respaldo atrás de imagem/vídeo (enquanto carrega ou fica
+           parcialmente transparente). Independente do tipo selecionado. -->
+      <div class="d-flex align-center justify-space-between mb-4">
+        <span class="text-caption text-medium-emphasis">Cor de fundo</span>
+        <input
+          type="color"
+          :value="previewBgColor"
+          @input="e => setBackgroundColor(e.target.value)"
+          class="sbg-color-input"
+          title="Cor de fundo"
+        />
+      </div>
+
       <!-- ── Estado neutro: nenhum tipo selecionado (padrão inicial) ─── -->
       <div v-if="bgType === null" class="text-caption text-medium-emphasis text-center mb-3">
         Usando imagem padrão do slide. Selecione um tipo acima para personalizar.
@@ -132,6 +148,20 @@
           @update:modelValue="setOpacity"
           min="10" max="100" step="5"
           color="primary" hide-details density="compact" :thumb-size="14"
+          class="mb-3"
+        />
+
+        <v-select
+          :model-value="imageFit"
+          @update:modelValue="setImageFit"
+          label="Ajuste"
+          :items="fitOptions"
+          item-title="label"
+          item-value="value"
+          density="compact"
+          variant="outlined"
+          hide-details
+          prepend-inner-icon="mdi-fit-to-page-outline"
         />
       </template>
 
@@ -166,6 +196,20 @@
           @update:modelValue="setOpacity"
           min="10" max="100" step="5"
           color="primary" hide-details density="compact" :thumb-size="14"
+          class="mb-3"
+        />
+
+        <v-select
+          :model-value="imageFit"
+          @update:modelValue="setImageFit"
+          label="Ajuste"
+          :items="fitOptions"
+          item-title="label"
+          item-value="value"
+          density="compact"
+          variant="outlined"
+          hide-details
+          prepend-inner-icon="mdi-fit-to-page-outline"
         />
       </template>
 
@@ -394,6 +438,14 @@ const videoFilename = computed(() =>
   decodeURIComponent((videoUrl.value || '').split('/').pop() || '')
 );
 
+// Ajuste de imagem/vídeo (mesmas opções do CustomizationTools, tipo object-fit)
+const fitOptions = [
+  { label: 'Preencher', value: 'cover' },
+  { label: 'Ajustar', value: 'contain' },
+  { label: 'Ampliar', value: 'fill' },
+  { label: 'Nenhum', value: 'none' },
+];
+
 // Fontes disponíveis (mesmas do CustomizationTools)
 const fontOptions = [
   { label: 'DIN Condensed (padrão)', value: 'DINCondensedBold, sans-serif' },
@@ -571,6 +623,18 @@ function setBgType(v) {
 function setOpacity(v) {
   imageOpacity.value = v;
   proxy?.$userdata?.set(`modules.${ID}.image_opacity`, v);
+  if (bgType.value) syncToLocalStorage();
+}
+// Cor de fundo e Ajuste — antes só editáveis na barra de baixo (removidos de
+// lá por duplicarem esta janela); precisam de setter próprio aqui agora que
+// a única UI é esta. Usam previewBgColor/imageFit (computeds que já leem
+// direto do $userdata, ver mais abaixo) como valor atual.
+function setBackgroundColor(v) {
+  proxy?.$userdata?.set(`modules.${ID}.background_color`, v);
+  syncToLocalStorage();
+}
+function setImageFit(v) {
+  proxy?.$userdata?.set(`modules.${ID}.image_fit`, v);
   if (bgType.value) syncToLocalStorage();
 }
 
