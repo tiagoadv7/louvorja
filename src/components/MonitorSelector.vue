@@ -22,18 +22,25 @@
 
       <v-progress-linear v-if="loading" indeterminate height="2" class="mb-1" />
 
-      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-2 px-2 pt-1 pb-2">
+      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-3 px-2 pt-1 pb-2">
         <div
           v-for="s in screens"
           :key="s.id"
-          class="monitor-card monitor-card--output"
-          :class="{ 'monitor-card--active-output': selectedId === s.id }"
+          class="monitor-tile"
+          :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-output': selectedId === s.id }"
           @click="lock(s.id)"
         >
-          <span class="monitor-card__num">{{ monitorNum(s) }}</span>
-          <span class="monitor-card__label">{{ s.label }}</span>
-          <span class="monitor-card__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
-          <span v-if="s.id === returnSelectedId" class="monitor-card__out monitor-card__out--return">Retorno</span>
+          <div class="monitor-tile__screen">
+            <v-icon v-if="s.primary" size="12" class="monitor-tile__star">mdi-star</v-icon>
+            <span class="monitor-tile__num">{{ monitorNum(s) }}</span>
+            <span class="monitor-tile__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
+            <span class="monitor-tile__badge" :class="{ 'monitor-tile__badge--primary': s.primary }">
+              {{ s.primary ? 'Principal' : 'Estendido' }}
+            </span>
+            <span v-if="s.id === returnSelectedId" class="monitor-tile__out monitor-tile__out--return">Retorno</span>
+          </div>
+          <div class="monitor-tile__stand" />
+          <div class="monitor-tile__base" />
         </div>
       </div>
 
@@ -53,6 +60,10 @@
       />
 
       <v-divider class="my-1" />
+
+      <v-list-item prepend-icon="mdi-monitor-dashboard" rounded="lg" @click="openArrangement">
+        <v-list-item-title>Arranjo de monitores</v-list-item-title>
+      </v-list-item>
 
       <v-list-item prepend-icon="mdi-monitor-multiple" rounded="lg" @click="identify">
         <v-list-item-title>Identificar monitores</v-list-item-title>
@@ -82,29 +93,42 @@
       </v-list-item>
 
       <!-- Lista sempre visível — sem v-if="returnOpen" -->
-      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-2 px-2 pt-1 pb-2">
+      <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-3 px-2 pt-1 pb-2">
         <div
           v-for="s in screens"
           :key="'ret-' + s.id"
-          class="monitor-card"
-          :class="{ 'monitor-card--active-return': returnSelectedId === s.id }"
+          class="monitor-tile"
+          :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-return': returnSelectedId === s.id }"
           @click="lockReturn(s.id)"
         >
-          <span class="monitor-card__num">{{ monitorNum(s) }}</span>
-          <span class="monitor-card__label">{{ s.label }}</span>
-          <span class="monitor-card__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
-          <span v-if="s.id === selectedId" class="monitor-card__out">Saída</span>
+          <div class="monitor-tile__screen">
+            <v-icon v-if="s.primary" size="12" class="monitor-tile__star">mdi-star</v-icon>
+            <span class="monitor-tile__num">{{ monitorNum(s) }}</span>
+            <span class="monitor-tile__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
+            <span class="monitor-tile__badge" :class="{ 'monitor-tile__badge--primary': s.primary }">
+              {{ s.primary ? 'Principal' : 'Estendido' }}
+            </span>
+            <span v-if="s.id === selectedId" class="monitor-tile__out">Saída</span>
+          </div>
+          <div class="monitor-tile__stand" />
+          <div class="monitor-tile__base" />
         </div>
       </div>
 
     </v-list>
   </v-menu>
+
+  <MonitorArrangementDialog v-if="is_desktop" v-model="arrangementOpen" />
 </template>
 
 <script>
+import MonitorArrangementDialog from "@/components/MonitorArrangementDialog.vue";
+
 export default {
   name: 'MonitorSelectorComponent',
+  components: { MonitorArrangementDialog },
   data: () => ({
+    arrangementOpen: false,
     menu: false,
     loading: false,
     screens: [],
@@ -255,6 +279,11 @@ export default {
       await this.$electron.identifyScreens();
     },
 
+    openArrangement() {
+      this.menu = false;
+      this.arrangementOpen = true;
+    },
+
     async toggleReturn() {
       if (this.returnOpen) {
         await this.$electron.closeReturnScreen();
@@ -290,67 +319,112 @@ export default {
 </script>
 
 <style scoped>
-.monitor-card {
-  min-width: 108px;
-  height: 74px;
-  background: rgba(12, 12, 15, 0.9);
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
+/* Cartão em forma de monitor (tela + pé + base), inspirado no arranjo de
+   monitores do pianolouvorja/app — substitui o antigo retângulo liso.
+   Primário ganha gradiente + estrela; os demais ficam neutros. */
+.monitor-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 0;
+}
+.monitor-tile__screen {
+  position: relative;
+  width: 112px;
+  height: 72px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  user-select: none;
-  padding: 6px 14px;
   gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 12, 15, 0.9);
+  color: #fff;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
-.monitor-card:hover {
+.monitor-tile:hover .monitor-tile__screen {
   border-color: rgba(255, 255, 255, 0.5);
   background: rgba(30, 30, 38, 0.95);
 }
-.monitor-card--active-output {
+.monitor-tile--active-output .monitor-tile__screen {
   border-color: #2196F3;
-  background: rgba(33, 150, 243, 0.12);
+  box-shadow: 0 0 0 1px rgba(33, 150, 243, 0.4);
 }
-.monitor-card--active-return {
+.monitor-tile--active-return .monitor-tile__screen {
   border-color: #4CAF50;
-  background: rgba(76, 175, 80, 0.12);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.4);
 }
-.monitor-card__num {
-  font-size: 26px;
+.monitor-tile--primary .monitor-tile__screen {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, #00497d 100%);
+}
+.monitor-tile__stand {
+  width: 14px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.monitor-tile--primary .monitor-tile__stand {
+  background: rgba(var(--v-theme-primary), 0.8);
+}
+.monitor-tile__base {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.monitor-tile--primary .monitor-tile__base {
+  background: rgb(var(--v-theme-primary));
+}
+.monitor-tile__star {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: #fde047;
+}
+.monitor-tile__num {
+  font-size: 22px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -1px;
 }
-.monitor-card__label {
-  font-size: 11px;
-  opacity: 0.85;
-  font-weight: 500;
-}
-.monitor-card__res {
-  font-size: 10px;
-  opacity: 0.45;
+.monitor-tile__res {
+  font-size: 9px;
+  opacity: 0.6;
   letter-spacing: 0.3px;
 }
-.monitor-card__out {
-  margin-top: 4px;
-  font-size: 9px;
+.monitor-tile__badge {
+  margin-top: 1px;
+  font-size: 8px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.monitor-tile__badge--primary {
+  opacity: 1;
+}
+.monitor-tile__out {
+  position: absolute;
+  bottom: -3px;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   background: rgba(33, 150, 243, 0.85);
   border-radius: 3px;
   padding: 1px 5px;
   line-height: 1.4;
+  color: #fff;
 }
 /* Badge "Retorno" no card de Monitor de saída — mesma ideia do badge
    "Saída" acima (marca ali qual monitor o OUTRO papel está usando), só que
-   na cor verde já usada em todo o resto pro retorno (ver
-   .monitor-card--active-return). */
-.monitor-card__out--return {
+   na cor verde já usada em todo o resto pro retorno. */
+.monitor-tile__out--return {
   background: rgba(76, 175, 80, 0.85);
 }
 </style>
