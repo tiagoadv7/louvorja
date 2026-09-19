@@ -173,6 +173,15 @@ export default {
         return;
       }
 
+      for (const category of this.categories) {
+        for (const album of (category.albums || [])) {
+          if (album.url_image) {
+            const local = await this.$electron.mediaResolveImage(album.url_image);
+            if (local) album.url_image = local;
+          }
+        }
+      }
+
       if (this.categories.length > 0) {
         this.categories.sort((a, b) => a.order - b.order);
         this.id_category = this.categories[0].id_category;
@@ -180,7 +189,7 @@ export default {
         this.id_category = 0;
       }
 
-      this.lang = this.$i18n.locale;
+      this.lang = this.$i18n.locale.value;
       this.loading = false;
     },
     setCategory(id = null) {
@@ -190,7 +199,7 @@ export default {
       this.$media.openAlbum(id_album);
     },
     async show(value) {
-      if (value && this.lang != this.$i18n.locale) {
+      if (value && this.lang != this.$i18n.locale.value) {
         await this.loadData();
       } else if (
         value &&
@@ -220,7 +229,16 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import { ref } from "vue";
 const moduleContainer = ref(null);
 const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+  if (!moduleContainer.value) {
+    const tr = manifest.translations?.['pt'];
+    if (tr) {
+      const val = key.split('.').reduce((obj, k) => obj?.[k], tr);
+      if (typeof val === 'string') return val;
+    }
+    return key;
+  }
+  const result = moduleContainer.value.t(key);
+  return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
 </script>
 <!-- ########################################################### -->

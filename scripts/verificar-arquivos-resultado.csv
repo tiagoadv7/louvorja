@@ -1,0 +1,42 @@
+tipo,arquivo,caminho_relativo,tamanho_bytes,status,encontrado_em
+IMAGEM_ALBUM,2022.bmp,config\capas\Eu Vou\2022.bmp,0,AUSENTE,
+MUSICA,Eu Vou.mp3,config\musicas\Eu Vou\Eu Vou.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Eu Vou.mp3
+MUSICA,Eu Vou - PB.mp3,config\musicas\Eu Vou\Eu Vou - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Eu Vou - PB.mp3
+IMAGEM_FUNDO_CAPA,generico_103.jpg,config\imagens\Eu Vou\generico_103.jpg,0,AUSENTE,
+IMAGEM_ALBUM,2024.bmp,config\capas\Maranata\2024.bmp,0,AUSENTE,
+MUSICA,Maranata.mp3,config\musicas\Maranata\Maranata.mp3,0,AUSENTE,
+MUSICA,Maranata - PB.mp3,config\musicas\Maranata\Maranata - PB.mp3,0,AUSENTE,
+IMAGEM_FUNDO_CAPA,generico_113.jpg,config\imagens\Maranata\generico_113.jpg,0,AUSENTE,
+IMAGEM_FUNDO_CAPA,generico_114.jpg,config\imagens\Maranata\generico_114.jpg,0,AUSENTE,
+IMAGEM_ALBUM,adoradores5.bmp,config\capas\Adoradores 5\adoradores5.bmp,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\capas\adoradores5.bmp
+MUSICA,Jesus.mp3,config\musicas\Adoradores 5\Jesus.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Jesus.mp3
+MUSICA,Jesus - PB.mp3,config\musicas\Adoradores 5\Jesus - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Jesus - PB.mp3
+IMAGEM_FUNDO_CAPA,adoradores_042.jpg,config\imagens\Adoradores 5\adoradores_042.jpg,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\imagens\adoradores_042.jpg
+MUSICA,Pra Teu Louvor.mp3,config\musicas\Adoradores 5\Pra Teu Louvor.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Pra Teu Louvor.mp3
+MUSICA,Pra Teu Louvor - PB.mp3,config\musicas\Adoradores 5\Pra Teu Louvor - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Pra Teu Louvor - PB.mp3
+MUSICA,Graça.mp3,config\musicas\Adoradores 5\Graça.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Graça.mp3
+MUSICA,Graça - PB.mp3,config\musicas\Adoradores 5\Graça - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Graça - PB.mp3
+MUSICA,Usa-Me.mp3,config\musicas\Adoradores 5\Usa-Me.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Usa-Me.mp3
+MUSICA,Usa-Me - PB.mp3,config\musicas\Adoradores 5\Usa-Me - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Usa-Me - PB.mp3
+MUSICA,Vitória.mp3,config\musicas\Adoradores 5\Vitória.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Vitória.mp3
+MUSICA,Vitória - PB.mp3,config\musicas\Adoradores 5\Vitória - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Vitória - PB.mp3
+MUSICA,Carta de Amor.mp3,config\musicas\Adoradores 5\Carta de Amor.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Carta de Amor.mp3
+MUSICA,Carta de Amor - PB.mp3,config\musicas\Adoradores 5\Carta de Amor - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Carta de Amor - PB.mp3
+MUSICA,És o Ar Que Eu Respiro.mp3,config\musicas\Adoradores 5\És o Ar Que Eu Respiro.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\És o Ar Que Eu Respiro.mp3
+MUSICA,És o Ar Que Eu Respiro - PB.mp3,config\musicas\Adoradores 5\És o Ar Que Eu Respiro - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\És o Ar Que Eu Respiro - PB.mp3
+MUSICA,Intensamente.mp3,config\musicas\Adoradores 5\Intensamente.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Intensamente.mp3
+MUSICA,Intensamente - PB.mp3,config\musicas\Adoradores 5\Intensamente - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Intensamente - PB.mp3
+MUSICA,Nossa Missão.mp3,config\musicas\Adoradores 5\Nossa Missão.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Nossa Missão.mp3
+MUSICA,Nossa Missão - PB.mp3,config\musicas\Adoradores 5\Nossa Missão - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Nossa Missão - PB.mp3
+MUSICA,Caminho.mp3,config\musicas\Adoradores 5\Caminho.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Caminho.mp3
+MUSICA,Caminho - PB.mp3,config\musicas\Adoradores 5\Caminho - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Caminho - PB.mp3
+MUSICA,Ele Vai Agir.mp3,config\musicas\Adoradores 5\Ele Vai Agir.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Ele Vai Agir.mp3
+MUSICA,Ele Vai Agir - PB.mp3,config\musicas\Adoradores 5\Ele Vai Agir - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Ele Vai Agir - PB.mp3
+MUSICA,Santo Espírito.mp3,config\musicas\Adoradores 5\Santo Espírito.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Santo Espírito.mp3
+MUSICA,Santo Espírito - PB.mp3,config\musicas\Adoradores 5\Santo Espírito - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Santo Espírito - PB.mp3
+MUSICA,Digno.mp3,config\musicas\Adoradores 5\Digno.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Digno.mp3
+MUSICA,Digno - PB.mp3,config\musicas\Adoradores 5\Digno - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Digno - PB.mp3
+IMAGEM_ALBUM,2026.bmp,config\capas\Meu Lugar no Mundo\2026.bmp,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\capas\2026.bmp
+MUSICA,Meu Lugar no Mundo.mp3,config\musicas\Meu Lugar no Mundo\Meu Lugar no Mundo.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Meu Lugar no Mundo.mp3
+MUSICA,Meu Lugar no Mundo - PB.mp3,config\musicas\Meu Lugar no Mundo\Meu Lugar no Mundo - PB.mp3,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\musicas\Meu Lugar no Mundo - PB.mp3
+IMAGEM_FUNDO_CAPA,generico_116.jpg,config\imagens\Meu Lugar no Mundo\generico_116.jpg,0,OK,C:\Users\Tiago Neves\AppData\Roaming\LouvorJA\config\imagens\generico_116.jpg

@@ -1,0 +1,8 @@
+{
+  "id": "liturgia",
+  "name": "Liturgia",
+  "description": "Ordem de louvor para cultos e eventos",
+  "category": "utilities",
+  "icon": "mdi-playlist-music",
+  "showInMainMenu": false
+}

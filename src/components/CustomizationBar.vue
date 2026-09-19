@@ -10,7 +10,7 @@
       />
     </template>
 
-    <v-card>
+    <v-card rounded="t-xl" class="overflow-hidden">
       <slot />
     </v-card>
   </v-bottom-sheet>

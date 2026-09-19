@@ -1,0 +1,12 @@
+{
+  "id": "custom_collections",
+  "name": "Coletâneas Personalizadas",
+  "description": "Suas músicas e coletâneas pessoais, criadas no Editor de Músicas.",
+  "category": "utilities",
+  "icon": "mdi-folder-music-outline",
+  "showInMainMenu": false,
+  "moduleOptions": {
+    "width": 900,
+    "height": 620
+  }
+}

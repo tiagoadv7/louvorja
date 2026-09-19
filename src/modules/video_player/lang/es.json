@@ -1,0 +1,8 @@
+{
+  "title": "Medios",
+  "description": "Reproductor de vídeo/imagen para la proyección (con fundido de audio), superposición de imagen y mesa de sonido SoundMaster, en pestañas separadas en la misma ventana.",
+  "tab_video": "Vídeo",
+  "tab_online": "Online",
+  "tab_overlay": "Overlay",
+  "tab_soundmaster": "SoundMaster"
+}

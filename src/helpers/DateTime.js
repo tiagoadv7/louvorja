@@ -19,12 +19,18 @@ export default {
   },
 
   toNumber(time) {
-    const parts = time.split(":").map(Number);
-
-    const hours = parts[0] || 0;
-    const minutes = parts[1] || 0;
-    const seconds = parts[2] || 0;
-
-    return hours * 3600 + minutes * 60 + seconds;
+    if (time == null) return 0;
+    // Se já for número, considera que está em segundos
+    if (typeof time === 'number') return isFinite(time) ? time : 0;
+    const parts = String(time).split(":").map(Number);
+    if (parts.length === 2) {
+      // "MM:SS" — formato do banco local e padrão da API
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    }
+    // "HH:MM:SS"
+    const h = parts[0] || 0;
+    const m = parts[1] || 0;
+    const s = parts[2] || 0;
+    return h * 3600 + m * 60 + s;
   },
 };
