@@ -4,5 +4,10 @@
   "tab_video": "Vídeo",
   "tab_online": "Online",
   "tab_overlay": "Overlay",
-  "tab_soundmaster": "SoundMaster"
+  "tab_capture": "Capturar Tela",
+  "tab_soundmaster": "SoundMaster",
+  "capture_no_source": "Escolha uma tela ou janela abaixo para pré-visualizar",
+  "capture_send_to_return": "Mostrar no Retorno",
+  "capture_refresh": "Atualizar",
+  "capture_no_sources": "Nenhuma tela ou janela encontrada"
 }

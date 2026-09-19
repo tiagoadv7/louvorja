@@ -1,4 +1,4 @@
-const { ipcMain, dialog, shell, app, screen } = require('electron');
+const { ipcMain, dialog, shell, app, screen, desktopCapturer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -119,6 +119,25 @@ function setupIpc(mainWindow) {
         primary: isPrimary,
       };
     });
+  });
+
+  // ── Captura de tela (monitor ou janela) ─────────────────────────────────────
+  // Lista as fontes disponíveis pra getUserMedia({ chromeMediaSourceId })  no
+  // renderer — cada janela (operador, saída, retorno) pede seu PRÓPRIO stream
+  // com o mesmo id escolhido aqui; o vídeo em si nunca passa pelo processo
+  // main, só o id da fonte (leve, cabe num appdata normal).
+  ipcMain.handle('screen:list-capture-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 160, height: 90 },
+      fetchWindowIcons: false,
+    });
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      isScreen: s.id.startsWith('screen:'),
+      thumbnailDataUrl: s.thumbnail.isEmpty() ? '' : s.thumbnail.toDataURL(),
+    }));
   });
 
   // ── Operações de arquivo ───────────────────────────────────────────────────

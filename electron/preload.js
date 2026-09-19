@@ -179,6 +179,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Telas / displays ─────────────────────────────────────────────────────
   getScreens: () => ipcRenderer.invoke('screen:get-all'),
+  listCaptureSources: () => ipcRenderer.invoke('screen:list-capture-sources'),
   identifyScreens: () => ipcRenderer.invoke('screen:identify'),
 
   // ── Diálogos ─────────────────────────────────────────────────────────────

@@ -26,7 +26,11 @@
         <LScreenBtn module="web_link" />
         <LReturnScreenBtn module="web_link" />
       </template>
-      <template v-else-if="activeTab !== 'soundmaster'">
+      <!-- Capturar Tela não projeta na saída principal (só manda o id da
+           fonte pra tela de Retorno, ver watch/methods da aba abaixo) —
+           mostrar os botões de Apresentar/Retorno do video_player aqui
+           sugeriria (errado) que dá pra jogar a captura na saída normal. -->
+      <template v-else-if="activeTab !== 'soundmaster' && activeTab !== 'capture'">
         <LScreenBtn module="video_player" />
         <LReturnScreenBtn module="video_player" />
       </template>
@@ -35,10 +39,12 @@
     <!-- Abas: Vídeo (substitui a projeção, como sempre), Overlay de Imagem
          (fica por cima de QUALQUER coisa projetada, sem substituir nada — ver
          views/Popup.vue#ImageOverlayPopup, montado incondicionalmente ali,
-         fora deste módulo) e SoundMaster (mesa de som, sem projeção nenhuma).
-         São três módulos independentes por baixo (ver watch/close/onMinimize
-         abaixo, que sincronizam abrir/fechar/minimizar dos três juntos) — só
-         a tela de edição foi unificada numa janela só. -->
+         fora deste módulo), Capturar Tela (espelha uma tela/janela do sistema
+         só na tela de Retorno, ver views/ReturnScreen.vue) e SoundMaster
+         (mesa de som, sem projeção nenhuma). São módulos independentes por
+         baixo (ver watch/close/onMinimize abaixo, que sincronizam
+         abrir/fechar/minimizar juntos) — só a tela de edição foi unificada
+         numa janela só. -->
     <template v-slot:header>
       <v-tabs v-model="activeTab" density="compact">
         <v-tab value="video">
@@ -52,6 +58,10 @@
         <v-tab value="overlay">
           <v-icon start size="15">mdi-image-multiple-outline</v-icon>
           {{ t("tab_overlay") }}
+        </v-tab>
+        <v-tab value="capture">
+          <v-icon start size="15">mdi-monitor-screenshot</v-icon>
+          {{ t("tab_capture") }}
         </v-tab>
         <v-tab value="soundmaster">
           <v-icon start size="15">mdi-tune-vertical</v-icon>
@@ -470,6 +480,65 @@
       </div>
     </div>
 
+    <!-- ═══════════════ Aba "Capturar Tela" ═════════════════════════════════
+         Captura uma tela/janela do sistema (Electron desktopCapturer) e
+         manda só o id da fonte escolhida pra tela de Retorno via appdata —
+         o stream de vídeo em si nunca atravessa processo/janela: tanto essa
+         prévia local quanto a tela de Retorno abrem seu próprio getUserMedia
+         com o mesmo id (ver views/ReturnScreen.vue#_startCaptureStream). -->
+    <div class="cs-root" v-show="activeTab === 'capture'">
+      <div class="cs-preview-frame">
+        <video
+          v-show="captureSourceId"
+          ref="capturePreviewVideo"
+          autoplay
+          muted
+          playsinline
+          class="cs-preview-video"
+        />
+        <div v-if="!captureSourceId" class="cs-empty">
+          <v-icon size="28">mdi-monitor-screenshot</v-icon>
+          <span>{{ t('capture_no_source') }}</span>
+        </div>
+      </div>
+
+      <div class="cs-toolbar">
+        <label class="cs-toggle" :class="{ 'cs-toggle--disabled': !captureSourceId }">
+          <v-switch
+            v-model="captureSendToReturn"
+            :disabled="!captureSourceId"
+            color="primary"
+            density="compact"
+            hide-details
+          />
+          <span>{{ t('capture_send_to_return') }}</span>
+        </label>
+        <button class="se-btn-outline" :disabled="loadingCaptureSources" @click="loadCaptureSources">
+          <v-icon size="16" :class="{ 'cs-spin': loadingCaptureSources }">mdi-refresh</v-icon>
+          {{ t('capture_refresh') }}
+        </button>
+      </div>
+
+      <div class="cs-sources">
+        <button
+          v-for="src in captureSources"
+          :key="src.id"
+          class="cs-source"
+          :class="{ 'cs-source--active': src.id === captureSourceId }"
+          @click="selectCaptureSource(src.id)"
+        >
+          <div class="cs-source-thumb">
+            <img v-if="src.thumbnailDataUrl" :src="src.thumbnailDataUrl" draggable="false" />
+            <v-icon v-else size="24">{{ src.isScreen ? 'mdi-monitor' : 'mdi-application-outline' }}</v-icon>
+          </div>
+          <span class="cs-source-name">{{ src.name }}</span>
+        </button>
+        <div v-if="!loadingCaptureSources && !captureSources.length" class="cs-empty-list">
+          {{ t('capture_no_sources') }}
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════════ Aba "SoundMaster" ══════════════════════════════════
          Componente próprio (não flattenado aqui como a aba Overlay) — o
          SoundMaster tem estado/métodos demais com nomes que colidiriam com
@@ -539,6 +608,11 @@ export default {
     OVERLAY_HANDLES,
     overlayDrag: null,
     importingOverlay: false,
+
+    // ── Aba "Capturar Tela" (desktopCapturer, espelha só no Retorno) ───────
+    captureSources: [],
+    loadingCaptureSources: false,
+    _capturePreviewStream: null,
   }),
 
   computed: {
@@ -665,6 +739,19 @@ export default {
         opacity: (this.overlayUserdata.image_opacity ?? 100) / 100,
       };
     },
+
+    // ── Aba "Capturar Tela" ──────────────────────────────────────────────
+    // Só o id da fonte (string leve) fica em appdata — o stream de vídeo em
+    // si nunca é serializado/enviado (ver comentário no template da aba e
+    // views/ReturnScreen.vue#_startCaptureStream, que lê esse mesmo id).
+    captureSourceId: {
+      get() { return this.$appdata.get('modules.video_player.capture_source_id') || ''; },
+      set(v) { this.$appdata.set('modules.video_player.capture_source_id', v); },
+    },
+    captureSendToReturn: {
+      get() { return !!this.$appdata.get('modules.video_player.capture_send_to_return'); },
+      set(v) { this.$appdata.set('modules.video_player.capture_send_to_return', !!v); },
+    },
   },
 
   watch: {
@@ -679,6 +766,12 @@ export default {
         this.$modules.open('image_overlay');
         this.$modules.open('soundmaster');
         this._maybeLoadCatalog();
+        this._maybeLoadCaptureSources();
+      } else {
+        // A prévia local (não a captura mandada pro Retorno, que é
+        // controlada só por captureSendToReturn) não faz sentido continuar
+        // rodando com a janela "Mídia" fechada.
+        this._stopCapturePreview();
       }
     },
     // Catálogo só é buscado (alguns MB) quando o operador realmente vê a
@@ -687,6 +780,12 @@ export default {
     // sem essa checagem explícita o catálogo baixaria sozinho já no boot.
     activeTab(val) {
       if (val === 'online') this._maybeLoadCatalog();
+      if (val === 'capture') {
+        this._maybeLoadCaptureSources();
+        if (this.captureSourceId) this._startCapturePreview(this.captureSourceId);
+      } else {
+        this._stopCapturePreview();
+      }
     },
     onlineSubTab(val) {
       if (val === 'catalog') this._maybeLoadCatalog();
@@ -1124,6 +1223,50 @@ export default {
     _overlayClamp(v, min, max) {
       return Math.min(Math.max(v, min), Math.max(min, max));
     },
+
+    // ── Aba "Capturar Tela" ──────────────────────────────────────────────
+    // Só busca a lista (com thumbnails) quando o operador de fato vê a aba
+    // com a janela aberta — mesmo motivo do _maybeLoadCatalog acima (este
+    // componente é "eager", sempre montado mesmo com a janela fechada).
+    _maybeLoadCaptureSources() {
+      if (this.module.show && this.activeTab === 'capture') this.loadCaptureSources();
+    },
+    async loadCaptureSources() {
+      if (this.loadingCaptureSources) return;
+      this.loadingCaptureSources = true;
+      try {
+        this.captureSources = await this.$electron.listCaptureSources();
+      } finally {
+        this.loadingCaptureSources = false;
+      }
+    },
+    selectCaptureSource(id) {
+      this.captureSourceId = id;
+      this._startCapturePreview(id);
+    },
+    async _startCapturePreview(id) {
+      this._stopCapturePreview();
+      if (!id) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: id } },
+        });
+        this._capturePreviewStream = stream;
+        this.$nextTick(() => {
+          if (this.$refs.capturePreviewVideo) this.$refs.capturePreviewVideo.srcObject = stream;
+        });
+      } catch (e) {
+        console.error('[video_player] falha ao pré-visualizar captura', e);
+      }
+    },
+    _stopCapturePreview() {
+      if (this._capturePreviewStream) {
+        this._capturePreviewStream.getTracks().forEach((t) => t.stop());
+        this._capturePreviewStream = null;
+      }
+      if (this.$refs.capturePreviewVideo) this.$refs.capturePreviewVideo.srcObject = null;
+    },
   },
 
   async mounted() {
@@ -1151,6 +1294,10 @@ export default {
     // restaurado de uma sessão anterior. As trocas normais (abrir a janela,
     // trocar de aba/subaba) já são pegas pelos watchers correspondentes.
     this._maybeLoadCatalog();
+    this._maybeLoadCaptureSources();
+    if (this.activeTab === 'capture' && this.captureSourceId) {
+      this._startCapturePreview(this.captureSourceId);
+    }
 
     if (!this.$electron.isElectron()) return;
     this.pipOpen = await this.$electron.pipIsOpen();
@@ -1180,6 +1327,7 @@ export default {
     $audioBus.unlisten(this._focusHandler);
     window.removeEventListener('online',  this._onlineHandler);
     window.removeEventListener('offline', this._offlineHandler);
+    this._stopCapturePreview();
   },
 };
 </script>
@@ -1688,5 +1836,126 @@ export default {
 .se-btn-outline:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* ── Aba "Capturar Tela" ──────────────────────────────────────────────── */
+.cs-root {
+  padding: 16px 20px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cs-preview-frame {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 200px;
+  border-radius: 8px;
+  background: #000;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  overflow: hidden;
+  display: flex;
+}
+.cs-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cs-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  font-size: 12.5px;
+  opacity: 0.6;
+  max-width: 280px;
+  color: #fff;
+}
+.cs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cs-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cs-toggle--disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cs-spin {
+  animation: cs-spin 0.9s linear infinite;
+}
+@keyframes cs-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.cs-sources {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.cs-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cs-source:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+.cs-source--active {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+.cs-source-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.cs-source-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cs-source-name {
+  font-size: 11.5px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cs-empty-list {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 20px;
+  font-size: 12.5px;
+  opacity: 0.6;
 }
 </style>

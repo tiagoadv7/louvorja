@@ -291,6 +291,8 @@ export default {
   // ── Telas ──────────────────────────────────────────────────────────────
   getScreens: () =>
     isElectron() ? window.electron.getScreens() : Promise.resolve([]),
+  listCaptureSources: () =>
+    isElectron() ? window.electron.listCaptureSources() : Promise.resolve([]),
   identifyScreens: () =>
     isElectron() ? window.electron.identifyScreens() : Promise.resolve(),
 

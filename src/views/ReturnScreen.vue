@@ -98,6 +98,19 @@
           <WebLinkScreen />
         </div>
       </transition>
+
+      <!-- Captura de tela/janela (aba "Capturar Tela" de Mídia) — mostrada em
+           tela cheia aqui quando o operador liga "Mostrar no Retorno" (ver
+           video_player/interface/Index.vue). Independente de popup_module:
+           é um espelho por cima de tudo, não um módulo "projetado" normal.
+           Pede seu PRÓPRIO stream (getUserMedia com o mesmo source id
+           escolhido no operador) — o vídeo em si nunca passa pelo appdata,
+           só o id da fonte, então cada janela captura de forma independente. -->
+      <transition name="rs-fade">
+        <div v-if="captureActive" class="rs-module-mirror rs-capture-mirror">
+          <video ref="captureVideo" autoplay muted playsinline class="rs-capture-video" />
+        </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -138,6 +151,7 @@ export default {
     // do clamp() fixo de antes (que ignorava esse ajuste completamente).
     width: typeof window !== 'undefined' ? window.innerWidth : 0,
     height: typeof window !== 'undefined' ? window.innerHeight : 0,
+    _captureStream: null,
   }),
 
   computed: {
@@ -175,6 +189,18 @@ export default {
     webLinkActive() {
       if (this.returnPopupModule) return this.returnPopupModule === 'web_link';
       return this.popupModule === 'web_link';
+    },
+    // Captura de tela/janela — independente de popup_module/returnPopupModule
+    // de propósito: é uma sobreposição que o operador liga/desliga na hora,
+    // não um "módulo projetado" que compete pela mesma seleção dos outros.
+    captureSourceId() {
+      return this.$appdata.get('modules.video_player.capture_source_id');
+    },
+    captureSendToReturn() {
+      return !!this.$appdata.get('modules.video_player.capture_send_to_return');
+    },
+    captureActive() {
+      return this.captureSendToReturn && !!this.captureSourceId;
     },
     // Apresentação do Editor de Músicas (Coletâneas Personalizadas) — mesmo
     // padrão de "ativo" dos outros módulos. Ao contrário deles, NÃO ganha um
@@ -350,9 +376,49 @@ export default {
     slideSnapshot(newVal, oldVal) {
       this.pushTextSlide(newVal, oldVal);
     },
+    captureActive(active) {
+      if (active) this._startCaptureStream();
+      else this._stopCaptureStream();
+    },
+    captureSourceId() {
+      if (this.captureActive) this._startCaptureStream();
+    },
   },
 
   methods: {
+    // Captura de tela/janela — pede seu PRÓPRIO stream (id vem do appdata,
+    // escolhido no operador via video_player/interface/Index.vue). Cada
+    // janela (operador, saída, retorno) que exibir a captura chama
+    // getUserMedia por conta própria com o mesmo id; nada de vídeo passa
+    // pelo processo main ou pelo appdata, só esse id (leve).
+    async _startCaptureStream() {
+      this._stopCaptureStream();
+      if (!this.captureSourceId) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: this.captureSourceId,
+            },
+          },
+        });
+        this._captureStream = stream;
+        this.$nextTick(() => {
+          if (this.$refs.captureVideo) this.$refs.captureVideo.srcObject = stream;
+        });
+      } catch (e) {
+        console.error('[ReturnScreen] falha ao capturar tela', e);
+      }
+    },
+    _stopCaptureStream() {
+      if (this._captureStream) {
+        this._captureStream.getTracks().forEach((t) => t.stop());
+        this._captureStream = null;
+      }
+      if (this.$refs.captureVideo) this.$refs.captureVideo.srcObject = null;
+    },
     // Empilha a nova linha em textSlides — mesmo padrão de setSlide() em
     // src/components/Slide.vue: marca a anterior inativa (dispara o fade de
     // saída), ativa a nova (fade de entrada) e destrói as antigas demais.
@@ -510,11 +576,15 @@ export default {
     // "mediaActive", e o relógio/cronômetro aparecem independente disso.
     this.visible = true;
     document.addEventListener('keydown', this.handleKeyDown);
+    // Se a captura já estava ligada quando esta janela abriu (ex.: reabrir o
+    // retorno com "Mostrar no Retorno" já ativo), pede o stream direto.
+    if (this.captureActive) this._startCaptureStream();
   },
   beforeUnmount() {
     clearInterval(this._tickInterval);
     document.removeEventListener('keydown', this.handleKeyDown);
     if (this._windowResizeHandler) window.removeEventListener('resize', this._windowResizeHandler);
+    this._stopCaptureStream();
     if (isElectron()) {
       if (this.stateHandler)  window.electron.off('state-update',   this.stateHandler);
       if (this.batchHandler)  window.electron.off('state-update-batch', this.batchHandler);
@@ -628,6 +698,17 @@ export default {
   position: absolute;
   inset: 0;
   z-index: 2;
+}
+
+/* Captura de tela: preenche igual aos outros espelhos, fundo preto atrás
+   do vídeo (barras) já que a fonte capturada pode ter outra proporção. */
+.rs-capture-mirror {
+  background: #000;
+}
+.rs-capture-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* Contador discreto */
