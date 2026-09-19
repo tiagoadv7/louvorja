@@ -85,8 +85,12 @@
                   class="flex-shrink-0"
                   @click.stop="toggleAlbum(album.id_album)"
                 />
-                <v-avatar size="32" rounded="sm" class="flex-shrink-0 mx-2" :color="album.color || 'grey-darken-2'">
-                  <v-img v-if="album.url_image" :src="album.url_image" cover />
+                <v-avatar
+                  size="32" rounded="sm" class="flex-shrink-0 mx-2 alb-cover"
+                  :style="{ borderColor: album.color || '#555555' }"
+                >
+                  <v-img v-if="album.url_image" :src="$path.file(album.url_image)" cover />
+                  <v-icon v-else size="16" :color="album.color || 'grey-darken-2'">mdi-album</v-icon>
                 </v-avatar>
                 <span class="text-body-2 text-truncate flex-grow-1" :class="{ 'text-medium-emphasis': isDisabled(album.id_album) }">
                   {{ album.name }}
@@ -244,5 +248,11 @@ export default {
 }
 .alb-row:hover {
   background: rgba(var(--v-theme-on-surface), 0.05);
+}
+/* Capa pequena com a cor do álbum na borda, em vez de um preenchimento
+   sólido dessa cor cobrindo o avatar inteiro quando não há imagem. */
+.alb-cover {
+  border: 2px solid;
+  box-sizing: border-box;
 }
 </style>
