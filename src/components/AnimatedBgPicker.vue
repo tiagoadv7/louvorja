@@ -23,9 +23,20 @@
         class="abg-picker-card"
         :class="{ 'abg-picker-card--active': modelValue === opt.value }"
         @click="select(opt.value)"
+        @mouseenter="hoveredValue = opt.value"
+        @mouseleave="hoveredValue = null"
       >
-        <span class="abg-picker-card__thumb">
-          <AnimatedBackground v-if="opt.value !== 'none'" :variant="opt.value" :color="color" />
+        <span class="abg-picker-card__thumb" :style="{ '--preview-color': color }">
+          <!-- Só a opção selecionada e a que o mouse está em cima ganham
+               prévia ao vivo (Three.js/GSAP/anime.js de verdade) — com ~13
+               efeitos na grade, deixar todos "ao vivo" o tempo todo (como
+               era antes) significava até 13 WebGL contexts + loops de
+               animação rodando ao mesmo tempo só por ABRIR o menu, em
+               QUALQUER picker de fundo animado do app. As demais opções
+               mostram um gradiente estático (na cor escolhida) — ainda dá
+               pra ver a cor, e passar o mouse mostra a animação de verdade. -->
+          <AnimatedBackground v-if="opt.value !== 'none' && isPreviewLive(opt.value)" :variant="opt.value" :color="color" />
+          <div v-else-if="opt.value !== 'none'" class="abg-picker-card__static" />
           <v-icon v-else size="22" style="opacity: 0.35">mdi-block-helper</v-icon>
         </span>
         <span class="abg-picker-card__label">{{ opt.label }}</span>
@@ -48,13 +59,25 @@ export default {
     options: { type: Array, required: true }, // [{ label, value }]
   },
   emits: ["update:modelValue"],
-  data: () => ({ menu: false }),
+  data: () => ({ menu: false, hoveredValue: null }),
   computed: {
     currentLabel() {
       return this.options.find((o) => o.value === this.modelValue)?.label || "";
     },
   },
+  watch: {
+    // Menu fechado não tem como o mouse continuar "em cima" de nada — sem
+    // isso, hoveredValue podia ficar preso na última opção sobrevoada,
+    // então reabrir o menu já nasceria com uma segunda prévia ao vivo
+    // acesa à toa antes de qualquer novo hover.
+    menu(open) {
+      if (!open) this.hoveredValue = null;
+    },
+  },
   methods: {
+    isPreviewLive(value) {
+      return value === this.modelValue || value === this.hoveredValue;
+    },
     select(value) {
       this.$emit("update:modelValue", value);
       this.menu = false;
@@ -147,5 +170,12 @@ export default {
   text-align: center;
   line-height: 1.2;
   opacity: 0.85;
+}
+/* Placeholder estático (sem WebGL/GSAP/anime.js) das opções que não estão
+   selecionadas nem sob o mouse agora — ver comentário no template. */
+.abg-picker-card__static {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--preview-color, #7aa0ff) 45%, #0d1117), #0d1117 75%);
 }
 </style>
