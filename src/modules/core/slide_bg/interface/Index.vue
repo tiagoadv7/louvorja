@@ -310,6 +310,70 @@
         </div>
       </template>
 
+      <!-- ── Sombra e Caixinha ──────────────────────────────────────────── -->
+      <v-divider class="my-4" />
+      <div class="text-subtitle-2 mb-3 d-flex align-center ga-2">
+        <v-icon size="16">mdi-square-opacity</v-icon>
+        {{ t('shadow_box_section') }}
+      </div>
+
+      <div class="d-flex align-center justify-space-between mb-2">
+        <span class="text-body-2">{{ t('text_shadow_label') }}</span>
+        <v-switch
+          :model-value="textShadow"
+          @update:modelValue="setTextShadow"
+          color="primary" density="compact" hide-details
+        />
+      </div>
+      <template v-if="textShadow">
+        <div class="text-caption text-medium-emphasis mb-1">
+          {{ t('shadow_intensity_label') }}: {{ Math.round(shadowIntensity * 100) }}%
+        </div>
+        <v-slider
+          :model-value="shadowIntensity"
+          @update:modelValue="setShadowIntensity"
+          min="0.2" max="1" step="0.05"
+          color="primary" hide-details density="compact" :thumb-size="14" class="mb-3"
+        />
+        <div class="text-caption text-medium-emphasis mb-1">
+          {{ t('shadow_blur_label') }}: {{ shadowBlur.toFixed(1) }}
+        </div>
+        <v-slider
+          :model-value="shadowBlur"
+          @update:modelValue="setShadowBlur"
+          min="0.5" max="5" step="0.1"
+          color="primary" hide-details density="compact" :thumb-size="14" class="mb-3"
+        />
+      </template>
+
+      <div class="d-flex align-center justify-space-between mb-2">
+        <span class="text-body-2">{{ t('text_box_label') }}</span>
+        <v-switch
+          :model-value="textBox"
+          @update:modelValue="setTextBox"
+          color="primary" density="compact" hide-details
+        />
+      </div>
+      <template v-if="textBox">
+        <div class="text-caption text-medium-emphasis mb-1">
+          {{ t('box_opacity_label') }}: {{ Math.round(boxOpacity * 100) }}%
+        </div>
+        <v-slider
+          :model-value="boxOpacity"
+          @update:modelValue="setBoxOpacity"
+          min="0.1" max="0.9" step="0.05"
+          color="primary" hide-details density="compact" :thumb-size="14" class="mb-3"
+        />
+        <div class="d-flex align-center justify-space-between mb-1">
+          <span class="text-body-2">{{ t('box_border_label') }}</span>
+          <v-switch
+            :model-value="boxBorder"
+            @update:modelValue="setBoxBorder"
+            color="primary" density="compact" hide-details
+          />
+        </div>
+      </template>
+
     </div>
   </ModuleContainer>
 </template>
@@ -359,6 +423,14 @@ const coverFontColor  = ref('#F6C32A');
 const repeatFontColor = ref('#F6C32A');
 const panelFontSize= ref(14);
 const panelFontColor = ref('#F6C32A');
+// Sombra e Caixinha — defaults reproduzem o visual fixo de antes (caixinha
+// preta a 75%, sem borda, sem sombra); ver Slide.vue#boxAndShadowStyle.
+const textShadow      = ref(false);
+const shadowIntensity = ref(0.8);
+const shadowBlur      = ref(2.2);
+const textBox         = ref(true);
+const boxOpacity      = ref(0.75);
+const boxBorder       = ref(false);
 
 const imageFilename = computed(() =>
   decodeURIComponent((imageUrl.value || '').split('/').pop() || '')
@@ -409,6 +481,12 @@ function loadFromUserdata() {
   repeatFontColor.value = ud.get(`modules.${ID}.repeat_font_color`, '#F6C32A') ?? '#F6C32A';
   panelFontSize.value = ud.get(`modules.${ID}.panel_font_size`, 14)   ?? 14;
   panelFontColor.value = ud.get(`modules.${ID}.panel_font_color`, '#F6C32A') ?? '#F6C32A';
+  textShadow.value      = ud.get(`modules.${ID}.text_shadow`,      false) ?? false;
+  shadowIntensity.value = ud.get(`modules.${ID}.shadow_intensity`, 0.8)   ?? 0.8;
+  shadowBlur.value      = ud.get(`modules.${ID}.shadow_blur`,      2.2)   ?? 2.2;
+  textBox.value         = ud.get(`modules.${ID}.text_box`,         true)  ?? true;
+  boxOpacity.value      = ud.get(`modules.${ID}.box_opacity`,      0.75)  ?? 0.75;
+  boxBorder.value       = ud.get(`modules.${ID}.box_border`,       false) ?? false;
 }
 
 // ── Sync para localStorage — Slide.vue lê desta chave ─────────────────────
@@ -416,10 +494,16 @@ function loadFromUserdata() {
 function syncToLocalStorage() {
   // Após um reset, o watcher dispara mas não deve re-escrever o localStorage
   if (_resetPending) { _resetPending = false; return; }
-  // Estado neutro (nem fundo nem texto personalizados): remove qualquer
-  // personalização anterior — do contrário um "Desativado" no texto depois
-  // de um fundo já resetado deixaria font/font_color velhos presos no slide.
-  if (!bgType.value && !textEnabled.value) {
+  // Sombra/Caixinha contam como personalização ativa mesmo com fundo/texto
+  // desligados — sem isso, ajustar só a sombra (bgType e textEnabled ainda
+  // nos defaults) caía direto no ramo neutro abaixo e nunca era salvo.
+  const shadowBoxCustomized = textShadow.value || !textBox.value || boxBorder.value
+    || boxOpacity.value !== 0.75 || shadowIntensity.value !== 0.8 || shadowBlur.value !== 2.2;
+  // Estado neutro (nem fundo, nem texto, nem sombra/caixinha personalizados):
+  // remove qualquer personalização anterior — do contrário um "Desativado" no
+  // texto depois de um fundo já resetado deixaria font/font_color velhos
+  // presos no slide.
+  if (!bgType.value && !textEnabled.value && !shadowBoxCustomized) {
     try { localStorage.removeItem('slide_global_bg'); } catch (_) {}
     window.dispatchEvent(new CustomEvent('slide-bg-changed'));
     if (window.electron && !proxy?.$appdata?.get?.('is_popup')) {
@@ -465,6 +549,14 @@ function syncToLocalStorage() {
       repeat_font_color: textEnabled.value ? (repeatFontColor.value || '') : '',
       panel_font_size:  textEnabled.value ? panelFontSize.value : null,
       panel_font_color: textEnabled.value ? (panelFontColor.value || '') : '',
+      // Sombra e Caixinha — independentes de textEnabled, mesma lógica do
+      // animated_bg/alinhamento acima (ver Slide.vue#boxAndShadowStyle).
+      text_shadow:      textShadow.value,
+      shadow_intensity: shadowIntensity.value,
+      shadow_blur:      shadowBlur.value,
+      text_box:         textBox.value,
+      box_opacity:      boxOpacity.value,
+      box_border:       boxBorder.value,
       // Janela
       border_spacing:   ud.get(`modules.${ID}.border_spacing`,   5)            ?? 5,
     };
@@ -563,6 +655,38 @@ function setPanelFontColor(v) {
   panelFontColor.value = v;
   proxy?.$userdata?.set(`modules.${ID}.panel_font_color`, v);
   if (bgType.value || textEnabled.value) syncToLocalStorage();
+}
+
+// ── Setters de Sombra e Caixinha (independentes de bgType/textEnabled) ────
+function setTextShadow(v) {
+  textShadow.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.text_shadow`, v);
+  syncToLocalStorage();
+}
+function setShadowIntensity(v) {
+  shadowIntensity.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.shadow_intensity`, v);
+  syncToLocalStorage();
+}
+function setShadowBlur(v) {
+  shadowBlur.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.shadow_blur`, v);
+  syncToLocalStorage();
+}
+function setTextBox(v) {
+  textBox.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.text_box`, v);
+  syncToLocalStorage();
+}
+function setBoxOpacity(v) {
+  boxOpacity.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.box_opacity`, v);
+  syncToLocalStorage();
+}
+function setBoxBorder(v) {
+  boxBorder.value = v;
+  proxy?.$userdata?.set(`modules.${ID}.box_border`, v);
+  syncToLocalStorage();
 }
 
 // ── File picker via Electron ──────────────────────────────────────────────

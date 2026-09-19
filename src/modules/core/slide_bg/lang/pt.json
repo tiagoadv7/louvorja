@@ -20,6 +20,13 @@
   "text_repeat_color": "Cor do texto de repetição",
   "text_aux_size":  "Tamanho texto auxiliar",
   "text_aux_color": "Cor do texto auxiliar",
+  "shadow_box_section":     "Sombra e Caixinha",
+  "text_shadow_label":      "Sombra na letra",
+  "shadow_intensity_label": "Intensidade da sombra",
+  "shadow_blur_label":      "Espalhamento da sombra",
+  "text_box_label":         "Caixinha atrás da letra",
+  "box_opacity_label":      "Opacidade da caixinha",
+  "box_border_label":       "Borda na caixinha",
   "customization": {
     "background": "Fundo",
     "align": "Posição da Letra",

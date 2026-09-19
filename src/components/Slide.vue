@@ -379,6 +379,24 @@ export default {
       return slideDefault;
     },
 
+    // Caixinha (fundo atrás da letra) + sombra na letra — "Sombra e Caixinha"
+    // do Fundo Personalizado (slide_bg). box_opacity/box_border/text_shadow/
+    // shadow_intensity/shadow_blur vêm de globalBg; ausentes (bg=null ou
+    // campo nunca customizado), os defaults abaixo reproduzem exatamente o
+    // visual fixo de antes desta função existir (caixinha preta a 75%, sem
+    // borda, sem sombra) — nenhum slide existente muda de aparência sozinho.
+    boxAndShadowStyle(bg, slide) {
+      const boxOn      = bg?.text_box !== false;
+      const boxOpacity = bg?.box_opacity ?? 0.75;
+      const hasBorder  = boxOn && bg?.box_border === true;
+      const shadowOn   = bg?.text_shadow === true;
+      return {
+        backgroundColor: slide.text_bg_transparent ? "transparent" : (boxOn ? `rgba(0, 0, 0, ${boxOpacity})` : "transparent"),
+        border:          (!slide.text_bg_transparent && hasBorder) ? "1px solid rgba(255, 255, 255, 0.25)" : "none",
+        textShadow:      shadowOn ? `0 0 ${this.fontSizePc(bg?.shadow_blur ?? 2.2)}px rgba(0, 0, 0, ${bg?.shadow_intensity ?? 0.8})` : "none",
+      };
+    },
+
     style_aux_text(slide = {}) {
       const bg     = this.globalBg;
       const family = bg?.font           || 'DINCondensedBold';
@@ -389,7 +407,7 @@ export default {
       const overrideSize  = slide.aux_font_size_pct ?? null;
       const overrideColor = slide.aux_color || null;
       return {
-        backgroundColor: slide.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
+        ...this.boxAndShadowStyle(bg, slide),
         fontSize:        `${this.fontSizePc(overrideSize ?? size)}px`,
         color:           overrideColor || bg?.panel_font_color || "rgb(246, 195, 42)",
         padding:         `0px ${this.fontSizePc(border)}px`,
@@ -412,7 +430,7 @@ export default {
       const overrideColor = slide.color || null;
 
       const base = {
-        backgroundColor: slide.text_bg_transparent ? "transparent" : "rgba(0, 0, 0, 0.75)",
+        ...this.boxAndShadowStyle(bg, slide),
         padding:         `0px ${this.fontSizePc(border)}px`,
         textAlign:       slide.text_align || "center",
         fontFamily:      family,
