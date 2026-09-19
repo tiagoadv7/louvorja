@@ -59,7 +59,7 @@
         >
           Ver no GitHub
         </v-btn>
-        <v-btn color="primary" variant="flat" class="px-5" @click="close">Fechar</v-btn>
+        <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
       </v-card-actions>
 
     </v-card>

@@ -103,7 +103,7 @@
 
       <v-divider />
       <v-card-actions class="px-5 py-3 justify-end">
-        <v-btn color="primary" variant="flat" class="px-5" @click="dialog = false">Fechar</v-btn>
+        <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="dialog = false">Fechar</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
