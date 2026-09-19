@@ -8,7 +8,7 @@
         <div class="flex-grow-1 min-w-0">
           <div class="text-subtitle-1 font-weight-bold">Gerenciar Álbuns</div>
           <div class="text-caption text-medium-emphasis">
-            Desative álbuns pra tirá-los da lista de Músicas — sem apagar nada
+            Desative álbuns ou hinários pra tirá-los da lista, sem apagar nada
           </div>
         </div>
         <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" @click="dialog = false" />
@@ -42,7 +42,10 @@
         <v-progress-linear v-if="loading" indeterminate color="primary" height="3" />
         <div v-if="error" class="pa-4 text-body-2 text-error">{{ error }}</div>
 
-        <div v-if="!loading && filteredCategories.length === 0" class="pa-6 text-center text-body-2 text-medium-emphasis">
+        <div
+          v-if="!loading && filteredCategories.length === 0 && filteredModules.length === 0"
+          class="pa-6 text-center text-body-2 text-medium-emphasis"
+        >
           Nenhum álbum encontrado
         </div>
 
@@ -98,6 +101,55 @@
               </div>
             </v-expansion-panel-text>
           </v-expansion-panel>
+
+          <!-- Hinários (e outros módulos "manageable" no manifest, ver
+               helpers/Modules.js#getGroups) — não são álbuns de verdade (sem
+               id_album/id_category, vêm de um módulo próprio, não do
+               catálogo), então ficam numa seção separada, mas com a mesma
+               UX de mostrar/ocultar. Esconder aqui só tira o módulo da grade
+               de tiles (Apps.vue/AppsRibbon.vue), sem apagar nada. -->
+          <v-expansion-panel v-if="filteredModules.length" value="__modules" rounded="0">
+            <v-expansion-panel-title hide-actions class="alb-cat-header">
+              <template #default="{ isOpen }">
+                <v-icon size="16" class="me-2 flex-shrink-0">{{ isOpen ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                <v-checkbox
+                  :model-value="modulesState"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  class="flex-shrink-0 me-1"
+                  @click.stop="toggleAllModules"
+                />
+                <span class="text-body-2 font-weight-medium text-truncate flex-grow-1">Hinários</span>
+                <span class="text-caption text-medium-emphasis flex-shrink-0">
+                  {{ enabledModulesCount }}/{{ filteredModules.length }}
+                </span>
+              </template>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text class="pa-0">
+              <div
+                v-for="mod in filteredModules"
+                :key="mod.id"
+                class="alb-row"
+                @click="toggleModule(mod.id)"
+              >
+                <v-checkbox
+                  :model-value="!isModuleDisabled(mod.id)"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  class="flex-shrink-0"
+                  @click.stop="toggleModule(mod.id)"
+                />
+                <v-avatar size="32" rounded="sm" class="flex-shrink-0 mx-2" color="primary" variant="tonal">
+                  <v-icon size="16">{{ mod.manifest?.icon || 'mdi-music-clef-treble' }}</v-icon>
+                </v-avatar>
+                <span class="text-body-2 text-truncate flex-grow-1" :class="{ 'text-medium-emphasis': isModuleDisabled(mod.id) }">
+                  {{ mod.manifest?.name || mod.id }}
+                </span>
+              </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
         </v-expansion-panels>
       </v-card-text>
 
@@ -116,6 +168,16 @@
 // só uma lista de ids em options.disabled_albums (ver DataTable.vue#filterData
 // e modules/core/musics/interface/Index.vue). Catálogo (categorias+álbuns)
 // vem do mesmo endpoint já usado pelo resto do app (ver helpers/Database.js).
+//
+// Hinários (Hinário Adventista etc.) NÃO são álbuns desse catálogo — são
+// módulos próprios registrados no app (ver helpers/Modules.js), sem
+// id_album/id_category. Por isso ficam numa seção separada ("Hinários"),
+// desativados via options.disabled_modules (lista de ids de módulo) em vez
+// de disabled_albums — só esconde o módulo da grade de tiles
+// (Apps.vue/AppsRibbon.vue, ver Modules.js#getGroups), nada é desregistrado.
+// Só módulos com manifest.manageable: true entram aqui (ver
+// modules/core/hymnal/manifest.json) — de propósito, pra essa lista nunca
+// incluir/esconder um módulo core sem querer.
 export default {
   name: "AlbumsManagerDialog",
   props: {
@@ -141,6 +203,30 @@ export default {
     disabledAlbums() {
       return this.$userdata.get("options.disabled_albums", []);
     },
+    // Hinários (e qualquer outro módulo marcado "manageable" no manifest, ver
+    // helpers/Modules.js#getGroups) — não vêm do catálogo de álbuns, vêm
+    // direto dos módulos já registrados no app.
+    disabledModules() {
+      return this.$userdata.get("options.disabled_modules", []);
+    },
+    manageableModules() {
+      return Object.values(this.$modules.get() || {}).filter((m) => m?.manifest?.manageable);
+    },
+    filteredModules() {
+      const q = this.$string.clean(this.search || "");
+      if (!q) return this.manageableModules;
+      return this.manageableModules.filter((m) => this.$string.clean(m.manifest?.name || m.id).includes(q));
+    },
+    enabledModulesCount() {
+      const disabled = new Set(this.disabledModules);
+      return this.filteredModules.filter((m) => !disabled.has(m.id)).length;
+    },
+    modulesState() {
+      const enabled = this.enabledModulesCount;
+      if (enabled === this.filteredModules.length) return true;
+      if (enabled === 0) return false;
+      return null;
+    },
     filteredCategories() {
       const q = this.$string.clean(this.search || "");
       if (!q) return this.categories;
@@ -165,6 +251,29 @@ export default {
     },
   },
   methods: {
+    isModuleDisabled(id) {
+      return this.disabledModules.includes(id);
+    },
+    toggleModule(id) {
+      const list = this.disabledModules.slice();
+      const idx = list.indexOf(id);
+      if (idx === -1) list.push(id);
+      else list.splice(idx, 1);
+      this.$userdata.set("options.disabled_modules", list);
+    },
+    toggleAllModules() {
+      const state = this.modulesState;
+      const ids = this.filteredModules.map((m) => m.id);
+      const disabled = new Set(this.disabledModules);
+      if (state === true) {
+        // Todos ativos → desativa todos.
+        ids.forEach((id) => disabled.add(id));
+      } else {
+        // Todos desativados OU indeterminado → ativa todos.
+        ids.forEach((id) => disabled.delete(id));
+      }
+      this.$userdata.set("options.disabled_modules", [...disabled]);
+    },
     isDisabled(id) {
       return this.disabledAlbums.includes(Number(id));
     },
@@ -219,7 +328,7 @@ export default {
         }
         this.categories = data;
         this._loadedLocale = this.locale;
-        this.expanded = data.map((c) => c.id_category);
+        this.expanded = [...data.map((c) => c.id_category), '__modules'];
       } finally {
         this.loading = false;
       }

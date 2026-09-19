@@ -1,5 +1,6 @@
 import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
+import $userdata from "@/helpers/UserData";
 
 export default {
   open(id) {
@@ -129,12 +130,24 @@ export default {
     const module_group = JSON.parse(
       JSON.stringify($appdata.get("module_group") || {})
     );
+    // options.disabled_modules (ver Gerenciar Álbuns/AlbumsManagerDialog.vue)
+    // esconde módulos da grade de tiles (Apps.vue/AppsRibbon.vue) sem
+    // desregistrá-los de verdade — só oculta. Restrito a manifest.manageable
+    // de propósito: evita que um id qualquer nessa lista (corrompido, de uma
+    // versão antiga, etc.) acabe escondendo um módulo core sem querer.
+    const disabledModules = new Set($userdata.get("options.disabled_modules", []));
     Object.keys(module_group).forEach((key) => {
       if (module_group[key].modules?.length <= 0) {
         module_group[key].modules = {};
       }
 
-      module_group[key].modules = this.get(module_group[key].modules || []);
+      const resolved = this.get(module_group[key].modules || []);
+      Object.keys(resolved).forEach((id) => {
+        if (resolved[id]?.manifest?.manageable && disabledModules.has(id)) {
+          delete resolved[id];
+        }
+      });
+      module_group[key].modules = resolved;
     });
     return module_group;
   },

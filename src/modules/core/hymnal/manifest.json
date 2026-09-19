@@ -4,6 +4,7 @@
   "description": "Lista as músicas do Hinário Adventista",
   "category": "musics",
   "icon": "mdi-music-clef-treble",
+  "manageable": true,
   "onlineOnlyLanguages": ["es"],
   "dependencies": [
     "media",
