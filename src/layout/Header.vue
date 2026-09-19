@@ -11,7 +11,11 @@
         <v-btn v-bind="activatorProps" icon="mdi-keyboard-close" />
       </template>
 
-      <v-card>
+      <!-- elevation="0": mesmo ajuste do CustomizationBar.vue -- a sombra
+           padrão do v-card não acompanhava direito o canto arredondado que
+           o v-bottom-sheet aplica por padrão, deixando um resquício
+           quadrado na ponta da curva em vez de ficar transparente/suave. -->
+      <v-card elevation="0">
         <v-card-actions>
           <v-btn icon="mdi-keyboard-esc" size="x-large" @click="sendKey(27)" />
         </v-card-actions>
