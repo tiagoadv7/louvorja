@@ -210,9 +210,15 @@ export default {
     textLayoutStyle() {
       const bg = this.globalBg;
       const map = { start: "flex-start", center: "center", end: "flex-end" };
+      // Margem padrão em relação às bordas da tela — sem isso, "start"/"end"
+      // em qualquer eixo colava a letra exatamente na borda (0px), ficando
+      // colada demais no topo/base/esquerda/direita.
+      const pad = `${this.fontSizePc(6)}px`;
       return {
         justifyContent: map[bg?.horizontal_align] || "center",
         alignItems:     map[bg?.vertical_align]   || "center",
+        padding:        pad,
+        boxSizing:      "border-box",
       };
     },
 
