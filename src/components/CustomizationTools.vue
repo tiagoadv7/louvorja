@@ -48,17 +48,22 @@
                 :key="indx_item"
                 class="my-2"
               >
-                <v-text-field
+                <div
                   v-if="item?.type == 'color'"
-                  v-model="userdata[item.property]"
-                  :label="item?.label"
-                  :width="100"
-                  type="color"
-                  prepend-inner-icon="mdi-palette"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
+                  class="px-1 d-flex flex-column align-center"
+                  style="width: 70px"
+                >
+                  <span
+                    class="text-label-small mb-1"
+                    style="
+                      opacity: var(--v-medium-emphasis-opacity);
+                      font-size: 12px;
+                    "
+                  >
+                    {{ item?.label }}
+                  </span>
+                  <l-color-swatch-picker v-model="userdata[item.property]" />
+                </div>
                 <v-number-input
                   v-else-if="
                     ['font-size', 'border-spacing', 'border-radius'].includes(item?.type)
@@ -308,12 +313,14 @@
 <script>
 import AnimatedBgPicker from "@/components/AnimatedBgPicker.vue";
 import PositionPad from "@/components/PositionPad.vue";
+import ColorSwatchPicker from "@/components/ColorSwatchPicker.vue";
 
 export default {
   name: "CustomizationToolsComponent",
   components: {
     LAnimatedBgPicker: AnimatedBgPicker,
     LPositionPad: PositionPad,
+    LColorSwatchPicker: ColorSwatchPicker,
   },
   props: {
     module: Object,
