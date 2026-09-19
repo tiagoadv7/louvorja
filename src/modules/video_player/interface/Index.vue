@@ -901,10 +901,14 @@ export default {
     toggleFlip()  { this.$videoPlayer.toggleFlip(); },
 
     // ── Aba "Online" (YouTube/Canva) ─────────────────────────────────────
+    // Só adiciona à fila (botão diz "Adicionar") — carregar/tocar de verdade
+    // é ação separada, ao clicar no item da fila (ver selectOnlineItem),
+    // mesmo padrão de pickVideos() acima ($videoPlayer.addToPlaylist só
+    // adiciona, sem tocar nem abrir a projeção sozinho).
     loadOnlineLink() {
       const url = this.onlineUrlInput.trim();
       if (!url) return;
-      this.$webLink.open(url);
+      this.$webLink.addToPlaylist(url);
       this.onlineUrlInput = '';
     },
     toggleOnlinePlay() { this.$webLink.togglePlay(); },

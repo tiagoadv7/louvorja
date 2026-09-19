@@ -266,14 +266,26 @@ function setupIpc(mainWindow) {
       const isPrimary = display.id === primary.id;
       const label = isPrimary ? 'Principal' : `Monitor ${++nonPrimaryIdx}`;
       const num   = isPrimary ? 0 : nonPrimaryIdx;
-      const zoom  = primaryScale / scale;
+      // Nome/modelo real do monitor reportado pelo Windows (mesma fonte usada
+      // em screen:get-all/deviceName, ver MonitorSelector.vue) — só aparece
+      // quando o driver/EDID do monitor realmente expõe um nome; se não tiver,
+      // o cartão mostra só número/papel/resolução como antes.
+      const deviceName = display.label || '';
 
-      // Fontes no mesmo tamanho fixo do cartão do monitor principal
-      const fsNum   = Math.round(52  * fontScale);
-      const fsLabel = Math.round(13  * fontScale);
-      const fsRes   = Math.round(11  * fontScale);
-      const border  = Math.max(2, Math.round(2.5 * fontScale));
-      const radius  = Math.round(14  * fontScale);
+      // Fontes/borda/cantos no mesmo tamanho FÍSICO fixo do cartão do monitor
+      // principal — como cardW/cardH acima, precisam do mesmo fator
+      // primaryScale/scale (não só o "fontScale" de segurança do overflow),
+      // senão em monitores com scaleFactor bem diferente do principal (ex.
+      // TV/4K a 300% no Windows) o texto/borda continuavam no tamanho DIP
+      // "cheio" enquanto o cartão em volta encolhia pra caber no tamanho
+      // físico certo — cortando o texto pra fora do cartão.
+      const visualScale = (primaryScale / scale) * fontScale;
+      const fsNum   = Math.round(52  * visualScale);
+      const fsLabel = Math.round(13  * visualScale);
+      const fsRes   = Math.round(11  * visualScale);
+      const fsDevice = Math.round(10.5 * visualScale);
+      const border  = Math.max(1, Math.round(2.5 * visualScale));
+      const radius  = Math.round(14  * visualScale);
 
       // No Linux, uma janela pequena flutuante não tem como pedir posição
       // global de forma confiável: no Wayland o protocolo simplesmente não dá
@@ -353,17 +365,24 @@ function setupIpc(mainWindow) {
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
     <div style="font-size:${fsNum}px;font-weight:700;line-height:1;letter-spacing:-1px">${num}</div>
-    <div style="font-size:${fsLabel}px;margin-top:${Math.round(8*fontScale)}px;opacity:0.85;font-weight:500">${label}</div>
-    <div style="font-size:${fsRes}px;opacity:0.45;margin-top:${Math.round(4*fontScale)}px;letter-spacing:0.3px">${width}×${height}</div>
+    <div style="font-size:${fsLabel}px;margin-top:${Math.round(8*visualScale)}px;opacity:0.85;font-weight:500">${label}</div>
+    <div style="font-size:${fsRes}px;opacity:0.45;margin-top:${Math.round(4*visualScale)}px;letter-spacing:0.3px">${width}×${height}</div>
+    ${deviceName ? `<div style="font-size:${fsDevice}px;opacity:0.6;margin-top:${Math.round(2*visualScale)}px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${deviceName}</div>` : ''}
   </div>
 </body></html>`;
 
+      // cardW/cardH acima já convertem o tamanho físico-alvo (BASE_W_PHYS)
+      // pra DIP correto de CADA monitor (ver comentário logo abaixo dessas
+      // constantes) — o conteúdo HTML já nasce com esse mesmo tamanho em
+      // width/height inline. Um setZoomFactor aqui em cima disso aplicaria a
+      // MESMA correção de escala duas vezes: em monitores com scaleFactor
+      // diferente do principal (ex. TVs/monitores 4K com 300% no Windows),
+      // isso encolhia e cortava o cartão pro canto superior esquerdo da
+      // janela (zoom não recentraliza o conteúdo, só escala a partir do
+      // topo-esquerda) — só não aparecia no monitor principal porque ali o
+      // zoom dava exatamente 1 (sem efeito). NÃO reintroduzir sem testar de
+      // verdade num monitor com scaleFactor diferente do principal.
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-      // Aplica zoom para que o conteúdo HTML fique no tamanho correto
-      win.webContents.on('did-finish-load', () => {
-        if (!win.isDestroyed()) win.webContents.setZoomFactor(zoom);
-      });
 
       return win;
     });

@@ -232,11 +232,16 @@ export default {
 
   // Igual a $videoPlayer.isMinimized() (ver VideoPlayer.js) — mas "web_link"
   // não é um módulo registrado (sem "modules.web_link.minimized" próprio, ver
-  // Modules.vue), então usa a visibilidade do painel da Liturgia (quem abriu o
-  // link) como equivalente: painel escondido/minimizado + vídeo carregado ⇒
-  // mostra a barra do rodapé com os controles, senão eles ficam invisíveis.
+  // Modules.vue), então usa a visibilidade de quem PODE ter aberto o link
+  // como equivalente: painel escondido/minimizado (Liturgia OU a aba Online
+  // da Mídia, os dois lugares que chamam open()/selectPlaylistItem() aqui)
+  // + vídeo carregado ⇒ mostra a barra do rodapé com os controles; com
+  // qualquer um dos dois painéis aberto, esses controles já aparecem lá
+  // dentro, então o rodapé fica quieto pra não duplicar.
   isMinimized() {
-    return !$appdata.get("modules.liturgia.show", false) && !!this.getConfig().videoId;
+    const liturgiaOpen    = $appdata.get("modules.liturgia.show", false);
+    const videoPlayerOpen = $appdata.get("modules.video_player.show", false);
+    return !liturgiaOpen && !videoPlayerOpen && !!this.getConfig().videoId;
   },
   maximize() {
     $modules.open("liturgia");

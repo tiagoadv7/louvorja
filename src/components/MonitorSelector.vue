@@ -42,6 +42,7 @@
           </div>
           <div class="monitor-tile__stand" />
           <div class="monitor-tile__base" />
+          <div v-if="s.deviceName" class="monitor-tile__device" :title="s.deviceName">{{ s.deviceName }}</div>
         </div>
       </div>
 
@@ -114,6 +115,7 @@
           </div>
           <div class="monitor-tile__stand" />
           <div class="monitor-tile__base" />
+          <div v-if="s.deviceName" class="monitor-tile__device" :title="s.deviceName">{{ s.deviceName }}</div>
         </div>
       </div>
 
@@ -430,5 +432,20 @@ export default {
    na cor verde já usada em todo o resto pro retorno. */
 .monitor-tile__out--return {
   background: rgba(76, 175, 80, 0.85);
+}
+/* Nome/modelo real do monitor (Display.label do Electron, ver
+   screen:get-all/deviceName em electron/ipc.js) — só aparece quando o
+   driver/EDID do monitor expõe algo (ex. "LG TV SSCR2"); truncado com "…"
+   se não couber, nome completo disponível via title (tooltip nativo).
+   Mesmo padrão do .marr-tile__device em MonitorArrangementDialog.vue. */
+.monitor-tile__device {
+  margin-top: 4px;
+  max-width: 112px;
+  font-size: 9px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 </style>
