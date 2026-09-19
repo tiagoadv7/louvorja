@@ -39,7 +39,7 @@
               ['box_opacity', 'box_border', 'box_border_color'],
             ],
           },
-          { name: t('customization.window'), items: ['border_spacing', 'box_border_radius'] },
+          { name: t('customization.window'), items: [['border_spacing', 'box_border_radius']] },
         ]"
       />
     </template>
