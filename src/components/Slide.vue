@@ -399,7 +399,7 @@ export default {
       const shadowOn   = bg?.text_shadow === true;
       return {
         backgroundColor: slide.text_bg_transparent ? "transparent" : (boxOn ? `rgba(0, 0, 0, ${boxOpacity})` : "transparent"),
-        border:          (!slide.text_bg_transparent && hasBorder) ? "1px solid rgba(255, 255, 255, 0.25)" : "none",
+        border:          (!slide.text_bg_transparent && hasBorder) ? `1px solid ${bg?.box_border_color || "#FFFFFF"}` : "none",
         textShadow:      shadowOn ? `0 0 ${this.fontSizePc(bg?.shadow_blur ?? 2.2)}px rgba(0, 0, 0, ${bg?.shadow_intensity ?? 0.8})` : "none",
       };
     },

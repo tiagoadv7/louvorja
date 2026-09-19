@@ -138,6 +138,11 @@
       "type": "toggle",
       "label": "customization.box_border",
       "default": false
+    },
+    "box_border_color": {
+      "type": "color",
+      "label": "customization.box_border_color",
+      "default": "#FFFFFF"
     }
   }
 }

@@ -6,7 +6,7 @@
       :key="indx_block"
     >
       <v-divider v-if="indx_block > 0" vertical class="mx-1" />
-      <v-card flat class="d-flex flex-column pt-2 ct-block">
+      <v-card flat class="d-flex flex-column pt-2">
         <!-- Presets — só nos blocos que declararam presetKey (ver toBlock).
              Salva/aplica só os campos DESSE bloco (ex.: um bloco "Fundo" com
              background_color/image/image_opacity/image_fit), não o módulo
@@ -569,17 +569,6 @@ export default {
   }
   .__ct-presets {
     max-width: 260px;
-  }
-  // Cada bloco (Fundo | Posição da Letra | Texto | Janela | Restaurar) ganha
-  // um cartão com cantos arredondados próprio, em vez de só um traço fino
-  // entre eles — mesmo tratamento visual usado no resto do sistema (ex.: a
-  // própria barra de personalização, ver CustomizationBar.vue).
-  .ct-block {
-    border-radius: 12px;
-    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-    background: rgba(128, 128, 128, 0.03);
-    padding: 8px;
-    margin: 4px 2px;
   }
   // Rótulo de texto embaixo do ícone nos botões de alinhamento (h-align/
   // v-align sem par) — "Esquerda/Centro/Direita", "Em Cima/Meio/Em Baixo".

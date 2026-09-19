@@ -54,6 +54,7 @@
     "shadow_blur": "Espalhamento da sombra",
     "text_box": "Caixinha atrás da letra",
     "box_opacity": "Opacidade da caixinha",
-    "box_border": "Borda na caixinha"
+    "box_border": "Borda na caixinha",
+    "box_border_color": "Cor da borda"
   }
 }
