@@ -28,6 +28,32 @@
         }"
       />
     </div>
+    <div v-else-if="variant === 'bokeh'" class="anim-bg-layer anim-bg-bokeh">
+      <span
+        v-for="(b, i) in bokehDefs" :key="i"
+        class="anim-bg-bokeh-circle"
+        :style="{
+          top: `${b.top}%`, left: `${b.left}%`,
+          width: `${b.size}px`, height: `${b.size}px`,
+          opacity: b.opacity,
+          animationDelay: `${b.delay}s`, animationDuration: `${b.duration}s`,
+        }"
+      />
+    </div>
+    <div v-else-if="variant === 'raios'" ref="raysLayer" class="anim-bg-layer anim-bg-rays" />
+    <div v-else-if="variant === 'brasas'" ref="embersLayer" class="anim-bg-layer anim-bg-embers">
+      <span v-for="n in 30" :key="n" class="anim-bg-ember" />
+    </div>
+    <div v-else-if="variant === 'fumaca'" class="anim-bg-layer anim-bg-smoke">
+      <span class="anim-bg-smoke-blob anim-bg-smoke-blob--1" />
+      <span class="anim-bg-smoke-blob anim-bg-smoke-blob--2" />
+      <span class="anim-bg-smoke-blob anim-bg-smoke-blob--3" />
+    </div>
+    <div v-else-if="variant === 'nuvens'" class="anim-bg-layer anim-bg-clouds">
+      <span class="anim-bg-cloud anim-bg-cloud--1" />
+      <span class="anim-bg-cloud anim-bg-cloud--2" />
+      <span class="anim-bg-cloud anim-bg-cloud--3" />
+    </div>
   </div>
 </template>
 
@@ -45,6 +71,15 @@
 //   grade    → GSAP: grade estilo synthwave/horizonte rolando pra frente
 //   neve     → anime.js (v4): partículas caindo (neve/confete)
 //   estrelas → CSS puro: campo de estrelas piscando (sem nenhuma lib)
+//   bokeh    → CSS puro: círculos desfocados flutuando (luzes fora de foco)
+//   raios    → GSAP: feixes de luz (repeating-conic-gradient) girando devagar
+//   brasas   → anime.js (v4): partículas subindo com brilho quente (fogo/brasa)
+//   fumaca   → CSS puro: manchas com border-radius mudando (fumaça/tinta)
+//   nuvens   → CSS puro: nuvens desfocadas deslizando horizontalmente
+//
+// (bokeh/raios/brasas/fumaça/nuvens inspirados nas categorias de fundos de
+// motion pra igreja tipo Worshipwide/WorshipHouse Media — mesmo espírito
+// visual, só que 100% procedural, sem baixar nenhum vídeo/imagem pronta.)
 //
 // Todas usam bibliotecas já instaladas localmente (three/gsap/animejs/motion)
 // ou CSS puro — nada busca nada pela rede, funciona 100% offline.
@@ -79,6 +114,15 @@ export default {
       delay: Math.random() * 4,
       duration: 2 + Math.random() * 3,
     })),
+    // Mesma lógica do starDefs acima (gerado uma vez só, não a cada render).
+    bokehDefs: Array.from({ length: 18 }, () => ({
+      top: Math.random() * 100,
+      left: Math.random() * 100,
+      size: 60 + Math.random() * 120,
+      opacity: 0.22 + Math.random() * 0.3,
+      delay: Math.random() * 6,
+      duration: 10 + Math.random() * 10,
+    })),
   }),
   watch: {
     variant() {
@@ -108,7 +152,10 @@ export default {
       else if (this.variant === "ondas") this._setupWaves();
       else if (this.variant === "grade") this._setupGrid();
       else if (this.variant === "neve") this._setupSnow();
-      // "estrelas" é só CSS (animação via @keyframes) — nada a inicializar.
+      else if (this.variant === "raios") this._setupRays();
+      else if (this.variant === "brasas") this._setupEmbers();
+      // "estrelas"/"bokeh"/"fumaca"/"nuvens" são só CSS (animação via
+      // @keyframes) — nada a inicializar.
     },
     _teardown() {
       if (this._three) {
@@ -317,6 +364,41 @@ export default {
         });
       });
     },
+
+    // ── GSAP: feixes de luz girando bem devagar (god rays) ─────────────────
+    async _setupRays() {
+      const el = this.$refs.raysLayer;
+      if (!el) return;
+      const { gsap } = await import("gsap");
+      gsap.set(el, { rotate: 0 });
+      this._gsapTween = gsap.to(el, {
+        rotate: 360,
+        duration: 90,
+        ease: "none",
+        repeat: -1,
+      });
+    },
+
+    // ── anime.js (v4): partículas subindo com brilho quente (brasas) ───────
+    async _setupEmbers() {
+      const el = this.$refs.embersLayer;
+      if (!el) return;
+      const { animate, utils } = await import("animejs");
+      const embers = utils.$(".anim-bg-ember", el);
+      this._animeAnimations = embers.map((ember, i) => {
+        utils.set(ember, { left: `${utils.random(0, 100)}%`, top: "105%" });
+        return animate(ember, {
+          top: ["105%", "-5%"],
+          translateX: () => utils.random(-30, 30),
+          opacity: [0, 0.9, 0.9, 0],
+          scale: [0.6, 1, 0.75],
+          duration: () => utils.random(8000, 15000),
+          delay: i * 250,
+          easing: "linear",
+          loop: true,
+        });
+      });
+    },
   },
 };
 </script>
@@ -470,5 +552,120 @@ export default {
 @keyframes anim-bg-twinkle {
   0%, 100% { opacity: 0.15; transform: scale(0.7); }
   50%      { opacity: 1;    transform: scale(1.4); }
+}
+
+/* Bokeh — círculos desfocados flutuando bem devagar, cada um com seu
+   próprio tamanho/posição/ritmo (ver bokehDefs, gerado uma vez só). */
+.anim-bg-bokeh {
+  position: relative;
+  background: linear-gradient(160deg, #0d1117 0%, #171f33 100%);
+}
+.anim-bg-bokeh-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--anim-color) 70%, white 30%),
+    color-mix(in srgb, var(--anim-color) 30%, transparent) 60%,
+    transparent 75%
+  );
+  filter: blur(6px);
+  animation-name: anim-bg-bokeh-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+@keyframes anim-bg-bokeh-float {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(3%, -4%) scale(1.15); }
+}
+
+/* Raios — feixes de luz (repeating-conic-gradient) desfocados, ampliados
+   (scale) pra rotação nunca deixar cantos vazios, igual à técnica de "ondas". */
+.anim-bg-rays {
+  background:
+    repeating-conic-gradient(
+      from 0deg at 30% 15%,
+      color-mix(in srgb, var(--anim-color) 60%, transparent) 0deg 3deg,
+      transparent 3deg 24deg
+    ),
+    linear-gradient(180deg, #05060c 0%, #0d0f1d 100%);
+  filter: blur(min(3.5vmin, 26px));
+  transform: scale(2.2);
+}
+
+/* Brasas — partículas quentes subindo com brilho (box-shadow), sempre
+   misturadas com laranja/amarelo pra parecer fogo mesmo se a cor escolhida
+   for fria (mesma lógica do "three" misturando com branco). */
+.anim-bg-embers {
+  position: relative;
+  background: linear-gradient(180deg, #150a06 0%, #2a1206 100%);
+}
+.anim-bg-ember {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--anim-color) 70%, #ffb800 30%);
+  box-shadow: 0 0 6px 2px color-mix(in srgb, var(--anim-color) 60%, #ff8800 40%);
+}
+
+/* Fumaça/Tinta — manchas grandes desfocadas com border-radius mudando
+   (morph orgânico), sem nenhuma lib, só @keyframes. */
+.anim-bg-smoke {
+  position: relative;
+  background: linear-gradient(160deg, #0b0d12 0%, #14171f 100%);
+  overflow: hidden;
+}
+.anim-bg-smoke-blob {
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  filter: blur(min(6vmin, 50px));
+  opacity: 0.35;
+  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 55%, white 10%), transparent 70%);
+  mix-blend-mode: screen;
+  animation-name: anim-bg-smoke-morph;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+.anim-bg-smoke-blob--1 { top: -10%; left: -10%; animation-duration: 26s; }
+.anim-bg-smoke-blob--2 {
+  top: 30%; left: 40%; animation-duration: 34s; opacity: 0.28;
+  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 40%, white 20%), transparent 70%);
+}
+.anim-bg-smoke-blob--3 { top: 55%; left: -5%; animation-duration: 30s; opacity: 0.3; }
+@keyframes anim-bg-smoke-morph {
+  0%   { border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%; transform: translate(0, 0) scale(1); }
+  50%  { border-radius: 60% 40% 35% 65% / 55% 65% 35% 45%; transform: translate(6%, 4%) scale(1.1); }
+  100% { border-radius: 35% 65% 55% 45% / 40% 55% 45% 60%; transform: translate(-4%, 6%) scale(0.95); }
+}
+
+/* Nuvens — elipses desfocadas deslizando na horizontal em velocidades e
+   alturas diferentes, sem nenhuma lib. */
+.anim-bg-clouds {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--anim-color) 20%, #0d1117), #0d1117);
+}
+.anim-bg-cloud {
+  position: absolute;
+  width: 55%;
+  height: 30%;
+  border-radius: 50%;
+  filter: blur(min(5vmin, 40px));
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--anim-color) 30%, white 60%), transparent 70%);
+  opacity: 0.4;
+  animation-name: anim-bg-cloud-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.anim-bg-cloud--1 { top: 10%; animation-duration: 70s; }
+.anim-bg-cloud--2 { top: 40%; width: 70%; height: 25%; opacity: 0.3; animation-duration: 95s; animation-delay: -20s; }
+.anim-bg-cloud--3 { top: 65%; width: 45%; opacity: 0.35; animation-duration: 60s; animation-delay: -40s; }
+@keyframes anim-bg-cloud-drift {
+  0%   { transform: translateX(-30%); }
+  100% { transform: translateX(130%); }
 }
 </style>

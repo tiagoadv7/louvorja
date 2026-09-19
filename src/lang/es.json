@@ -52,7 +52,12 @@
                 "ondas": "Aurora",
                 "grade": "Cuadrícula Synthwave",
                 "neve": "Nieve",
-                "estrelas": "Estrellas"
+                "estrelas": "Estrellas",
+                "bokeh": "Bokeh",
+                "raios": "Rayos de Luz",
+                "brasas": "Brasas",
+                "fumaca": "Humo",
+                "nuvens": "Nubes"
             }
         }
     },

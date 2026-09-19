@@ -52,7 +52,12 @@
                 "ondas": "Aurora",
                 "grade": "Grade Synthwave",
                 "neve": "Neve",
-                "estrelas": "Estrelas"
+                "estrelas": "Estrelas",
+                "bokeh": "Bokeh",
+                "raios": "Raios de Luz",
+                "brasas": "Brasas",
+                "fumaca": "Fumaça",
+                "nuvens": "Nuvens"
             }
         }
     },

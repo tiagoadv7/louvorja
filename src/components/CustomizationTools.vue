@@ -405,6 +405,11 @@ export default {
         { label: this.$t("components.customization.animated_bg.grade"), value: "grade" },
         { label: this.$t("components.customization.animated_bg.neve"), value: "neve" },
         { label: this.$t("components.customization.animated_bg.estrelas"), value: "estrelas" },
+        { label: this.$t("components.customization.animated_bg.bokeh"), value: "bokeh" },
+        { label: this.$t("components.customization.animated_bg.raios"), value: "raios" },
+        { label: this.$t("components.customization.animated_bg.brasas"), value: "brasas" },
+        { label: this.$t("components.customization.animated_bg.fumaca"), value: "fumaca" },
+        { label: this.$t("components.customization.animated_bg.nuvens"), value: "nuvens" },
       ];
     },
   },
