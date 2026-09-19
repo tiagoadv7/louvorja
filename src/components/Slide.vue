@@ -349,9 +349,12 @@ export default {
           return { overflow: "hidden", backgroundColor: "transparent" };
         }
 
-        // type='none': transparente — letras aparecem sem imagem de fundo
+        // type='none': sem imagem/vídeo — usa a "Cor do Fundo" escolhida
+        // quando houver (senão fica transparente, igual ao comportamento
+        // anterior). Sem isso, o campo de cor no bloco "Fundo" não tinha
+        // nenhum efeito visual enquanto o tipo estivesse em "Sem Fundo".
         if (bg.type === 'none') {
-          return { overflow: "hidden", backgroundColor: "transparent" };
+          return { overflow: "hidden", backgroundColor: bg.background_color || "transparent" };
         }
 
         // type='image': imagem personalizada escolhida pelo usuário.
@@ -400,10 +403,9 @@ export default {
       return {
         backgroundColor: slide.text_bg_transparent ? "transparent" : (boxOn ? `rgba(0, 0, 0, ${boxOpacity})` : "transparent"),
         border:          (!slide.text_bg_transparent && hasBorder) ? `1px solid ${bg?.box_border_color || "#FFFFFF"}` : "none",
-        // Cantos arredondados na caixinha — antes só a cor da borda era
-        // customizável, mas o retângulo em si continuava com cantos retos
-        // mesmo com uma borda visível.
-        borderRadius:    (!slide.text_bg_transparent && boxOn) ? `${this.fontSizePc(2)}px` : "0",
+        // Cantos arredondados na caixinha — quantidade ajustável (Janela >
+        // Cantos Arredondados), não mais um valor fixo.
+        borderRadius:    (!slide.text_bg_transparent && boxOn) ? `${this.fontSizePc(bg?.box_border_radius ?? 2)}px` : "0",
         textShadow:      shadowOn ? `0 0 ${this.fontSizePc(bg?.shadow_blur ?? 2.2)}px rgba(0, 0, 0, ${bg?.shadow_intensity ?? 0.8})` : "none",
       };
     },

@@ -48,7 +48,11 @@
                 "three": "Partículas 3D",
                 "gsap": "Gradiente en Movimiento",
                 "anime": "Manchas Flotantes",
-                "motion": "Brillo Pulsante"
+                "motion": "Brillo Pulsante",
+                "ondas": "Aurora",
+                "grade": "Cuadrícula Synthwave",
+                "neve": "Nieve",
+                "estrelas": "Estrellas"
             }
         }
     },

@@ -61,17 +61,19 @@
                 />
                 <v-number-input
                   v-else-if="
-                    ['font-size', 'border-spacing'].includes(item?.type)
+                    ['font-size', 'border-spacing', 'border-radius'].includes(item?.type)
                   "
                   v-model="userdata[item.property]"
                   :label="item?.label"
                   :width="150"
-                  :min="1"
-                  :max="90"
+                  :min="item?.min ?? 1"
+                  :max="item?.max ?? 90"
                   :prepend-inner-icon="
                     item?.type == 'font-size'
                       ? 'mdi-format-font-size-increase'
-                      : 'mdi-border-all-variant'
+                      : item?.type == 'border-radius'
+                        ? 'mdi-rounded-corner'
+                        : 'mdi-border-all-variant'
                   "
                   density="compact"
                   variant="outlined"
@@ -392,6 +394,10 @@ export default {
         { label: this.$t("components.customization.animated_bg.gsap"), value: "gsap" },
         { label: this.$t("components.customization.animated_bg.anime"), value: "anime" },
         { label: this.$t("components.customization.animated_bg.motion"), value: "motion" },
+        { label: this.$t("components.customization.animated_bg.ondas"), value: "ondas" },
+        { label: this.$t("components.customization.animated_bg.grade"), value: "grade" },
+        { label: this.$t("components.customization.animated_bg.neve"), value: "neve" },
+        { label: this.$t("components.customization.animated_bg.estrelas"), value: "estrelas" },
       ];
     },
   },

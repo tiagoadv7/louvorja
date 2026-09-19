@@ -55,6 +55,7 @@
     "text_box": "Caja detrás de la letra",
     "box_opacity": "Opacidad de la caja",
     "box_border": "Borde de la caja",
-    "box_border_color": "Color del borde"
+    "box_border_color": "Color del borde",
+    "box_border_radius": "Esquinas Redondeadas"
   }
 }

@@ -39,7 +39,7 @@
               ['box_opacity', 'box_border', 'box_border_color'],
             ],
           },
-          { name: t('customization.window'), items: ['border_spacing'] },
+          { name: t('customization.window'), items: ['border_spacing', 'box_border_radius'] },
         ]"
       />
     </template>
@@ -385,6 +385,7 @@ const textBox          = computed(() => proxy?.$userdata?.get(`modules.${ID}.tex
 const boxOpacity       = computed(() => proxy?.$userdata?.get(`modules.${ID}.box_opacity`, 0.75) ?? 0.75);
 const boxBorder        = computed(() => proxy?.$userdata?.get(`modules.${ID}.box_border`, false) ?? false);
 const boxBorderColor   = computed(() => proxy?.$userdata?.get(`modules.${ID}.box_border_color`, '#FFFFFF') || '#FFFFFF');
+const boxBorderRadius  = computed(() => proxy?.$userdata?.get(`modules.${ID}.box_border_radius`, 2) ?? 2);
 
 const imageFilename = computed(() =>
   decodeURIComponent((imageUrl.value || '').split('/').pop() || '')
@@ -517,8 +518,9 @@ function syncToLocalStorage() {
       shadow_blur:      shadowBlur.value,
       text_box:         textBox.value,
       box_opacity:      boxOpacity.value,
-      box_border:       boxBorder.value,
-      box_border_color: boxBorderColor.value,
+      box_border:        boxBorder.value,
+      box_border_color:  boxBorderColor.value,
+      box_border_radius: boxBorderRadius.value,
       // Janela
       border_spacing:   ud.get(`modules.${ID}.border_spacing`,   5)            ?? 5,
     };

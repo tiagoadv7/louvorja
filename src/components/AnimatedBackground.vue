@@ -9,6 +9,25 @@
       <span class="anim-bg-glow anim-bg-glow--halo" />
       <span class="anim-bg-glow" />
     </div>
+    <div v-else-if="variant === 'ondas'" ref="wavesLayer" class="anim-bg-layer anim-bg-waves" />
+    <div v-else-if="variant === 'grade'" ref="gridLayer" class="anim-bg-layer anim-bg-grid">
+      <div class="anim-bg-grid-lines" />
+      <div class="anim-bg-grid-horizon" />
+    </div>
+    <div v-else-if="variant === 'neve'" ref="snowLayer" class="anim-bg-layer anim-bg-snow">
+      <span v-for="n in 40" :key="n" class="anim-bg-flake" />
+    </div>
+    <div v-else-if="variant === 'estrelas'" class="anim-bg-layer anim-bg-stars">
+      <span
+        v-for="(s, i) in starDefs" :key="i"
+        class="anim-bg-star"
+        :style="{
+          top: `${s.top}%`, left: `${s.left}%`,
+          width: `${s.size}px`, height: `${s.size}px`,
+          animationDelay: `${s.delay}s`, animationDuration: `${s.duration}s`,
+        }"
+      />
+    </div>
   </div>
 </template>
 
@@ -18,11 +37,17 @@
 // sendo projetado (nada de flashes ou movimento rápido). Cada variante usa
 // uma biblioteca diferente, todas de propósito geral (não específicas de
 // fundo), meio que como vitrine/base pra evoluir mais efeitos depois:
-//   three  → Three.js: campo de partículas 3D flutuando bem lento (WebGL)
-//   gsap   → GSAP: gradiente que desliza suavemente
-//   anime  → anime.js (v4): manchas borradas ("blobs") boiando
-//   motion → Motion (motion.dev): brilho radial pulsando (respiração)
+//   three    → Three.js: campo de partículas 3D flutuando bem lento (WebGL)
+//   gsap     → GSAP: gradiente que desliza suavemente
+//   anime    → anime.js (v4): manchas borradas ("blobs") boiando
+//   motion   → Motion (motion.dev): brilho radial pulsando (respiração)
+//   ondas    → GSAP: aurora em gradiente cônico girando bem devagar
+//   grade    → GSAP: grade estilo synthwave/horizonte rolando pra frente
+//   neve     → anime.js (v4): partículas caindo (neve/confete)
+//   estrelas → CSS puro: campo de estrelas piscando (sem nenhuma lib)
 //
+// Todas usam bibliotecas já instaladas localmente (three/gsap/animejs/motion)
+// ou CSS puro — nada busca nada pela rede, funciona 100% offline.
 // Cada variante cria/destrói seus próprios recursos (loop de render,
 // contexto WebGL, tweens) no mounted/beforeUnmount — importante porque este
 // componente é montado e desmontado com frequência (troca de módulo, editor
@@ -45,6 +70,15 @@ export default {
     _animeAnimations: [],
     _motionAnimations: [],
     _resizeHandler: null,
+    // Gerado uma vez só (não a cada render) — posições/tempos fixos, senão
+    // as estrelas "pulariam" de lugar a cada atualização reativa do pai.
+    starDefs: Array.from({ length: 70 }, () => ({
+      top: Math.random() * 100,
+      left: Math.random() * 100,
+      size: 1 + Math.random() * 2,
+      delay: Math.random() * 4,
+      duration: 2 + Math.random() * 3,
+    })),
   }),
   watch: {
     variant() {
@@ -71,6 +105,10 @@ export default {
       else if (this.variant === "gsap") this._setupGsap();
       else if (this.variant === "anime") this._setupAnime();
       else if (this.variant === "motion") this._setupMotion();
+      else if (this.variant === "ondas") this._setupWaves();
+      else if (this.variant === "grade") this._setupGrid();
+      else if (this.variant === "neve") this._setupSnow();
+      // "estrelas" é só CSS (animação via @keyframes) — nada a inicializar.
     },
     _teardown() {
       if (this._three) {
@@ -231,6 +269,54 @@ export default {
         ));
       }
     },
+
+    // ── GSAP: aurora em gradiente cônico girando bem devagar ───────────────
+    async _setupWaves() {
+      const el = this.$refs.wavesLayer;
+      if (!el) return;
+      const { gsap } = await import("gsap");
+      gsap.set(el, { rotate: 0 });
+      this._gsapTween = gsap.to(el, {
+        rotate: 360,
+        duration: 50,
+        ease: "none",
+        repeat: -1,
+      });
+    },
+
+    // ── GSAP: grade estilo synthwave rolando em direção à câmera ───────────
+    async _setupGrid() {
+      const el = this.$refs.gridLayer?.querySelector(".anim-bg-grid-lines");
+      if (!el) return;
+      const { gsap } = await import("gsap");
+      gsap.set(el, { backgroundPositionY: "0px" });
+      this._gsapTween = gsap.to(el, {
+        backgroundPositionY: "+=40px",
+        duration: 1.1,
+        ease: "none",
+        repeat: -1,
+      });
+    },
+
+    // ── anime.js (v4): partículas caindo (neve/confete) ────────────────────
+    async _setupSnow() {
+      const el = this.$refs.snowLayer;
+      if (!el) return;
+      const { animate, utils } = await import("animejs");
+      const flakes = utils.$(".anim-bg-flake", el);
+      this._animeAnimations = flakes.map((flake, i) => {
+        utils.set(flake, { left: `${utils.random(0, 100)}%`, top: "-5%" });
+        return animate(flake, {
+          top: ["-5%", "105%"],
+          translateX: () => utils.random(-40, 40),
+          opacity: [0, 0.9, 0.9, 0],
+          duration: () => utils.random(7000, 13000),
+          delay: i * 200,
+          easing: "linear",
+          loop: true,
+        });
+      });
+    },
   },
 };
 </script>
@@ -310,5 +396,79 @@ export default {
   background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 35%, transparent), transparent 70%);
   filter: blur(24px);
   box-shadow: none;
+}
+
+/* Ondas — aurora em gradiente cônico multi-matiz, girando devagar e
+   desfocada; a rotação/escala fazem ela nunca deixar cantos vazios. */
+.anim-bg-waves {
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    color-mix(in srgb, var(--anim-color) 70%, #050814) 0deg,
+    color-mix(in srgb, var(--anim-color) 15%, #050814) 90deg,
+    color-mix(in srgb, var(--anim-color) 70%, #050814) 180deg,
+    color-mix(in srgb, var(--anim-color) 15%, #050814) 270deg,
+    color-mix(in srgb, var(--anim-color) 70%, #050814) 360deg
+  );
+  filter: blur(min(8vmin, 60px)) saturate(1.3);
+  transform: scale(1.8);
+}
+
+/* Grade — horizonte synthwave: linha de brilho + grade em perspectiva
+   rolando pra frente (background-position animado via GSAP). */
+.anim-bg-grid {
+  background: linear-gradient(180deg, #05030d 0%, #0d0821 55%, #170f3d 100%);
+}
+.anim-bg-grid-horizon {
+  position: absolute;
+  top: 42%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--anim-color) 85%, white 15%);
+  box-shadow: 0 0 min(6vmin, 40px) min(1.5vmin, 10px) color-mix(in srgb, var(--anim-color) 60%, transparent);
+}
+.anim-bg-grid-lines {
+  position: absolute;
+  top: 42%;
+  left: -50%;
+  right: -50%;
+  bottom: -20%;
+  background-image:
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--anim-color) 55%, transparent) 0 2px, transparent 2px 60px),
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--anim-color) 55%, transparent) 0 2px, transparent 2px 40px);
+  transform: perspective(220px) rotateX(60deg);
+  transform-origin: top center;
+  opacity: 0.8;
+}
+
+/* Neve — partículas caindo devagar, cor derivada da escolhida. */
+.anim-bg-snow {
+  position: relative;
+}
+.anim-bg-flake {
+  position: absolute;
+  top: -5%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--anim-color) 35%, white 65%);
+}
+
+/* Estrelas — só CSS, sem nenhuma lib: cada estrela pisca em seu próprio
+   ritmo (delay/duration aleatórios por estrela, ver starDefs). */
+.anim-bg-stars {
+  position: relative;
+}
+.anim-bg-star {
+  position: absolute;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--anim-color) 30%, white 70%);
+  animation-name: anim-bg-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes anim-bg-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.7); }
+  50%      { opacity: 1;    transform: scale(1.4); }
 }
 </style>

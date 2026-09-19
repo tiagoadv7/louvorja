@@ -98,6 +98,13 @@
       "label": "customization.border",
       "default": 5
     },
+    "box_border_radius": {
+      "type": "border-radius",
+      "label": "customization.box_border_radius",
+      "default": 2,
+      "min": 0,
+      "max": 20
+    },
     "text_shadow": {
       "type": "toggle",
       "label": "customization.text_shadow",
