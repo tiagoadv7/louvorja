@@ -79,6 +79,7 @@ export default {
         this._three.renderer.dispose();
         this._three.geometry.dispose();
         this._three.material.dispose();
+        this._three.glowTexture?.dispose();
         this._three = null;
       }
       if (this._gsapTween) {
@@ -89,6 +90,24 @@ export default {
       this._animeAnimations = [];
       this._motionAnimations.forEach((a) => a.stop?.());
       this._motionAnimations = [];
+    },
+
+    // Textura em degradê radial (branco opaco no centro → transparente na
+    // borda) usada como sprite de cada partícula — sem ela, PointsMaterial
+    // desenha um quadradinho sólido de aresta dura, sem nenhum brilho.
+    _createGlowTexture(THREE) {
+      const size = 64;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      gradient.addColorStop(0, "rgba(255,255,255,1)");
+      gradient.addColorStop(0.35, "rgba(255,255,255,0.7)");
+      gradient.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      return new THREE.CanvasTexture(canvas);
     },
 
     // ── Three.js: campo de partículas flutuando bem lento ─────────────────
@@ -116,7 +135,19 @@ export default {
       // Mistura com branco pra manter as partículas visíveis/brilhantes contra
       // o fundo escuro fixo, independente de qual matiz o usuário escolheu.
       const particleColor = new THREE.Color(this.color).lerp(new THREE.Color(0xffffff), 0.5);
-      const material = new THREE.PointsMaterial({ color: particleColor, size: 0.35, transparent: true, opacity: 0.65 });
+      const glowTexture = this._createGlowTexture(THREE);
+      // additive blending + sprite em degradê: partículas próximas somam
+      // brilho entre si (parecendo "acender" onde se sobrepõem) em vez de só
+      // pontos sólidos — é isso que dá o efeito de glow real.
+      const material = new THREE.PointsMaterial({
+        color: particleColor,
+        size: 1.4,
+        map: glowTexture,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
       const points = new THREE.Points(geometry, material);
       scene.add(points);
 
@@ -138,7 +169,7 @@ export default {
       };
       tick();
 
-      this._three = { renderer, geometry, material, onResize: resize, get frameId() { return frameId; } };
+      this._three = { renderer, geometry, material, glowTexture, onResize: resize, get frameId() { return frameId; } };
     },
 
     // ── GSAP: gradiente deslizando suavemente ──────────────────────────────

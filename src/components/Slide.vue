@@ -400,6 +400,10 @@ export default {
       return {
         backgroundColor: slide.text_bg_transparent ? "transparent" : (boxOn ? `rgba(0, 0, 0, ${boxOpacity})` : "transparent"),
         border:          (!slide.text_bg_transparent && hasBorder) ? `1px solid ${bg?.box_border_color || "#FFFFFF"}` : "none",
+        // Cantos arredondados na caixinha — antes só a cor da borda era
+        // customizável, mas o retângulo em si continuava com cantos retos
+        // mesmo com uma borda visível.
+        borderRadius:    (!slide.text_bg_transparent && boxOn) ? `${this.fontSizePc(2)}px` : "0",
         textShadow:      shadowOn ? `0 0 ${this.fontSizePc(bg?.shadow_blur ?? 2.2)}px rgba(0, 0, 0, ${bg?.shadow_intensity ?? 0.8})` : "none",
       };
     },
