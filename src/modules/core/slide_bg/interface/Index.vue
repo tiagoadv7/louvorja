@@ -35,6 +35,15 @@
               ['panel_font_size', 'panel_font_color'],
             ],
           },
+          {
+            name: t('shadow_box_section'),
+            items: [
+              'text_shadow',
+              ['shadow_intensity', 'shadow_blur'],
+              'text_box',
+              ['box_opacity', 'box_border'],
+            ],
+          },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
       />

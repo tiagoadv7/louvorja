@@ -97,6 +97,47 @@
       "type": "border-spacing",
       "label": "customization.border",
       "default": 5
+    },
+    "text_shadow": {
+      "type": "toggle",
+      "label": "customization.text_shadow",
+      "default": false
+    },
+    "shadow_intensity": {
+      "type": "range",
+      "label": "customization.shadow_intensity",
+      "default": 0.8,
+      "min": 0.2,
+      "max": 1,
+      "step": 0.05,
+      "percent": true
+    },
+    "shadow_blur": {
+      "type": "range",
+      "label": "customization.shadow_blur",
+      "default": 2.2,
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1
+    },
+    "text_box": {
+      "type": "toggle",
+      "label": "customization.text_box",
+      "default": true
+    },
+    "box_opacity": {
+      "type": "range",
+      "label": "customization.box_opacity",
+      "default": 0.75,
+      "min": 0.1,
+      "max": 0.9,
+      "step": 0.05,
+      "percent": true
+    },
+    "box_border": {
+      "type": "toggle",
+      "label": "customization.box_border",
+      "default": false
     }
   }
 }

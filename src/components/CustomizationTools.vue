@@ -6,7 +6,7 @@
       :key="indx_block"
     >
       <v-divider v-if="indx_block > 0" vertical class="mx-1" />
-      <v-card flat class="d-flex flex-column pt-2">
+      <v-card flat class="d-flex flex-column pt-2 ct-block">
         <!-- Presets — só nos blocos que declararam presetKey (ver toBlock).
              Salva/aplica só os campos DESSE bloco (ex.: um bloco "Fundo" com
              background_color/image/image_opacity/image_fit), não o módulo
@@ -91,6 +91,16 @@
                   item-value="value"
                   hide-details
                 />
+                <!-- h-align + v-align no mesmo grupo → um único "pad" de
+                     posição arrastável, em vez de duas barras de botões
+                     separadas (ver PositionPad.vue). -->
+                <l-position-pad
+                  v-else-if="item?.type == 'h-align' && pairedVAlignItem(group)"
+                  :horizontal="userdata[item.property]"
+                  @update:horizontal="userdata[item.property] = $event"
+                  :vertical="userdata[pairedVAlignItem(group).property]"
+                  @update:vertical="userdata[pairedVAlignItem(group).property] = $event"
+                />
                 <v-btn-toggle
                   v-else-if="item?.type == 'h-align'"
                   v-model="userdata[item.property]"
@@ -98,33 +108,45 @@
                   density="compact"
                   variant="outlined"
                 >
-                  <v-btn value="start">
+                  <v-btn value="start" size="small" stacked>
                     <v-icon>mdi-format-horizontal-align-left</v-icon>
+                    <span class="ct-align-btn-label">Esquerda</span>
                   </v-btn>
-                  <v-btn value="center">
+                  <v-btn value="center" size="small" stacked>
                     <v-icon>mdi-format-horizontal-align-center</v-icon>
+                    <span class="ct-align-btn-label">Centro</span>
                   </v-btn>
-                  <v-btn value="end">
+                  <v-btn value="end" size="small" stacked>
                     <v-icon>mdi-format-horizontal-align-right</v-icon>
+                    <span class="ct-align-btn-label">Direita</span>
                   </v-btn>
                 </v-btn-toggle>
+                <!-- v-align sozinho só renderiza se não tiver h-align irmão
+                     no grupo (esse caso já é coberto pelo pad acima). -->
                 <v-btn-toggle
-                  v-else-if="item?.type == 'v-align'"
+                  v-else-if="item?.type == 'v-align' && !pairedHAlignItem(group)"
                   v-model="userdata[item.property]"
                   :label="item?.label"
                   density="compact"
                   variant="outlined"
                 >
-                  <v-btn value="start">
+                  <v-btn value="start" size="small" stacked>
                     <v-icon>mdi-format-vertical-align-top</v-icon>
+                    <span class="ct-align-btn-label">Em Cima</span>
                   </v-btn>
-                  <v-btn value="center">
+                  <v-btn value="center" size="small" stacked>
                     <v-icon>mdi-format-vertical-align-center</v-icon>
+                    <span class="ct-align-btn-label">Meio</span>
                   </v-btn>
-                  <v-btn value="end">
+                  <v-btn value="end" size="small" stacked>
                     <v-icon>mdi-format-vertical-align-bottom</v-icon>
+                    <span class="ct-align-btn-label">Em Baixo</span>
                   </v-btn>
                 </v-btn-toggle>
+                <!-- v-align pareado com h-align: já renderizado pelo pad
+                     acima — precisa de um ramo próprio aqui só pra fechar a
+                     cadeia v-if/else-if sem cair no "Type inválido" final. -->
+                <template v-else-if="item?.type == 'v-align'" />
                 <v-btn
                   v-else-if="item?.type == 'restore'"
                   icon="mdi-restore"
@@ -219,6 +241,53 @@
                     :track-size="1"
                   />
                 </div>
+                <!-- Slider genérico com faixa própria (min/max/step vêm do
+                     manifest.json do módulo) — usado por campos que não são
+                     0-100%, como intensidade/espalhamento de sombra. -->
+                <div
+                  v-else-if="item?.type == 'range'"
+                  class="px-1"
+                  style="width: 200px"
+                >
+                  <span
+                    class="text-label-small px-2"
+                    style="
+                      opacity: var(--v-medium-emphasis-opacity);
+                      font-size: 12px;
+                    "
+                  >
+                    {{ item?.label }}:
+                    {{ item?.percent ? Math.round((userdata[item.property] ?? 0) * 100) + '%' : userdata[item.property] }}
+                  </span>
+                  <v-slider
+                    v-model="userdata[item.property]"
+                    :min="item?.min ?? 0"
+                    :max="item?.max ?? 1"
+                    :step="item?.step ?? 0.1"
+                    hide-details
+                    :thumb-size="15"
+                    :track-size="1"
+                  />
+                </div>
+                <!-- Interruptor simples (booleano). -->
+                <div
+                  v-else-if="item?.type == 'toggle'"
+                  class="d-flex align-center justify-space-between px-2"
+                  style="width: 200px"
+                >
+                  <span
+                    class="text-label-small"
+                    style="opacity: var(--v-medium-emphasis-opacity); font-size: 12px"
+                  >
+                    {{ item?.label }}
+                  </span>
+                  <v-switch
+                    v-model="userdata[item.property]"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                  />
+                </div>
                 <div v-else class="text-error">
                   Type "{{ item?.type }}" invalid!
                 </div>
@@ -236,11 +305,13 @@
 
 <script>
 import AnimatedBgPicker from "@/components/AnimatedBgPicker.vue";
+import PositionPad from "@/components/PositionPad.vue";
 
 export default {
   name: "CustomizationToolsComponent",
   components: {
     LAnimatedBgPicker: AnimatedBgPicker,
+    LPositionPad: PositionPad,
   },
   props: {
     module: Object,
@@ -283,7 +354,13 @@ export default {
         {},
         {
           get: (_, key) => {
-            return this.$userdata.get(`modules.${this.module.id}.${key}`, null);
+            // Cai pro "default" declarado no manifest.json (quando existir)
+            // em vez de sempre null -- sem isso, um campo boolean com
+            // default:true (ex.: text_box) aparecia OFF na barra até o
+            // usuário tocar nele, mesmo já estando ON de verdade (ver
+            // Slide.vue, que trata ausência como true nesse caso).
+            const def = this.module?.manifest?.customization?.[key]?.default ?? null;
+            return this.$userdata.get(`modules.${this.module.id}.${key}`, def);
           },
           set: (_, key, value) => {
             this.$userdata.set(`modules.${this.module.id}.${key}`, value);
@@ -319,6 +396,14 @@ export default {
     },
   },
   methods: {
+    // h-align/v-align no mesmo grupo viram um único PositionPad em vez de
+    // duas barras de botões separadas (ver bloco h-align/v-align no template).
+    pairedVAlignItem(group) {
+      return group.find((i) => i?.type === "v-align");
+    },
+    pairedHAlignItem(group) {
+      return group.find((i) => i?.type === "h-align");
+    },
     t(text) {
       if (!text) return '';
       const key = `modules.${this.module.id}.${text}`;
@@ -484,6 +569,25 @@ export default {
   }
   .__ct-presets {
     max-width: 260px;
+  }
+  // Cada bloco (Fundo | Posição da Letra | Texto | Janela | Restaurar) ganha
+  // um cartão com cantos arredondados próprio, em vez de só um traço fino
+  // entre eles — mesmo tratamento visual usado no resto do sistema (ex.: a
+  // própria barra de personalização, ver CustomizationBar.vue).
+  .ct-block {
+    border-radius: 12px;
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    background: rgba(128, 128, 128, 0.03);
+    padding: 8px;
+    margin: 4px 2px;
+  }
+  // Rótulo de texto embaixo do ícone nos botões de alinhamento (h-align/
+  // v-align sem par) — "Esquerda/Centro/Direita", "Em Cima/Meio/Em Baixo".
+  .ct-align-btn-label {
+    font-size: 9px;
+    line-height: 1.1;
+    text-transform: none;
+    margin-top: 2px;
   }
 }
 </style>

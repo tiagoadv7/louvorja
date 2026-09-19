@@ -48,6 +48,12 @@
     "repeat_font_color": "Color de repetición",
     "panel_size": "Tamaño lateral",
     "panel_font_color": "Color lateral",
-    "border": "Borde"
+    "border": "Borde",
+    "text_shadow": "Sombra en la letra",
+    "shadow_intensity": "Intensidad de la sombra",
+    "shadow_blur": "Difuminado de la sombra",
+    "text_box": "Caja detrás de la letra",
+    "box_opacity": "Opacidad de la caja",
+    "box_border": "Borde de la caja"
   }
 }
