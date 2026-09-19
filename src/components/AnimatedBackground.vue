@@ -54,6 +54,12 @@
       <span class="anim-bg-cloud anim-bg-cloud--2" />
       <span class="anim-bg-cloud anim-bg-cloud--3" />
     </div>
+
+    <!-- Glow ambiente — camada extra por cima de QUALQUER variante acima
+         (ver comentário no <style>), pra todo fundo animado ter um brilho
+         suave, não só "Brilho Pulsante"/partículas 3D que já tinham o seu
+         próprio de propósito. -->
+    <div class="anim-bg-ambient-glow" />
   </div>
 </template>
 
@@ -667,5 +673,32 @@ export default {
 @keyframes anim-bg-cloud-drift {
   0%   { transform: translateX(-30%); }
   100% { transform: translateX(130%); }
+}
+
+/* Glow ambiente — CSS puro, por cima de TODAS as variantes (renderizado
+   depois de todas no template, então fica no topo do empilhamento). Um
+   brilho radial suave, pulsando bem devagar, misturado com "screen" (só
+   clareia, nunca escurece o que está por baixo) — dá um "glow" geral a
+   fundos que antes eram só forma/movimento (grade, nuvens, estrelas etc.)
+   sem competir com o conteúdo real (texto/imagem) na frente. Sutil de
+   propósito: quem já tem brilho próprio (motion/three) só ganha um reforço
+   leve, não dobra o efeito. */
+.anim-bg-ambient-glow {
+  position: absolute;
+  inset: -25%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--anim-color) 55%, white 25%) 0%,
+    color-mix(in srgb, var(--anim-color) 25%, transparent) 45%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.28;
+  animation: anim-bg-ambient-pulse 7s ease-in-out infinite;
+}
+@keyframes anim-bg-ambient-pulse {
+  0%, 100% { opacity: 0.2;  transform: scale(1); }
+  50%      { opacity: 0.38; transform: scale(1.08); }
 }
 </style>

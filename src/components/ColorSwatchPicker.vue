@@ -7,9 +7,10 @@
     </template>
 
     <!-- Fileira de cores pré-definidas + um círculo tracejado pra "mais
-         cores" (abre o seletor nativo do SO) — mesmo padrão do
-         pianolouvorja/app (github.com/pianolouvorja/app), sem mudar o
-         layout existente da barra: só o que aparece ao clicar é novo. -->
+         cores" (abre o seletor completo abaixo, ver v-color-picker) — mesmo
+         padrão do pianolouvorja/app (github.com/pianolouvorja/app), sem
+         mudar o layout existente da barra: só o que aparece ao clicar é
+         novo. -->
     <v-card class="csw-panel pa-2">
       <div class="csw-swatches">
         <button
@@ -22,11 +23,37 @@
           :title="preset"
           @click="select(preset)"
         />
-        <label class="csw-custom" title="Mais cores">
+        <button
+          type="button"
+          class="csw-custom"
+          :class="{ 'csw-custom--active': showCustom }"
+          title="Mais cores"
+          @click="showCustom = !showCustom"
+        >
           <v-icon size="16">mdi-eyedropper-variant</v-icon>
-          <input type="color" :value="modelValue || '#000000'" @input="onCustomInput" />
-        </label>
+        </button>
       </div>
+
+      <!-- Seletor completo (canvas + slider de matiz + campos RGB/hex +
+           conta-gotas) — substitui o <input type="color"> nativo de
+           propósito: o seletor do próprio SO/Chromium não é estilizável (não
+           é DOM da página), então os cantos dele nunca ficavam arredondados
+           iguais ao resto do app por mais CSS que se tentasse. O
+           v-color-picker do Vuetify já usa a mesma UI (canvas, matiz, RGB,
+           conta-gotas via EyeDropper API), só que como componente de verdade
+           — herda o "rounded" abaixo normalmente. -->
+      <v-color-picker
+        v-if="showCustom"
+        :model-value="modelValue || '#000000'"
+        @update:model-value="onCustomInput"
+        class="csw-picker mt-2"
+        rounded="lg"
+        elevation="0"
+        width="220"
+        mode="hex"
+        :modes="['hex']"
+        hide-alpha
+      />
     </v-card>
   </v-menu>
 </template>
@@ -51,7 +78,15 @@ export default {
     presets: { type: Array, default: () => DEFAULT_PRESETS },
   },
   emits: ["update:modelValue"],
-  data: () => ({ menu: false }),
+  data: () => ({ menu: false, showCustom: false }),
+  watch: {
+    // Fecha o seletor completo ao reabrir o menu do zero, senão ele ficava
+    // "grudado" aberto (aumentando o popover) mesmo pra quem só queria
+    // clicar numa das cores pré-definidas da próxima vez.
+    menu(open) {
+      if (!open) this.showCustom = false;
+    },
+  },
   methods: {
     isActive(preset) {
       return (this.modelValue || "").toLowerCase() === preset.toLowerCase();
@@ -59,8 +94,8 @@ export default {
     select(preset) {
       this.$emit("update:modelValue", preset);
     },
-    onCustomInput(event) {
-      this.$emit("update:modelValue", event.target.value);
+    onCustomInput(value) {
+      this.$emit("update:modelValue", value);
     },
   },
 };
@@ -113,7 +148,6 @@ export default {
   box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.25);
 }
 .csw-custom {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -121,6 +155,8 @@ export default {
   height: 28px;
   border-radius: 50%;
   border: 2px dashed rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   opacity: 0.8;
 }
@@ -128,10 +164,17 @@ export default {
   opacity: 1;
   border-color: rgb(var(--v-theme-primary));
 }
-.csw-custom input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+.csw-custom--active {
+  opacity: 1;
+  border-style: solid;
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
+}
+
+/* v-color-picker completo (canvas + matiz + RGB/hex + conta-gotas) — troca
+   o seletor nativo do SO (sem cantos arredondados, sem como estilizar) por
+   um de verdade no DOM da página, então "rounded" aqui realmente funciona. */
+.csw-picker {
+  width: 220px;
 }
 </style>
