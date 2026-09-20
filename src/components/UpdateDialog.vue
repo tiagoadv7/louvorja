@@ -133,25 +133,6 @@
           <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
         </v-card-text>
 
-        <!-- ── Baixando ── -->
-        <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
-          <div class="d-flex align-center ga-5 mb-6">
-            <v-progress-circular size="48" width="4" indeterminate color="primary" />
-            <div class="flex-grow-1 min-w-0">
-              <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
-              <div class="text-caption text-medium-emphasis text-truncate mt-2">{{ downloadStatus }}</div>
-            </div>
-            <div class="text-right flex-shrink-0">
-              <div class="text-h6 font-weight-black text-primary">{{ downloadPercent }}<span class="text-body-2">%</span></div>
-            </div>
-          </div>
-          <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mb-4" />
-          <div class="d-flex justify-space-between">
-            <span class="text-caption text-medium-emphasis">{{ downloadTransferred }} / {{ downloadTotal }}</span>
-            <span class="text-caption text-primary font-weight-semibold">{{ downloadSpeed }}</span>
-          </div>
-        </v-card-text>
-
         <!-- ── Pronto para instalar ── -->
         <v-card-text v-else-if="step === 'downloaded'" class="d-flex flex-column align-center py-6 ga-4">
           <v-avatar size="72" color="primary" variant="tonal">
@@ -184,7 +165,16 @@
       <v-divider />
 
       <!-- Ações -->
-      <v-card-actions class="px-5 py-3 justify-end" style="gap:12px">
+      <!-- Baixando: progresso mostrado aqui no rodapé (não mais um bloco
+           grande ocupando o centro da tela — ver pedido do usuário). -->
+      <v-card-actions v-if="step === 'downloading'" class="px-5 py-3 d-flex flex-column align-stretch upd-download-footer">
+        <div class="d-flex align-center justify-space-between">
+          <span class="text-caption text-medium-emphasis">{{ downloadTransferred }} / {{ downloadTotal }} · {{ downloadSpeed }}</span>
+          <span class="text-body-2 font-weight-black text-primary">{{ downloadPercent }}%</span>
+        </div>
+        <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mt-2" />
+      </v-card-actions>
+      <v-card-actions v-else class="px-5 py-3 justify-end" style="gap:12px">
         <template v-if="step === 'checking'">
           <v-btn variant="text" @click="dialog = false">Cancelar</v-btn>
         </template>
@@ -193,9 +183,6 @@
           <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-download" @click="startDownload">
             Baixar agora
           </v-btn>
-        </template>
-        <template v-else-if="step === 'downloading'">
-          <v-btn variant="text" disabled>Baixando...</v-btn>
         </template>
         <template v-else-if="step === 'downloaded'">
           <v-btn variant="text" @click="dialog = false">Mais tarde</v-btn>
