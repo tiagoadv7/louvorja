@@ -6,15 +6,17 @@
     <v-app-bar-title v-if="!$appdata.get('is_desktop')">{{ $t("app.name") }}</v-app-bar-title>
     <v-spacer />
 
-    <v-bottom-sheet v-if="remote">
+    <v-bottom-sheet v-if="remote" class="hdr-bottom-sheet">
       <template v-slot:activator="{ props: activatorProps }">
         <v-btn v-bind="activatorProps" icon="mdi-keyboard-close" />
       </template>
 
-      <!-- elevation="0": mesmo ajuste do CustomizationBar.vue -- a sombra
-           padrão do v-card não acompanhava direito o canto arredondado que
-           o v-bottom-sheet aplica por padrão, deixando um resquício
-           quadrado na ponta da curva em vez de ficar transparente/suave. -->
+      <!-- elevation="0" + <style> não-scoped no fim do arquivo: mesmo ajuste
+           do CustomizationBar.vue -- o v-card sem sombra não bastava sozinho
+           porque o v-bottom-sheet do Vuetify também aplica UMA SOMBRA
+           PRÓPRIA no seu wrapper (sempre retangular, sem acompanhar o canto
+           arredondado do card), que é o resquício reto que sobrava visível
+           na ponta da curva. -->
       <v-card elevation="0">
         <v-card-actions>
           <v-btn icon="mdi-keyboard-esc" size="x-large" @click="sendKey(27)" />
@@ -219,5 +221,14 @@ export default {
 #header-bar {
   position: initial !important;
   flex: 0 !important;
+}
+</style>
+
+<style>
+/* Sem "scoped" (ver comentário igual em CustomizationBar.vue): o conteúdo
+   do v-bottom-sheet é teleportado pra fora da árvore deste componente, o
+   atributo do scoped CSS não chega nele. */
+.hdr-bottom-sheet .v-overlay__content {
+  box-shadow: none !important;
 }
 </style>
