@@ -647,9 +647,17 @@ export default {
 <style scoped>
 /* Separa visualmente os dois botões (grade/lista) do grupo — por padrão o
    v-btn-toggle deixa tudo colado, formando um só bloco sem nenhum respiro
-   entre os ícones. */
+   entre os ícones. O v-btn-group do Vuetify vem com "overflow-x: auto" por
+   padrão (pensado pra grupos com muitos botões) — como o gap deixa o
+   conteúdo mais largo que a caixa original, isso sozinho já bastava pra
+   aparecer uma barra de rolagem horizontal por baixo dos dois ícones.
+   overflow: visible + width: auto removem essa rolagem, já que só são 2
+   botões e cabem tranquilamente sem precisar rolar. */
 .fcd-view-toggle {
   gap: 6px;
+  overflow: visible !important;
+  width: auto !important;
+  flex-shrink: 0;
 }
 .fcd-view-toggle :deep(.v-btn) {
   border-radius: 6px !important;
