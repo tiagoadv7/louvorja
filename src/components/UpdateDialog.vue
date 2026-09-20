@@ -45,8 +45,14 @@
   </v-snackbar>
 
   <!-- ── Dialog completo (abre via menu "Verificar atualizações") ── -->
+  <!-- .upd-card (ver <style> abaixo): em janelas baixas o v-dialog do
+       Vuetify simplesmente corta o conteúdo que passa da viewport (sem como
+       rolar até lá) — o próprio card fica mais alto que a tela e a ação do
+       rodapé ("Fechar"/"Instalar e reiniciar"/etc.) acaba inacessível.
+       Cabeçalho e rodapé ficam FORA da área que rola (.upd-scroll-body),
+       sempre visíveis. -->
   <v-dialog v-model="dialog" max-width="460" persistent>
-    <v-card rounded="lg" elevation="12" style="overflow:hidden">
+    <v-card rounded="lg" elevation="12" class="upd-card">
 
       <!-- Cabeçalho -->
       <div class="upd-header">
@@ -68,82 +74,112 @@
       </div>
       <v-divider />
 
+      <div class="upd-scroll-body">
+      <!-- ── Configurações (beta / verificar ao iniciar / baixar automático) ──
+           Sempre visíveis, junto com o status abaixo (não é mais uma tela à
+           parte atrás de um botão "Configurações" — ver pedido do usuário). -->
+      <v-card-text class="py-3 upd-settings">
+        <v-checkbox
+          v-model="useBeta"
+          color="primary"
+          hide-details
+          density="compact"
+          label="Usar versões beta (pré-release)"
+        />
+        <v-checkbox
+          v-model="autoCheck"
+          color="primary"
+          hide-details
+          density="compact"
+          label="Verificar novas versões ao iniciar"
+        />
+        <v-checkbox
+          v-model="autoDownload"
+          color="primary"
+          hide-details
+          density="compact"
+          label="Baixar atualizações automaticamente"
+        />
+      </v-card-text>
+      <v-divider />
+
       <!-- ── Verificando ── -->
-      <v-card-text v-if="step === 'checking'" class="d-flex flex-column align-center py-12 ga-5">
-        <v-progress-circular indeterminate color="primary" size="52" width="4" />
-        <div class="text-body-2 text-medium-emphasis">Verificando atualizações...</div>
-      </v-card-text>
+      <v-card-text v-if="step === 'checking'" class="d-flex flex-column align-center py-6 ga-5">
+          <v-progress-circular indeterminate color="primary" size="52" width="4" />
+          <div class="text-body-2 text-medium-emphasis">Verificando atualizações...</div>
+        </v-card-text>
 
-      <!-- ── Sem atualização ── -->
-      <v-card-text v-else-if="step === 'not-available'" class="d-flex flex-column align-center py-12 ga-4">
-        <v-avatar size="72" color="success" variant="tonal">
-          <v-icon size="40">mdi-check-circle-outline</v-icon>
-        </v-avatar>
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold">Você está atualizado!</div>
-          <div class="text-body-2 text-medium-emphasis mt-1">
-            A versão instalada (<strong>v{{ currentVersion }}</strong>) já é a mais recente disponível.
+        <!-- ── Sem atualização ── -->
+        <v-card-text v-else-if="step === 'not-available'" class="d-flex flex-column align-center py-6 ga-4">
+          <v-avatar size="72" color="success" variant="tonal">
+            <v-icon size="40">mdi-check-circle-outline</v-icon>
+          </v-avatar>
+          <div class="text-center">
+            <div class="text-h6 font-weight-bold">Você está atualizado!</div>
+            <div class="text-body-2 text-medium-emphasis mt-1">
+              A versão instalada (<strong>v{{ currentVersion }}</strong>) já é a mais recente disponível.
+            </div>
           </div>
-        </div>
-      </v-card-text>
+        </v-card-text>
 
-      <!-- ── Atualização disponível ── -->
-      <!-- Sem changelog aqui de propósito — as novidades da versão aparecem
-           só no ReleaseNotesDialog (modal separado, exibido no boot após a
-           instalação), pra não duplicar a mesma informação em dois lugares. -->
-      <v-card-text v-else-if="step === 'available'" class="py-12 text-center">
-        <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
-          v{{ updateInfo?.version || '?' }}
-        </v-chip>
-        <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
-      </v-card-text>
+        <!-- ── Atualização disponível ── -->
+        <!-- Sem changelog aqui de propósito — as novidades da versão aparecem
+             só no ReleaseNotesDialog (modal separado, exibido no boot após a
+             instalação), pra não duplicar a mesma informação em dois lugares. -->
+        <v-card-text v-else-if="step === 'available'" class="py-6 text-center">
+          <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
+            v{{ updateInfo?.version || '?' }}
+          </v-chip>
+          <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
+        </v-card-text>
 
-      <!-- ── Baixando ── -->
-      <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
-        <div class="d-flex align-center ga-5 mb-6">
-          <v-progress-circular size="48" width="4" indeterminate color="primary" />
-          <div class="flex-grow-1 min-w-0">
-            <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
-            <div class="text-caption text-medium-emphasis text-truncate mt-2">{{ downloadStatus }}</div>
+        <!-- ── Baixando ── -->
+        <v-card-text v-else-if="step === 'downloading'" class="py-7 px-6">
+          <div class="d-flex align-center ga-5 mb-6">
+            <v-progress-circular size="48" width="4" indeterminate color="primary" />
+            <div class="flex-grow-1 min-w-0">
+              <div class="text-body-2 font-weight-semibold mb-1">Baixando atualização...</div>
+              <div class="text-caption text-medium-emphasis text-truncate mt-2">{{ downloadStatus }}</div>
+            </div>
+            <div class="text-right flex-shrink-0">
+              <div class="text-h6 font-weight-black text-primary">{{ downloadPercent }}<span class="text-body-2">%</span></div>
+            </div>
           </div>
-          <div class="text-right flex-shrink-0">
-            <div class="text-h6 font-weight-black text-primary">{{ downloadPercent }}<span class="text-body-2">%</span></div>
+          <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mb-4" />
+          <div class="d-flex justify-space-between">
+            <span class="text-caption text-medium-emphasis">{{ downloadTransferred }} / {{ downloadTotal }}</span>
+            <span class="text-caption text-primary font-weight-semibold">{{ downloadSpeed }}</span>
           </div>
-        </div>
-        <v-progress-linear :model-value="downloadPercent" height="8" rounded color="primary" class="mb-4" />
-        <div class="d-flex justify-space-between">
-          <span class="text-caption text-medium-emphasis">{{ downloadTransferred }} / {{ downloadTotal }}</span>
-          <span class="text-caption text-primary font-weight-semibold">{{ downloadSpeed }}</span>
-        </div>
-      </v-card-text>
+        </v-card-text>
 
-      <!-- ── Pronto para instalar ── -->
-      <v-card-text v-else-if="step === 'downloaded'" class="d-flex flex-column align-center py-12 ga-4">
-        <v-avatar size="72" color="primary" variant="tonal">
-          <v-icon size="40">mdi-download-circle-outline</v-icon>
-        </v-avatar>
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold">Pronta para instalar!</div>
-          <div class="text-body-2 text-medium-emphasis mt-1">
-            Versão <strong>v{{ updateInfo?.version }}</strong> foi baixada.<br>
-            O app será reiniciado para concluir a instalação.
+        <!-- ── Pronto para instalar ── -->
+        <v-card-text v-else-if="step === 'downloaded'" class="d-flex flex-column align-center py-6 ga-4">
+          <v-avatar size="72" color="primary" variant="tonal">
+            <v-icon size="40">mdi-download-circle-outline</v-icon>
+          </v-avatar>
+          <div class="text-center">
+            <div class="text-h6 font-weight-bold">Pronta para instalar!</div>
+            <div class="text-body-2 text-medium-emphasis mt-1">
+              Versão <strong>v{{ updateInfo?.version }}</strong> foi baixada.<br>
+              {{ autoDownload ? 'Será instalada automaticamente ao fechar o programa.' : 'O app será reiniciado para concluir a instalação.' }}
+            </div>
           </div>
-        </div>
-      </v-card-text>
+        </v-card-text>
 
-      <!-- ── Erro ── -->
-      <v-card-text v-else-if="step === 'error'" class="d-flex flex-column align-center py-12 ga-4">
-        <v-avatar size="72" color="error" variant="tonal">
-          <v-icon size="40">mdi-alert-circle-outline</v-icon>
-        </v-avatar>
-        <div class="text-center px-4">
-          <div class="text-h6 font-weight-bold">Erro ao baixar atualização</div>
-          <div class="text-body-2 text-medium-emphasis mt-2">{{ errorMessage }}</div>
-          <v-btn size="small" variant="text" color="primary" class="mt-3" prepend-icon="mdi-open-in-new" @click="openReleasePage">
-            Baixar manualmente pelo navegador
-          </v-btn>
-        </div>
-      </v-card-text>
+        <!-- ── Erro ── -->
+        <v-card-text v-else-if="step === 'error'" class="d-flex flex-column align-center py-6 ga-4">
+          <v-avatar size="72" color="error" variant="tonal">
+            <v-icon size="40">mdi-alert-circle-outline</v-icon>
+          </v-avatar>
+          <div class="text-center px-4">
+            <div class="text-h6 font-weight-bold">Erro ao baixar atualização</div>
+            <div class="text-body-2 text-medium-emphasis mt-2">{{ errorMessage }}</div>
+            <v-btn size="small" variant="text" color="primary" class="mt-3" prepend-icon="mdi-open-in-new" @click="openReleasePage">
+              Baixar manualmente pelo navegador
+            </v-btn>
+          </div>
+        </v-card-text>
+      </div>
 
       <v-divider />
 
@@ -197,6 +233,15 @@ export default {
     downloadTransferred: '',
     downloadTotal:       '',
     downloadStatus:      '',
+
+    // Configurações de atualização (persistidas via $userdata, aplicadas em
+    // tempo real via updaterSetOptions — ver electron/updater.js). Espelham
+    // as mesmas opções que main.js lê do Store no boot (registerIpcHandlers).
+    // Sempre visíveis junto com o status, não é mais uma tela à parte.
+    useBeta:       false,
+    autoCheck:     true,
+    autoDownload:  false,
+    _settingsLoaded: false,
 
     _handlers: [],
   }),
@@ -265,10 +310,27 @@ export default {
     },
   },
 
+  watch: {
+    // Persiste + aplica em tempo real (updaterSetOptions já reconfigura o
+    // autoUpdater sem precisar reiniciar o app) — _settingsLoaded evita
+    // regravar os mesmos valores durante o carregamento inicial em mounted().
+    useBeta()      { this.saveOptions(); },
+    autoCheck()    { this.saveOptions(); },
+    autoDownload() { this.saveOptions(); },
+  },
+
   mounted() {
     if (!this.$electron?.isElectron()) return;
 
     this.$electron.getVersion?.().then(v => { this.currentVersion = v || ''; }).catch(() => {});
+
+    // Carrega as opções persistidas (mesmas 3 que main.js lê do Store no
+    // boot — ver registerIpcHandlers em electron/main.js) antes de ligar o
+    // watch acima, senão o valor padrão inicial já dispararia um save.
+    this.useBeta      = !!this.$userdata.get('update_use_beta', false);
+    this.autoCheck    = this.$userdata.get('update_check_on_startup', true) !== false;
+    this.autoDownload = !!this.$userdata.get('update_auto_download', false);
+    this._settingsLoaded = true;
 
     const listen = (channel, fn) => {
       const h = this.$electron.on(channel, fn);
@@ -286,6 +348,19 @@ export default {
   },
 
   methods: {
+    // Persiste as 3 opções e aplica no processo main em tempo real.
+    saveOptions() {
+      if (!this._settingsLoaded) return;
+      this.$userdata.set('update_use_beta', this.useBeta);
+      this.$userdata.set('update_check_on_startup', this.autoCheck);
+      this.$userdata.set('update_auto_download', this.autoDownload);
+      this.$electron.updaterSetOptions?.({
+        useBeta: this.useBeta,
+        autoCheck: this.autoCheck,
+        autoDownload: this.autoDownload,
+      });
+    },
+
     // Aplica o snapshot de estado vindo de electron/updater.js aos campos
     // locais que o template já usa. O snackbar só reabre numa TRANSIÇÃO pra
     // 'available'/'downloaded' (não a cada atualização de estado que mantém
@@ -374,11 +449,31 @@ export default {
 </script>
 
 <style scoped>
+.upd-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  overflow: hidden;
+}
 .upd-header {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
+  flex-shrink: 0;
+}
+/* Só essa área rola — cabeçalho e ações (rodapé) ficam sempre visíveis,
+   mesmo com o conteúdo das configurações (3 switches + texto) deixando o
+   dialog mais alto que janelas pequenas/baixas. */
+.upd-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
+/* Centraliza cada linha (checkbox + texto) como um bloco só, em vez de
+   ficar tudo encostado na esquerda. */
+.upd-settings :deep(.v-selection-control) {
+  justify-content: center;
+}
 </style>

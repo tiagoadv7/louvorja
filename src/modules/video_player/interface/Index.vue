@@ -1889,7 +1889,7 @@ export default {
 .cs-toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   font-size: 12.5px;
   cursor: pointer;
 }

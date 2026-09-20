@@ -79,7 +79,7 @@
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
               <v-spacer />
-              <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg">
+              <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4">
                 <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="'Agrupado por álbum'" />
                 <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="'Lista simples'" />
               </v-btn-toggle>
@@ -383,6 +383,15 @@ export default {
       }
     },
 
+    // Roda a varredura inteira em segundo plano, SEM abrir o dialog (sem
+    // scrim nenhum) — antes o dialog abria com "Verificando..." assim que a
+    // varredura começava e só fechava sozinho no final, deixando um scrim de
+    // v-dialog cobrindo a tela inteira por toda a duração do scan (podem ser
+    // vários segundos com muitos álbuns). Qualquer clique do operador em
+    // OUTRA parte do app nesse meio-tempo (ex.: abrir "Músicas" assim que o
+    // programa termina de carregar) era engolido pelo scrim sem nenhum
+    // feedback — parecia que o botão/ícone clicado "não funcionava". Agora só
+    // abre o dialog no final, e só se realmente houver arquivo faltando.
     async _scanSilent() {
       const myId = ++this._scanId;
       this.fileList      = [];
@@ -391,10 +400,6 @@ export default {
       this.selectedDests = new Set();
       this.scanAlbum     = { current: 0, total: 0, name: '' };
 
-      // Mostra a tela de escaneamento imediatamente
-      this.step = 'scanning';
-      this.show = true;
-
       let result = null;
       try {
         this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
@@ -402,7 +407,6 @@ export default {
         });
         result = await this.$electron.scanAlbumsFiles();
       } catch (_) {
-        if (this._scanId === myId) this.close();
         return;
       } finally {
         if (this._scanProgressHandler) {
@@ -412,10 +416,7 @@ export default {
       }
 
       if (this._scanId !== myId) return;
-      if (!result || result.total === 0) {
-        this.close();
-        return;
-      }
+      if (!result || result.total === 0) return;
 
       this.totalScanned = result.total      || 0;
       this.totalFiles   = result.totalFiles || 0;
@@ -426,18 +427,16 @@ export default {
       this.scanSource   = result.source     || null;
       this.totalMissing = this.fileList.length;
 
-      if (this.totalMissing === 0) {
-        // Sem problemas: mostra "tudo ok" brevemente e fecha
-        this.step = 'all-good';
-        await new Promise(r => setTimeout(r, 1500));
-        if (this._scanId === myId) this.close();
-        return;
-      }
+      if (this.totalMissing === 0) return; // tudo ok — nunca precisou aparecer nada
 
-      // Arquivos faltando: mostra resultados diretamente
+      // Só agora, com algo real pra mostrar, abre o dialog direto na tela de
+      // resultados (sem passar pelo "Verificando..."/"Tudo certo" — eram só
+      // pra dar feedback visual de um dialog já aberto, que deixou de existir
+      // aqui).
       this.selectedDests  = new Set(this.fileList.map(f => f.dest));
       this.expandedAlbums = this.defaultExpandedAlbums();
       this.step           = 'results';
+      this.show           = true;
     },
 
     close() {

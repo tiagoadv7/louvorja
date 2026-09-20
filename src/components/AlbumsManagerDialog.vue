@@ -141,8 +141,8 @@
                   class="flex-shrink-0"
                   @click.stop="toggleModule(mod.id)"
                 />
-                <v-avatar size="32" rounded="sm" class="flex-shrink-0 mx-2" color="primary" variant="tonal">
-                  <v-icon size="16">{{ mod.manifest?.icon || 'mdi-music-clef-treble' }}</v-icon>
+                <v-avatar size="32" rounded="sm" class="flex-shrink-0 mx-2 alb-cover" style="border-color: rgb(var(--v-theme-primary));">
+                  <v-icon size="16" color="primary">{{ mod.manifest?.icon || 'mdi-music-clef-treble' }}</v-icon>
                 </v-avatar>
                 <span class="text-body-2 text-truncate flex-grow-1" :class="{ 'text-medium-emphasis': isModuleDisabled(mod.id) }">
                   {{ mod.manifest?.name || mod.id }}

@@ -629,6 +629,22 @@ function setOptions({ useBeta, autoCheck, autoDownload } = {}) {
   }
 }
 
+/** Snapshot das opções em runtime (ex.: main.js decidir se instala sozinho ao fechar). */
+function getOptions() {
+  return { useBeta: _useBeta, autoCheck: _autoCheck, autoDownload: _autoDownload };
+}
+
+/**
+ * Há uma atualização baixada via electron-updater (caminho NATIVO) esperando
+ * pra ser instalada? Usado por main.js pra decidir, no fechamento do app, se
+ * instala sozinho (ver app.on('before-quit')) — só faz sentido pro caminho
+ * nativo: o download MANUAL (fallback GitHub, ver downloadPackage) só deixa
+ * o instalador solto na pasta Downloads, sem integração com quitAndInstall.
+ */
+function hasPendingNativeInstall() {
+  return _state.status === 'downloaded' && !_checkedViaGithub && !!autoUpdater && autoUpdater.isUpdaterActive();
+}
+
 /**
  * Verifica se há versão nova.
  * - Produção com electron-updater ativo: delega a ele.
@@ -730,6 +746,8 @@ module.exports = {
   openReleasePage,
   status,
   setOptions,
+  getOptions,
+  hasPendingNativeInstall,
   checkGithubRelease,
   checkGithubAndSetState,
   getCurrentReleaseNotes,

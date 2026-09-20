@@ -20,7 +20,7 @@
             class="d-flex align-center"
             style="margin-left: 20px"
           >
-            <v-icon :icon="icon" />
+            <v-icon :icon="icon" size="22" color="primary" />
           </div>
           <v-avatar
             v-if="image && $vuetify.display.width > 500"

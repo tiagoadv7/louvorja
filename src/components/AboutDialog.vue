@@ -38,33 +38,33 @@
       <div class="about-col-left">
         <div class="about-section-title">Contato / Sites / Redes Sociais:</div>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('mailto:contato@louvorja.com.br')">
-          <v-icon size="15">mdi-email-outline</v-icon> contato@louvorja.com.br
+          <v-icon size="15" color="primary">mdi-email-outline</v-icon> contato@louvorja.com.br
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.facebook.com/louvorja')">
-          <v-icon size="15" color="blue">mdi-facebook</v-icon> facebook.com/louvorja
+          <v-icon size="15" color="primary">mdi-facebook</v-icon> facebook.com/louvorja
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.instagram.com/louvorja.app')">
-          <v-icon size="15" color="purple">mdi-instagram</v-icon> instagram.com/louvorja.app
+          <v-icon size="15" color="primary">mdi-instagram</v-icon> instagram.com/louvorja.app
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://louvorja.com.br/')">
-          <v-icon size="15">mdi-web</v-icon> louvorja.com.br
+          <v-icon size="15" color="primary">mdi-web</v-icon> louvorja.com.br
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://www.louvorja.com.br/whatsapp')">
-          <v-icon size="15" color="green">mdi-whatsapp</v-icon> Whatsapp
+          <v-icon size="15" color="primary">mdi-whatsapp</v-icon> Whatsapp
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://louvorja.com.br/telegram')">
-          <v-icon size="15" color="blue" class="mdi-rotate-315">mdi-send</v-icon> Telegram
+          <v-icon size="15" color="primary" class="mdi-rotate-315">mdi-send</v-icon> Telegram
         </a>
 
         <div class="about-section-title mt-4">LouvorJA On-line</div>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://app.louvorja.com.br')">
-          <v-icon size="15">mdi-web</v-icon> app.louvorja.com.br
+          <v-icon size="15" color="primary">mdi-web</v-icon> app.louvorja.com.br
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="checkForUpdates">
           <v-icon size="15" color="primary">mdi-cloud-refresh-outline</v-icon> Verificar atualizações
         </a>
         <a class="about-mini-link about-mini-link--lg" @click="openExternal('https://github.com/tiagoadv7/louvorja/issues')">
-          <v-icon size="15" color="orange">mdi-bug-outline</v-icon> Enviar Feedback
+          <v-icon size="15" color="primary">mdi-bug-outline</v-icon> Enviar Feedback
         </a>
 
         <template v-if="mainDev">
@@ -77,7 +77,7 @@
               class="about-mini-link"
               @click="openExternal(l.url)"
             >
-              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
+              <v-icon size="13" :color="l.color || 'primary'">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
           </div>
         </template>
@@ -94,7 +94,7 @@
               class="about-mini-link"
               @click="openExternal(l.url)"
             >
-              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
+              <v-icon size="13" :color="l.color || 'primary'">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
           </div>
         </template>
@@ -122,7 +122,7 @@
               class="about-mini-link"
               @click="openExternal(l.url)"
             >
-              <v-icon size="13" :color="l.color">{{ l.icon }}</v-icon> {{ l.label }}
+              <v-icon size="13" :color="l.color || 'primary'">{{ l.icon }}</v-icon> {{ l.label }}
             </a>
           </div>
         </template>
@@ -284,6 +284,7 @@ export default {
 .about-col-left {
   flex: 1 1 0;
   min-width: 0;
+  text-align: center;
 }
 
 .about-col-divider {
@@ -295,6 +296,7 @@ export default {
 .about-col-right {
   flex: 1 1 0;
   min-width: 0;
+  text-align: center;
 }
 
 .about-link--inline {
@@ -308,6 +310,7 @@ export default {
 
 .about-collab {
   margin-bottom: 26px;
+  text-align: center;
 }
 .about-collab-name {
   font-size: 0.85rem;
@@ -322,9 +325,10 @@ export default {
 
 .about-mini-link {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
-  margin: 4px 0 0 6px;
+  margin: 4px 0 0;
   color: rgb(var(--v-theme-primary));
   text-decoration: none;
   font-size: 0.75rem;
@@ -341,7 +345,8 @@ export default {
 .about-mini-link:hover {
   opacity: 0.7;
 }
-/* Links de topo (contato/site) — sem o recuo/indent dos links por pessoa. */
+/* Links de topo (contato/site) — mesmo alinhamento centralizado dos links
+   de crédito por pessoa, só sem o recuo/indent deles. */
 .about-mini-link--lg {
   margin-left: 0;
   font-size: 0.83rem;
@@ -382,5 +387,6 @@ export default {
   padding-top: 12px;
   font-size: 0.78rem;
   color: rgba(var(--v-theme-on-surface), 0.6);
+  text-align: center;
 }
 </style>

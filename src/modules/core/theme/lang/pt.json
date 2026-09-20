@@ -1,5 +1,9 @@
 {
     "title": "Aparência",
+    "theme_subtitle": "Escolha o modo de cores para o programa",
+    "mode_auto": "Automático",
+    "mode_light": "Modo Claro",
+    "mode_dark": "Modo Escuro",
     "light-themes": "Temas Claros",
     "dark-themes": "Temas Escuros",
     "monitors": "Monitor de Saída",

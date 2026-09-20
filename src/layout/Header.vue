@@ -60,7 +60,7 @@
         <v-btn
           v-bind="props"
           :icon="offlineModeEnabled ? 'mdi-wifi-off' : 'mdi-wifi'"
-          :color="offlineModeEnabled ? 'grey' : 'green'"
+          :color="offlineModeEnabled ? 'grey' : 'success'"
           @click="toggleOfflineMode()"
         />
       </template>

@@ -377,6 +377,15 @@ export default {
 .monitor-tile--primary .monitor-tile__stand {
   background: rgba(var(--v-theme-primary), 0.8);
 }
+/* Selecionado (saída/retorno) — pé/base acompanham a mesma cor do contorno
+   da tela (ver .monitor-tile--active-output/--active-return acima), em vez
+   de ficarem cinza mesmo com o monitor selecionado. */
+.monitor-tile--active-output .monitor-tile__stand {
+  background: rgba(33, 150, 243, 0.85);
+}
+.monitor-tile--active-return .monitor-tile__stand {
+  background: rgba(76, 175, 80, 0.85);
+}
 .monitor-tile__base {
   width: 40px;
   height: 4px;
@@ -385,6 +394,12 @@ export default {
 }
 .monitor-tile--primary .monitor-tile__base {
   background: rgb(var(--v-theme-primary));
+}
+.monitor-tile--active-output .monitor-tile__base {
+  background: #2196F3;
+}
+.monitor-tile--active-return .monitor-tile__base {
+  background: #4CAF50;
 }
 .monitor-tile__star {
   position: absolute;

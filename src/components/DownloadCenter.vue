@@ -7,9 +7,11 @@
     <v-card class="dc-root" rounded="lg" style="overflow:hidden; height:700px">
       <!-- Título -->
       <div class="dc-header">
-        <v-icon size="18" class="mr-2">mdi-download-box-outline</v-icon>
-        Centro de Downloads
-        <v-spacer />
+        <div class="dc-header-spacer" />
+        <div class="dc-header-title">
+          <v-icon size="18" color="primary" class="mr-2">mdi-download-box-outline</v-icon>
+          Centro de Downloads
+        </div>
         <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
       </div>
 
@@ -69,11 +71,8 @@
                 class="dc-home-card"
                 @click="goTo(item.section)"
               >
-                <div
-                  class="dc-home-cover"
-                  :style="{ background: `linear-gradient(145deg, ${item.color}ee 0%, ${item.color}99 100%)` }"
-                >
-                  <v-icon size="48" color="white" style="opacity:0.95">{{ item.icon }}</v-icon>
+                <div class="dc-home-cover">
+                  <v-icon size="48" :color="item.color">{{ item.icon }}</v-icon>
                 </div>
                 <div class="dc-home-info">
                   <div class="dc-home-label">{{ item.label }}</div>
@@ -88,18 +87,15 @@
             <div class="dc-section-title">Hinários</div>
             <div class="dc-hymnal-grid mt-3">
               <div v-for="h in hymnalItems" :key="h.file" class="dc-hymnal-card">
-                <!-- Capa: gradiente + ícone do hinário (SVG local) -->
-                <div
-                  class="dc-hymnal-cover"
-                  :style="{ background: `linear-gradient(145deg, ${h.color}ee 0%, ${h.color}99 100%)` }"
-                >
+                <!-- Capa: ícone do hinário (SVG local) -->
+                <div class="dc-hymnal-cover">
                   <img
                     v-if="h.cover"
                     :src="h.cover"
                     class="dc-hymnal-icon"
                     loading="lazy"
                   />
-                  <v-icon v-else size="72" color="white" style="opacity:0.9">{{ h.icon }}</v-icon>
+                  <v-icon v-else size="72" :color="h.color">{{ h.icon }}</v-icon>
                   <div v-if="isDownloaded(h.file)" class="dc-album-badge-ok">
                     <v-icon size="18" color="success">mdi-check</v-icon>
                   </div>
@@ -1291,6 +1287,19 @@ export default {
   background: rgba(0,0,0,0.25);
   flex-shrink: 0;
 }
+/* Título centralizado de verdade — o botão de fechar tem um espaçador do
+   mesmo tamanho do lado oposto, senão o v-spacer sozinho empurraria o
+   título pra esquerda (só compensando o botão de um dos lados). */
+.dc-header-spacer {
+  width: 32px;
+  flex-shrink: 0;
+}
+.dc-header-title {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .dc-body {
   display: flex;
@@ -1329,7 +1338,7 @@ export default {
 }
 
 /* ── Comuns ─────────────────────────────────────────────────────── */
-.dc-section-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.dc-section-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; text-align: center; }
 
 /* ── Cards da tela inicial (estilo capa) ─────────────────────────── */
 .dc-home-grid {
@@ -1354,6 +1363,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(128,128,128,0.08);
 }
 .dc-home-info {
   padding: 14px 16px 16px;
@@ -1395,6 +1405,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(128,128,128,0.08);
 }
 .dc-hymnal-info {
   padding: 14px 16px 16px;

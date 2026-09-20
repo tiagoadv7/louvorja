@@ -59,10 +59,27 @@ export default {
     this.$userdata.load();
 
     //Carrega o tema
-    let theme = this.$userdata.get("theme");
-    if (theme != "") {
-      this.$vuetify.theme.global.name = theme;
-      this.$appdata.set("theme", theme);
+    const theme_mode = this.$userdata.get("theme_mode") || "manual";
+    this.$appdata.set("theme_mode", theme_mode);
+
+    if (theme_mode === "auto" && window.matchMedia) {
+      const applyAutoTheme = () => {
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme_id = prefersDark
+          ? (this.$userdata.get("theme_dark") || "dark")
+          : (this.$userdata.get("theme_light") || "light");
+        this.$vuetify.theme.global.name = theme_id;
+        this.$appdata.set("theme", theme_id);
+        this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
+      };
+      applyAutoTheme();
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAutoTheme);
+    } else {
+      let theme = this.$userdata.get("theme");
+      if (theme != "") {
+        this.$vuetify.theme.global.name = theme;
+        this.$appdata.set("theme", theme);
+      }
     }
     this.$appdata.set("is_dark", this.$vuetify.theme.global.current.dark);
 

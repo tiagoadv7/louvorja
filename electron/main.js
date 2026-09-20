@@ -810,7 +810,17 @@ function registerIpcHandlers() {
   // em electron/updater.js. setMainWindow() é chamado depois, assim que
   // createMainWindow() roda logo abaixo — os handlers aqui só leem a janela
   // em tempo de chamada, então a ordem não é um problema.
-  Updater.init();
+  //
+  // As 3 opções (beta/verificar ao iniciar/baixar automático) são as mesmas
+  // que a UI (UpdateDialog.vue) persiste via $userdata — Store.init() já
+  // rodou antes de createLoadingWindow() (ver app.whenReady() abaixo), então
+  // 'user_data' aqui já reflete a última sincronização do renderer.
+  const savedUserData = Store.get('user_data', {}) || {};
+  Updater.init({
+    autoCheck: savedUserData.update_check_on_startup !== false,
+    autoDownload: !!savedUserData.update_auto_download,
+    useBeta: !!savedUserData.update_use_beta,
+  });
 
   ipcMain.handle('window:minimize',     () => mainWindow?.minimize());
   ipcMain.handle('window:maximize',     () => {
@@ -1159,9 +1169,28 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+// true durante a re-entrada provocada por Updater.quitAndInstall() logo
+// abaixo — sem essa guarda, o 'before-quit' disparado pelo próprio
+// quitAndInstall() cairia de novo no mesmo "if" e tentaria instalar de novo
+// num loop.
+let _quittingForUpdate = false;
+
+app.on('before-quit', (event) => {
   // stopServer() (não stop()): libera porta/firewall sem marcar a preferência
   // "enabled" como desligada — isso roda em TODO fechamento do app, então
   // usar stop() aqui faria "Transmitir" nunca reabrir sozinho na próxima vez.
   remoteServer.stopServer();
+
+  // Atualização automática "ao reiniciar" (igual FreeShow): só entra em ação
+  // quando o operador FECHA o app por conta própria — nunca força o
+  // encerramento no meio de um culto. Se "Baixar atualizações
+  // automaticamente" está ligado e já existe uma versão baixada em segundo
+  // plano (beta ou final, ver Updater.hasPendingNativeInstall), troca o
+  // fechamento normal por quitAndInstall(): instala e reabre já na versão
+  // nova, sem esperar o operador clicar em "Instalar".
+  if (!_quittingForUpdate && Updater.getOptions().autoDownload && Updater.hasPendingNativeInstall()) {
+    event.preventDefault();
+    _quittingForUpdate = true;
+    Updater.quitAndInstall();
+  }
 });
