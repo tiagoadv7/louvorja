@@ -79,7 +79,7 @@
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
               <v-spacer />
-              <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4 fcd-view-toggle">
+              <v-btn-toggle v-model="viewMode" color="primary" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4 fcd-view-toggle">
                 <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="'Agrupado por álbum'" />
                 <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="'Lista simples'" />
               </v-btn-toggle>
