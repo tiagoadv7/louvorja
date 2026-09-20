@@ -17,7 +17,13 @@
     </template>
 
     <template v-slot:header>
-      <div class="se-toolbar">
+      <!-- Modo apresentação (ver computed "presentationMode"): só o título,
+           sem nenhuma ferramenta de edição -- veio de "Apresentar", não
+           "Editar" (ver custom_collections/interface/Index.vue). -->
+      <div v-if="presentationMode" class="se-toolbar se-toolbar--presentation">
+        <span class="se-title">{{ songTitle }}</span>
+      </div>
+      <div v-else class="se-toolbar">
         <div class="se-toolbar-actions">
           <button class="se-btn-outline" @click="actNew">
             <v-icon size="15">mdi-file-plus-outline</v-icon> {{ t("actions.new") }}
@@ -60,7 +66,7 @@
           <span class="se-slide-list-count">{{ slides.length }}</span>
         </div>
         <div class="se-slide-list-body">
-          <draggable v-model="song.slides" item-key="id" handle=".se-thumb-grip" @end="onReorder">
+          <draggable v-model="song.slides" item-key="id" handle=".se-thumb-grip" :disabled="presentationMode" @end="onReorder">
             <template #item="{ element, index }">
               <div
                 class="se-thumb"
@@ -68,13 +74,20 @@
                 :style="thumbStyle(element)"
                 @click="goSlide(index)"
               >
-                <v-icon size="14" class="se-thumb-grip">mdi-drag-vertical</v-icon>
+                <v-icon v-if="!presentationMode" size="14" class="se-thumb-grip">mdi-drag-vertical</v-icon>
                 <span class="se-thumb-num">{{ index + 1 }}</span>
                 <span v-if="element.tempo_seconds > 0" class="se-thumb-time">
                   <v-icon size="9">mdi-clock-outline</v-icon>
                   {{ formatTime(element.tempo_seconds) }}
                 </span>
+                <!-- Modo apresentação: texto só-leitura (sem textarea editável)
+                     -- não faz sentido deixar editar letra enquanto só se
+                     quer tocar/projetar a música (ver "presentation_mode"). -->
+                <div v-if="presentationMode" class="se-thumb-text se-thumb-text-readonly" :style="{ color: element.cor_letra, textAlign: element.text_align || 'center' }">
+                  {{ element.letra || `(${element.tipo})` }}
+                </div>
                 <textarea
+                  v-else
                   class="se-thumb-text se-thumb-text-editable"
                   :style="{ color: element.cor_letra, textAlign: element.text_align || 'center' }"
                   :placeholder="`(${element.tipo})`"
@@ -87,12 +100,12 @@
               </div>
             </template>
           </draggable>
-          <button class="se-slide-list-add" @click="actNewSlide">
+          <button v-if="!presentationMode" class="se-slide-list-add" @click="actNewSlide">
             <v-icon size="16">mdi-plus-circle-outline</v-icon>
             <span>{{ t("actions.new_slide") }}</span>
           </button>
         </div>
-        <div class="se-slide-list-actions">
+        <div v-if="!presentationMode" class="se-slide-list-actions">
           <v-btn icon="mdi-content-duplicate" size="x-small" variant="text" :title="t('actions.duplicate_slide')" @click="actDuplicateSlide" />
           <v-btn icon="mdi-image-remove-outline" size="x-small" variant="text" :title="t('actions.remove_slide')" @click="actRemoveSlide" />
           <v-btn icon="mdi-arrow-split-horizontal" size="x-small" variant="text" :title="t('actions.split_slide')" @click="actSplitSlide" />
@@ -180,7 +193,7 @@
         @loadedmetadata="onAudioLoad"
       />
 
-      <div class="se-audio-actions">
+      <div v-if="!presentationMode" class="se-audio-actions">
         <v-btn size="small" variant="text" prepend-icon="mdi-music-note-plus" @click="actAttachAudio">{{ t("actions.audio_attach") }}</v-btn>
         <v-btn v-if="song.audio_name" size="small" variant="text" prepend-icon="mdi-music-note-off" @click="actAudioRemove">{{ t("actions.audio_remove") }}</v-btn>
         <input ref="fileAudio" type="file" accept="audio/*" hidden @change="onPickAudio" />
@@ -196,8 +209,10 @@
     </div>
 
     <!-- ── Coluna esquerda: formatação do slide atual — sempre visível, sem
-         precisar abrir/fechar pra achar cada opção. -->
-    <template v-slot:left>
+         precisar abrir/fechar pra achar cada opção. Escondida inteira no modo
+         apresentação (ver "presentationMode"): são só controles de edição,
+         sem nenhum uso enquanto se está só tocando/projetando a música. -->
+    <template v-if="!presentationMode" v-slot:left>
       <div class="se-props">
         <div class="se-props-section">
           <div class="se-props-title">{{ t("labels.main_text") }}</div>
@@ -364,6 +379,16 @@ export default {
     // uma música salva pra carregar em vez de abrir em branco.
     pendingSongId() {
       return this.$appdata.get(`modules.${this.module_id}.pending_song_id`, "");
+    },
+    // true = veio de "Apresentar" (tocar/projetar), false = veio de "Editar"
+    // (ver custom_collections/interface/Index.vue#apresentar/editar) --
+    // esconde a barra de ferramentas e os painéis de formatação, deixando só
+    // o preview + player + lista de slides (só-leitura), pra não abrir a
+    // ferramenta de edição inteira só pra tocar uma música. Não precisa de
+    // watch/reset próprio: cada abertura (apresentar/editar) já define o
+    // valor certo antes de mostrar a janela.
+    presentationMode() {
+      return this.$appdata.get(`modules.${this.module_id}.presentation_mode`, false);
     },
     // Caminho de um .slja recebido por fora (duplo clique no arquivo, com o
     // SO abrindo/entregando pro app — ver electron/main.js#openSljaFile e o
@@ -1203,6 +1228,16 @@ export default {
       const el = this.$refs.audioEl;
       if (el && !el.paused) el.pause();
     };
+    // Fim de fila de verdade (ver custom_collections "Reproduzir tudo" —
+    // _playQueueAt, fim da lista): diferente de stopCurrent acima (só troca
+    // de contexto), aqui é pra encerrar mesmo — pausa o áudio e fecha o
+    // editor/a projeção, igual $media.endSong() faz do lado oficial.
+    CustomSongsPlayback.stopAndClose = () => {
+      const el = this.$refs.audioEl;
+      if (el && !el.paused) el.pause();
+      this.$modules.close(this.module_id);
+      this.$popup.close();
+    };
 
     // Atalhos de teclado: seta direita avança o slide, seta esquerda volta,
     // espaço toca/pausa o áudio. Os botões de gravação (recordAdvance/Start/
@@ -1426,6 +1461,15 @@ export default {
 }
 .se-thumb-text-editable::placeholder {
   color: rgba(255, 255, 255, 0.55);
+}
+.se-thumb-text-readonly {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 4px 4px;
+}
+.se-toolbar--presentation {
+  padding: 4px 2px;
 }
 .se-slide-list-add {
   width: 100%;

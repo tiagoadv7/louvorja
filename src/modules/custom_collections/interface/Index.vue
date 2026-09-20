@@ -91,7 +91,9 @@
           <span
             class="cc-color-dot"
             :style="collectionCovers[c.id] ? { backgroundImage: `url(${collectionCovers[c.id]})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: c.cor }"
-          />
+          >
+            <v-icon v-if="!collectionCovers[c.id]" size="14" color="rgba(255,255,255,0.75)">mdi-music</v-icon>
+          </span>
           <div class="cc-collection-info">
             <div class="cc-collection-name" :title="c.nome">{{ c.nome }}</div>
             <div class="cc-collection-count">{{ c.items.length }} {{ t('labels.songs_count') }}</div>
@@ -120,6 +122,7 @@
               :title="t('actions.change_cover')"
               @click="actSetCollectionCover"
             >
+              <v-icon v-if="!collectionCovers[selectedCollection.id]" size="20" color="rgba(255,255,255,0.6)" class="cc-collection-cover-icon">mdi-music</v-icon>
               <div class="cc-collection-cover-overlay">
                 <v-icon size="15">mdi-camera-outline</v-icon>
               </div>
@@ -361,6 +364,22 @@ export default {
         .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
         .slice(0, 60);
     },
+    // Mesmo padrão de modules/core/album/interface/Index.vue (playingAll) —
+    // detecta o operador fechando manualmente o player (oficial ou próprio)
+    // no meio de "Reproduzir tudo", pra encerrar a sequência em vez de
+    // deixar "playingCollection" preso em true pra sempre.
+    mediaShow() {
+      return !!this.$appdata.get('modules.media.show');
+    },
+    mediaMinimized() {
+      return !!this.$appdata.get('modules.media.minimized');
+    },
+    slideEditorShow() {
+      return !!this.$appdata.get('modules.slide_editor.show');
+    },
+    slideEditorMinimized() {
+      return !!this.$appdata.get('modules.slide_editor.minimized');
+    },
   },
 
   watch: {
@@ -371,6 +390,21 @@ export default {
     // sentido (a fila era da coletânea anterior) — encerra a sequência.
     selectedCollectionId() {
       if (this.playingCollection) this._stopPlayAllCollection();
+    },
+    // Player oficial ($media) fechado (não minimizado) com a sequência ativa
+    // → operador encerrou manualmente, não deixa "playingCollection" preso.
+    mediaShow(now, prev) {
+      if (prev && !now && this.playingCollection && !this.mediaMinimized) this._stopPlayAllCollection();
+    },
+    mediaMinimized(now, prev) {
+      if (prev && !now && this.playingCollection && !this.mediaShow) this._stopPlayAllCollection();
+    },
+    // Mesma ideia pro lado das músicas próprias (slide_editor).
+    slideEditorShow(now, prev) {
+      if (prev && !now && this.playingCollection && !this.slideEditorMinimized) this._stopPlayAllCollection();
+    },
+    slideEditorMinimized(now, prev) {
+      if (prev && !now && this.playingCollection && !this.slideEditorShow) this._stopPlayAllCollection();
     },
   },
 
@@ -504,6 +538,10 @@ export default {
     // ===== Handoff pro Editor de Músicas (ver slide_editor/interface/
     // Index.vue — computed "pendingSongId" e watch homônimo) =====
     editar(song) {
+      // Modo edição de verdade -- mostra a barra de ferramentas/painéis de
+      // formatação do editor (ver "presentation_mode" em
+      // slide_editor/interface/Index.vue).
+      this.$appdata.set('modules.slide_editor.presentation_mode', false);
       this.$appdata.set('modules.slide_editor.pending_song_id', song.id);
       this.$modules.open('slide_editor');
     },
@@ -517,6 +555,12 @@ export default {
         await this.$popup.open('media');
         return;
       }
+      // "Apresentar" (tocar/projetar) não é "editar" -- abre o slide_editor
+      // em modo apresentação (barra de ferramentas/painéis de formatação
+      // escondidos, lista de slides só-leitura, ver "presentation_mode" em
+      // slide_editor/interface/Index.vue), igual ao $media acima faz pra
+      // uma música oficial.
+      this.$appdata.set('modules.slide_editor.presentation_mode', true);
       this.$appdata.set('modules.slide_editor.pending_song_id', item.id);
       this.$appdata.set('modules.slide_editor.pending_autoplay', true);
       this.$modules.open('slide_editor');
@@ -722,6 +766,17 @@ export default {
       const items = this._queueItems;
       if (idx < 0) idx = 0;
       if (idx >= items.length) {
+        // Fim da fila: encerra de verdade a apresentação da última música
+        // tocada (mesmo padrão de modules/core/album/interface/Index.vue —
+        // "self._stopPlayAll(); self.$media.endSong();"), senão a tela de
+        // saída ficava presa mostrando o último slide/áudio pra sempre em
+        // vez de encerrar a projeção sozinha.
+        const lastItem = items[items.length - 1];
+        if (lastItem?.type === 'official') {
+          this.$media.endSong();
+        } else {
+          CustomSongsPlayback.stopAndClose?.();
+        }
         this._stopPlayAllCollection();
         return;
       }
@@ -928,6 +983,9 @@ export default {
   border: 1px solid rgba(0, 0, 0, 0.15);
   background-size: cover;
   background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .cc-collection-info { flex: 1; min-width: 0; }
 .cc-collection-name {
@@ -965,6 +1023,13 @@ export default {
   background-position: center;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   overflow: hidden;
+}
+.cc-collection-cover-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 20px;
+  height: 20px;
 }
 .cc-collection-cover-overlay {
   position: absolute;

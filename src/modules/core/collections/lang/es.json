@@ -1,5 +1,18 @@
 {
     "title": "Colecciones",
     "all_collections": "Todas las Colecciones",
-    "custom_collections_category": "Colecciones Personalizadas"
+    "custom_collections_category": "Colecciones Personalizadas",
+    "table": {
+        "track": "Pista",
+        "music_name": "Nombre"
+    },
+    "actions": {
+        "play_all": "Reproducir todos",
+        "stop_all": "Detener",
+        "present": "Presentar",
+        "edit_in_editor": "Abrir en el Editor"
+    },
+    "data": {
+        "empty_collection": "Colección vacía"
+    }
 }
