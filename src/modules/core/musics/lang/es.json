@@ -7,7 +7,8 @@
         "filter_lyric": "Letra",
         "filter_album": "Álbum",
         "filter_track": "Número",
-        "filter_instrumental": "Con Instrumental"
+        "filter_instrumental": "Con Instrumental",
+        "filter_custom_collections": "Colecciones Personalizadas"
     },
     "table": {
         "music_name": "Nombre",
@@ -16,6 +17,7 @@
     },
     "data": {
         "records": "Registros totales",
-        "not_found": "No se encontraron registros con los filtros seleccionados. Intente cambiar los filtros de búsqueda."
+        "not_found": "No se encontraron registros con los filtros seleccionados. Intente cambiar los filtros de búsqueda.",
+        "custom_collections_results": "Resultados en Colecciones Personalizadas"
     }
 }

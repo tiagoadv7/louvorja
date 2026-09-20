@@ -85,6 +85,7 @@ export default {
         },
         filter: {
           instrumental_music: false,
+          custom_collections: false,
         },
       },
       media: {

@@ -7,7 +7,8 @@
         "filter_lyric": "Letra",
         "filter_album": "Álbum",
         "filter_track": "Número",
-        "filter_instrumental": "Com Playback"
+        "filter_instrumental": "Com Playback",
+        "filter_custom_collections": "Coletâneas Personalizadas"
     },
     "table": {
         "music_name": "Nome",
@@ -16,6 +17,7 @@
     },
     "data": {
         "records": "Total de registros",
-        "not_found": "Não foram encontados registros com os filtros selecionados! Tente alterar os filtros de pesquisa."
+        "not_found": "Não foram encontados registros com os filtros selecionados! Tente alterar os filtros de pesquisa.",
+        "custom_collections_results": "Resultados em Coletâneas Personalizadas"
     }
 }

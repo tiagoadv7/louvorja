@@ -46,6 +46,13 @@
               :label="t('inputs.filter_instrumental')"
             />
           </div>
+          <div>
+            <Checkbox
+              switch
+              v-model="userdata.filter.custom_collections"
+              :label="t('inputs.filter_custom_collections')"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -126,6 +133,34 @@
       class="ma-2"
     />
 
+    <!-- Resultados de "Coletâneas Personalizadas" -- fonte totalmente
+         separada do catálogo (arquivos do usuário, não a tabela pt_musics),
+         então não dá pra usar o :filter/:searchable_fields da Table acima
+         (ver DataTable.vue, filtra só DENTRO de um dataset já carregado).
+         Clicar num resultado abre o módulo custom_collections já na
+         coletânea que contém aquela música (mesmo deep-link usado por
+         "Coletâneas" > categoria "Coletâneas Personalizadas", ver
+         modules/core/collections/interface/Index.vue#openAlbum). -->
+    <template v-if="userdata.filter.custom_collections && search">
+      <v-divider class="my-1" />
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">
+        {{ t("data.custom_collections_results") }}
+      </div>
+      <v-list v-if="customCollectionMatches.length" density="compact">
+        <v-list-item
+          v-for="song in customCollectionMatches"
+          :key="song.id"
+          :title="song.nome"
+          rounded="lg"
+          prepend-icon="mdi-folder-music-outline"
+          @click="openCustomSong(song)"
+        />
+      </v-list>
+      <div v-else class="text-caption text-medium-emphasis px-3 pb-2">
+        {{ t("data.not_found") }}
+      </div>
+    </template>
+
     <template v-slot:footer>
       <div class="w-100">
         <LetterPaginate v-model="letter" />
@@ -167,11 +202,13 @@ const userdata = computed(() => {
 /* ########################################################### */
 /* ########################################################### */
 
+import { watch } from "vue";
 import Table from "@/components/DataTable.vue";
 import Search from "@/components/inputs/Search.vue";
 import Checkbox from "@/components/inputs/CheckBox.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import LetterPaginate from "@/components/LetterPagination.vue";
+import CustomSongs from "@/helpers/CustomSongs";
 
 /* -------------------------------------------------- */
 /* STATE                                              */
@@ -205,6 +242,36 @@ const search_track = computed(() => {
 
 const filter_instrumental_music = computed(() => {
   return userdata.value.filter.instrumental_music;
+});
+
+/* -------------------------------------------------- */
+/* COLETÂNEAS PERSONALIZADAS (busca opcional)         */
+/* -------------------------------------------------- */
+// Carregado uma única vez, sob demanda (só quando o operador liga o
+// checkbox pela primeira vez) -- são arquivos locais do usuário, não a
+// tabela pt_musics já carregada pela Table acima, então não tem custo de
+// rede, mas também não precisa ler disco à toa se ninguém usar isso.
+const customSongs = ref([]);
+const customCollectionsList = ref([]);
+const customCollectionsLoaded = ref(false);
+
+async function loadCustomCollectionsData() {
+  if (customCollectionsLoaded.value) return;
+  customCollectionsLoaded.value = true;
+  customSongs.value = await CustomSongs.listSongs();
+  customCollectionsList.value = await CustomSongs.listCollections();
+}
+
+watch(
+  () => userdata.value.filter.custom_collections,
+  (on) => { if (on) loadCustomCollectionsData(); },
+  { immediate: true },
+);
+
+const customCollectionMatches = computed(() => {
+  const q = proxy.$string.clean(search.value || "");
+  if (!q) return [];
+  return customSongs.value.filter((s) => proxy.$string.clean(s.nome || "").includes(q));
 });
 
 // Álbuns desativados pelo operador (ver Menu.vue > "Gerenciar Álbuns") —
@@ -245,6 +312,21 @@ function hasScroll(value) {
 
 function openAlbum(id_album) {
   proxy.$media.openAlbum(id_album);
+}
+
+// Abre a coletânea personalizada que contém essa música (pode estar em mais
+// de uma -- pega a primeira) no módulo custom_collections, já selecionada
+// (mesmo deep-link de collections/interface/Index.vue#openAlbum). Sem
+// nenhuma coletânea encontrada (música ainda não adicionada a nenhuma),
+// abre o módulo mesmo assim, só sem apontar pra uma coletânea específica.
+function openCustomSong(song) {
+  const collection = customCollectionsList.value.find((c) =>
+    (c.items || []).some((i) => i.type === "custom" && i.id === song.id)
+  );
+  if (collection) {
+    proxy.$appdata.set("modules.custom_collections.open_collection_id", collection.id);
+  }
+  proxy.$modules.open("custom_collections");
 }
 
 function close() {

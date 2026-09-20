@@ -126,6 +126,13 @@
 </template>
 
 <script>
+import CustomSongs from "@/helpers/CustomSongs";
+
+// Id sintético (não-numérico, propositalmente incompatível com id_category
+// real do catálogo) da categoria "Coletâneas Personalizadas" — ver
+// refreshCustomCollectionsCategory()/openAlbum() abaixo.
+const CUSTOM_COLLECTIONS_CATEGORY_ID = "custom_collections";
+
 export default {
   name: manifest.id,
   data: () => ({
@@ -193,24 +200,75 @@ export default {
         this.id_category = 0;
       }
 
+      // Depois de escolher a categoria padrão acima (nunca a sintética).
+      await this.refreshCustomCollectionsCategory();
+
       this.lang = this.$i18n.locale.value;
       this.loading = false;
+    },
+    // "Coletâneas Personalizadas" (módulo custom_collections, sem álbuns/
+    // categorias de verdade no catálogo) aparece aqui como mais uma
+    // categoria, logo abaixo de "Diversas" — mesmo menu/grade de álbuns das
+    // coletâneas do sistema, só que cada "álbum" é uma coletânea do usuário
+    // (ver openAlbum abaixo pra abrir ela de verdade). Refeita a cada
+    // abertura da janela (não só quando o idioma muda) pra refletir
+    // coletâneas criadas/apagadas enquanto este módulo estava fechado.
+    async refreshCustomCollectionsCategory() {
+      const list = await CustomSongs.listCollections();
+      const albums = await Promise.all(
+        list.map(async (c, idx) => ({
+          id_album: `custom:${c.id}`,
+          name: c.nome,
+          color: c.cor || "#385F73",
+          url_image: c.capa
+            ? await CustomSongs.resolveCollectionCoverUrl(c.id, c.capa).catch(() => "")
+            : "",
+          order: idx,
+          subtitle: null,
+        })),
+      );
+      const category = {
+        id_category: CUSTOM_COLLECTIONS_CATEGORY_ID,
+        name: this.$t("modules.collections.custom_collections_category"),
+        order: 0,
+        albums,
+      };
+
+      const existingIdx = this.categories.findIndex((c) => c.id_category === CUSTOM_COLLECTIONS_CATEGORY_ID);
+      if (existingIdx !== -1) {
+        this.categories.splice(existingIdx, 1, category);
+        return;
+      }
+      const diversasIdx = this.categories.findIndex(
+        (c) => this.$string.clean(c.name || "") === this.$string.clean("Diversas"),
+      );
+      const insertAt = diversasIdx !== -1 ? diversasIdx + 1 : this.categories.length;
+      this.categories.splice(insertAt, 0, category);
     },
     setCategory(id = null) {
       this.id_category = id;
     },
     openAlbum(id_album) {
+      // "Álbuns" da categoria sintética (ver refreshCustomCollectionsCategory)
+      // não existem no catálogo — abrem a coletânea de verdade no módulo
+      // custom_collections, já selecionada (deep-link consumido uma única
+      // vez em custom_collections/interface/Index.vue#loadAll).
+      if (typeof id_album === "string" && id_album.startsWith("custom:")) {
+        const collectionId = id_album.slice("custom:".length);
+        this.$appdata.set("modules.custom_collections.open_collection_id", collectionId);
+        this.$modules.open("custom_collections");
+        return;
+      }
       this.$media.openAlbum(id_album);
     },
     async show(value) {
       if (value && this.lang != this.$i18n.locale.value) {
         await this.loadData();
-      } else if (
-        value &&
-        this.categories.length > 0 &&
-        this.id_category == null
-      ) {
-        this.id_category = this.categories[0].id_category;
+      } else if (value) {
+        if (this.categories.length > 0 && this.id_category == null) {
+          this.id_category = this.categories[0].id_category;
+        }
+        await this.refreshCustomCollectionsCategory();
       }
     },
     close() {

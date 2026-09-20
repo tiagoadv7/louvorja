@@ -427,6 +427,19 @@ export default {
       this.resolvePreviewImages(this.songs);
       this.resolveCollectionCovers(this.collections);
       if (!this.officialMusics.length) this.loadOfficialMusics();
+      // Deep-link de fora (ver modules/core/collections/interface/Index.vue
+      // #openAlbum) -- abrir este módulo já com uma coletânea específica em
+      // vez de sempre cair na primeira. Consumido uma única vez (limpo logo
+      // depois), senão reabrir o módulo manualmente depois voltaria sempre
+      // pra essa mesma coletânea.
+      const pendingId = this.$appdata.get('modules.custom_collections.open_collection_id');
+      if (pendingId) {
+        this.$appdata.set('modules.custom_collections.open_collection_id', null);
+        if (this.collections.some((c) => c.id === pendingId)) {
+          this.selectedCollectionId = pendingId;
+          this.tab = 'collections';
+        }
+      }
       if (!this.selectedCollectionId && this.collections.length) {
         this.selectedCollectionId = this.collections[0].id;
       }
