@@ -2729,6 +2729,7 @@ export default {
   padding: 7px 10px;
   cursor: pointer;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
+  border-radius: 6px;
   transition: background 0.1s;
 }
 .lt-music-row:hover { background: rgba(var(--v-theme-on-surface), 0.06); }

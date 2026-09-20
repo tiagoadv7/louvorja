@@ -93,6 +93,7 @@
             v-for="(item, index) in slides"
             :key="index"
             link
+            rounded="lg"
             :active="config.slide_index === index"
             ref="slideItem"
             variant="tonal"

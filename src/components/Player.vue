@@ -152,6 +152,7 @@
             <v-list-item
               v-for="(item, index) in slides"
               :key="index"
+              rounded="lg"
               :active="media.config.slide_index == index"
               @click="$media.goToSlide(index)"
             >

@@ -17,6 +17,7 @@
                 v-for="category in categories"
                 :key="category.id_category"
                 :title="category.name"
+                rounded="lg"
                 :active="id_category == category.id_category"
                 @click="setCategory(category.id_category)"
               />
@@ -26,6 +27,7 @@
               <v-list-item
                 class="mt-auto"
                 :title="t('all_collections')"
+                rounded="lg"
                 :active="id_category == 0"
                 @click="setCategory(0)"
               />
@@ -62,6 +64,7 @@
           v-for="category in categories"
           :key="category.id_category"
           :title="category.name"
+          rounded="lg"
           :active="id_category == category.id_category"
           @click="setCategory(category.id_category)"
         />
@@ -69,6 +72,7 @@
         <v-list-item
           class="mt-auto"
           :title="t('all_collections')"
+          rounded="lg"
           :active="id_category == 0"
           @click="setCategory(0)"
         />

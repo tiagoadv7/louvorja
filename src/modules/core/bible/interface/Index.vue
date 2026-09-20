@@ -241,6 +241,7 @@
                   :key="num"
                   link
                   variant="flat"
+                  rounded="lg"
                   :value="verse"
                   :active="bible.verses.includes(+num)"
                   @click="selVerse($event, num)"

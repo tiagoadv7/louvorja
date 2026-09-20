@@ -705,6 +705,7 @@ export default {
   height: 36px;
   cursor: pointer;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.4));
+  border-radius: 6px;
   transition: background 0.1s;
 }
 .fcd-list-row--indent { padding-left: 32px; }
