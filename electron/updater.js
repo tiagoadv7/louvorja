@@ -553,6 +553,16 @@ function init({ channel = 'latest', autoCheck = true, autoDownload = false, useB
     });
 
     autoUpdater.on('update-available', async (info) => {
+      // Salvaguarda: o autoUpdater às vezes reporta uma versão de um cache/
+      // verificação anterior (ex.: pasta de staging de update do Windows com
+      // um instalador antigo ainda presente) sem revalidar se ela é de fato
+      // mais nova que a versão JÁ instalada — confirmado na prática
+      // reoferecendo v1.28.8 rodando uma beta mais nova (v1.28.9-beta.1, que
+      // numericamente já é maior mesmo sendo pré-release).
+      if (compareVersions(info.version, app.getVersion()) <= 0) {
+        _setState({ status: 'not-available', newVersion: info.version });
+        return;
+      }
       const raw = typeof info.releaseNotes === 'string' ? info.releaseNotes : null;
       const releaseNotes = raw ? (await renderMarkdown(raw)) || raw : null;
       _setState({ status: 'available', newVersion: info.version, releaseNotes, error: null });
@@ -576,6 +586,13 @@ function init({ channel = 'latest', autoCheck = true, autoDownload = false, useB
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+      // Mesma salvaguarda do 'update-available' acima — um pacote cacheado
+      // de uma verificação/versão anterior não deve virar "pronto pra
+      // instalar" se já não for mais novo que a versão atual instalada.
+      if (compareVersions(info.version, app.getVersion()) <= 0) {
+        _setState({ status: 'not-available', newVersion: info.version });
+        return;
+      }
       _setState({ status: 'downloaded', newVersion: info.version, progress: 100 });
     });
 
