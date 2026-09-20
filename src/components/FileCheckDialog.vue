@@ -79,7 +79,7 @@
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
               <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
               <v-spacer />
-              <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4">
+              <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4 fcd-view-toggle">
                 <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="'Agrupado por álbum'" />
                 <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="'Lista simples'" />
               </v-btn-toggle>
@@ -645,6 +645,16 @@ export default {
 </script>
 
 <style scoped>
+/* Separa visualmente os dois botões (grade/lista) do grupo — por padrão o
+   v-btn-toggle deixa tudo colado, formando um só bloco sem nenhum respiro
+   entre os ícones. */
+.fcd-view-toggle {
+  gap: 6px;
+}
+.fcd-view-toggle :deep(.v-btn) {
+  border-radius: 6px !important;
+}
+
 /* ── Cabeçalho principal ─────────────────────────────────────────────────── */
 .fcd-header {
   display: flex;
