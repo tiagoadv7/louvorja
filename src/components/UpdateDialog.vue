@@ -373,6 +373,15 @@ export default {
         this.snackbar = true;
         if (this.dialog) this.dialog = true; // mantém aberto se já estava
       }
+
+      // Assim que o download começa, fecha o dialog grande (centralizado) —
+      // o progresso passa a aparecer só na notificação compacta do canto
+      // (ver template acima), em vez de duplicado nos dois lugares ao mesmo
+      // tempo (pedido do usuário).
+      if (state.status === 'downloading' && prevStep !== 'downloading') {
+        this.dialog = false;
+        this.snackbar = true;
+      }
     },
 
     // Abre o dialog e inicia verificação manual
