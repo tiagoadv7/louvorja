@@ -1,6 +1,6 @@
 <template>
   <v-dialog
-    v-model="visible"
+    v-model="dialogVisible"
     scrollable
     persistent
     :eager="eager"
@@ -169,6 +169,22 @@ export default {
 
   data: () => ({
     container_height: 0,
+    // Só usados quando eager=true — ver dialogVisible/watch("visible")
+    // abaixo. eager mantém o conteúdo montado pra sempre (ver comentário na
+    // prop "eager"), e isso faz o dialog-transition padrão do Vuetify (v-show
+    // + <Transition> reaproveitando a MESMA instância entre aberturas) parar
+    // de tocar o fade de saída de forma confiável — confirmado amostrando
+    // frames: ora a opacidade ia suavemente até a metade e voltava pra 1 de
+    // repente (um re-render do Vue no meio do caminho reiniciava uma
+    // animação via classe CSS), ora cortava direto pra display:none sem
+    // nenhuma animação. internalVisible atrasa o fechamento de verdade do
+    // v-dialog; o fade em si roda via Web Animations API (element.animate,
+    // ver watch("visible") abaixo) em vez de uma classe CSS — uma animação
+    // já iniciada assim roda isolada no compositor, imune a um re-render do
+    // Vue tocar em qualquer outro atributo do mesmo elemento no meio do
+    // caminho.
+    internalVisible: false,
+    _fadeAnimation: null,
   }),
   computed: {
     visible: {
@@ -177,6 +193,17 @@ export default {
       },
       set(value) {
         this.$emit("update:modelValue", value);
+      },
+    },
+    // v-model real do <v-dialog> — pra módulos eager, atrasa a transição pra
+    // "fechado" até o fade manual (eagerClosing) terminar; pros demais, é
+    // exatamente "visible" (comportamento padrão, inalterado).
+    dialogVisible: {
+      get() {
+        return this.eager ? this.internalVisible : this.visible;
+      },
+      set(value) {
+        this.visible = value;
       },
     },
     compact_screen: function () {
@@ -203,8 +230,48 @@ export default {
     },
   },
   watch: {
-    visible() {
+    visible(value) {
       this.listenerResize(this.visible);
+
+      if (!this.eager) return;
+
+      // Sempre cancela uma animação pendente primeiro — evita reiniciar o
+      // fade do zero se "visible" disparar mais de uma vez seguida pro
+      // mesmo fechamento.
+      if (this._fadeAnimation) {
+        this._fadeAnimation.cancel();
+        this._fadeAnimation = null;
+      }
+
+      if (value) {
+        this.internalVisible = true;
+        return;
+      }
+      if (!this.internalVisible) return; // já estava fechado
+
+      // Web Animations API em vez de uma classe CSS: uma vez iniciada, essa
+      // animação roda isolada no compositor do navegador — nenhum re-render
+      // do Vue nesse meio-tempo (ex.: o watch("index") logo abaixo, disparado
+      // pelo mesmo fechamento) consegue reiniciá-la ou interrompê-la. Espera
+      // a Promise "finished" da PRÓPRIA animação (em vez de um setTimeout
+      // com a mesma duração cruzando os dedos) pra só então deixar o
+      // v-dialog fechar de vez — imune a qualquer atraso entre o watcher
+      // disparar e a animação realmente começar a rodar no compositor.
+      const contentEl = this.$el?.closest?.(".v-overlay__content");
+      if (!contentEl?.animate) {
+        this.internalVisible = false;
+        return;
+      }
+      this._fadeAnimation = contentEl.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: 220, easing: "ease", fill: "forwards" }
+      );
+      this._fadeAnimation.finished
+        .then(() => {
+          this.internalVisible = false;
+          this._fadeAnimation = null;
+        })
+        .catch(() => {}); // cancelada (reabriu no meio do fade) — nada a fazer
     },
     index() {
       this.checkScroll();
@@ -287,6 +354,12 @@ export default {
       }
     },
   },
+  created() {
+    // Estado inicial de dialogVisible (ver watch("visible") acima) — evita
+    // um primeiro render com internalVisible desalinhado de "visible" (ex.:
+    // módulo já abre com show:true, restaurado de uma sessão anterior).
+    this.internalVisible = this.visible;
+  },
   mounted() {
     this.resizeObserver = new ResizeObserver(() => {
       this.checkScroll();
@@ -295,6 +368,9 @@ export default {
     if (this.visible) {
       this.listenerResize(this.visible);
     }
+  },
+  beforeUnmount() {
+    if (this._fadeAnimation) this._fadeAnimation.cancel();
   },
 };
 </script>
