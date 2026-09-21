@@ -126,13 +126,30 @@ function setupIpc(mainWindow) {
   // renderer — cada janela (operador, saída, retorno) pede seu PRÓPRIO stream
   // com o mesmo id escolhido aqui; o vídeo em si nunca passa pelo processo
   // main, só o id da fonte (leve, cabe num appdata normal).
+  // Telas e janelas são pedidas em DUAS chamadas separadas, com
+  // thumbnailSize diferente — o Windows Graphics Capture (usado por baixo
+  // pra gerar a miniatura de cada JANELA individual) pode falhar e derrubar
+  // o processo inteiro com um crash nativo (ACCESS_VIOLATION) pra certas
+  // janelas (ex.: apps protegidos/UWP, ou só instabilidade do driver de
+  // GPU) — confirmado na prática ("Failed to start capture" nos logs,
+  // seguido do processo caindo). thumbnailSize 0x0 pula a captura da
+  // miniatura sem pular a fonte em si (a UI já tem um ícone genérico de
+  // fallback pra quando não tem thumbnail — ver .cs-source-thumb no
+  // video_player). Telas inteiras continuam com miniatura normal: bem mais
+  // estável, nunca reproduziu esse crash.
   ipcMain.handle('screen:list-capture-sources', async () => {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen', 'window'],
-      thumbnailSize: { width: 160, height: 90 },
-      fetchWindowIcons: false,
-    });
-    return sources.map((s) => ({
+    const [screens, windows] = await Promise.all([
+      desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 160, height: 90 },
+      }),
+      desktopCapturer.getSources({
+        types: ['window'],
+        thumbnailSize: { width: 0, height: 0 },
+        fetchWindowIcons: false,
+      }),
+    ]);
+    return [...screens, ...windows].map((s) => ({
       id: s.id,
       name: s.name,
       isScreen: s.id.startsWith('screen:'),
