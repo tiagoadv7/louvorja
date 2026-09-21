@@ -456,7 +456,23 @@ export default {
         this._restoringFromMinimize = false;
         return;
       }
-      if (open && !this.pendingSongId && !this.pendingSljaPath) this.resetToBlank();
+      if (open && !this.pendingSongId && !this.pendingSljaPath) {
+        // Abertura "do zero" (ex.: tile "Editor de Músicas", sem handoff de
+        // uma música específica) — se a saída/retorno ainda estavam
+        // mostrando ESTE editor de uma apresentação anterior que não foi
+        // encerrada direito, para ela agora: como só existe UMA instância
+        // do editor (eager), compor uma música nova aqui necessariamente
+        // substitui o que estava carregado — sem isso, o placeholder em
+        // branco ("Nova música") vazava pra quem estivesse vendo a
+        // saída/retorno assim que o texto era rebroadcast (ver watch
+        // "activeSlide"/broadcastCurrentSlide abaixo). $popup.close() só
+        // encerra o CONTEÚDO projetado, mantém a janela de saída aberta.
+        if (this.$appdata.get("popup_module") === this.module_id) {
+          this.$popup.close();
+        }
+        this.$appdata.set(`modules.${this.module_id}.presentation_mode`, false);
+        this.resetToBlank();
+      }
     },
     // Cobre o caso do editor JÁ estar aberto quando Coletâneas Personalizadas
     // pede pra abrir outra música — "show" não dispara de novo (já é true),
