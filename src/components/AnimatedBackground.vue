@@ -1,5 +1,5 @@
 <template>
-  <div class="anim-bg" aria-hidden="true" :style="{ '--anim-color': color }">
+  <div ref="root" class="anim-bg" aria-hidden="true" :style="{ '--anim-color': color }">
     <canvas v-if="variant === 'three'" ref="threeCanvas" class="anim-bg-layer" />
     <div v-else-if="variant === 'gsap'" ref="gsapLayer" class="anim-bg-layer anim-bg-gsap" />
     <div v-else-if="variant === 'anime'" ref="animeLayer" class="anim-bg-layer anim-bg-anime">
@@ -150,6 +150,8 @@ export default {
     _animeAnimations: [],
     _motionAnimations: [],
     _resizeHandler: null,
+    // Dip de opacidade ao trocar de variante (ver watch "variant" abaixo).
+    _switchFade: null,
     // Gerado uma vez só (não a cada render) — posições/tempos fixos, senão
     // as estrelas "pulariam" de lugar a cada atualização reativa do pai.
     starDefs: Array.from({ length: 70 }, () => ({
@@ -188,9 +190,40 @@ export default {
     })),
   }),
   watch: {
-    variant() {
-      this._teardown();
-      this.$nextTick(() => this._setup());
+    // Trocar de UMA variante ativa pra OUTRA (não ativar/desativar — esse
+    // caso nem chega a rodar isto, ver Slide.vue#bgKey, que agora ignora o
+    // nome da variante na key e não remonta o componente todo por causa
+    // disso) — sem esse dip de opacidade, a troca era um corte seco: o
+    // efeito antigo sumia e o novo (Three.js/GSAP/anime.js, todos
+    // assíncronos — import dinâmico) só aparecia de verdade alguns quadros
+    // depois, quando terminava de montar. O dip cobre exatamente esse vão.
+    variant(_new, old) {
+      const el = this.$refs.root;
+      if (!old || !el?.animate) {
+        this._teardown();
+        this.$nextTick(() => this._setup());
+        return;
+      }
+      if (this._switchFade) this._switchFade.cancel();
+      // fill:"forwards" nas duas pontas -- sem isso, o navegador devolve a
+      // opacidade ao valor do CSS (1) assim que CADA animate() termina, e o
+      // dip sumiria sozinho bem antes do teardown/setup rodar de verdade.
+      this._switchFade = el.animate(
+        [{ opacity: 1 }, { opacity: 0.1 }],
+        { duration: 180, easing: "ease", fill: "forwards" }
+      );
+      this._switchFade.finished
+        .then(() => {
+          this._teardown();
+          this.$nextTick(() => {
+            this._setup();
+            this._switchFade = el.animate(
+              [{ opacity: 0.1 }, { opacity: 1 }],
+              { duration: 260, easing: "ease", fill: "forwards" }
+            );
+          });
+        })
+        .catch(() => {});
     },
     color() {
       // Só o three.js precisa recriar a cena pra recolorir (as outras
@@ -204,6 +237,7 @@ export default {
     this._setup();
   },
   beforeUnmount() {
+    if (this._switchFade) this._switchFade.cancel();
     this._teardown();
   },
   methods: {

@@ -189,11 +189,23 @@ export default {
 
     // Chave única do fundo — muda SOMENTE quando a imagem/tipo realmente muda,
     // evitando que a transição dispare ao trocar apenas o texto.
+    //
+    // animated_bg entra na key só como flag (tem/não tem), não pelo nome da
+    // variante — trocar DE um fundo animado ativo PRA OUTRO (ex.: "Aurora" →
+    // "Gradiente Líquido") não deve remontar esta div (e o <AnimatedBackground>
+    // dentro dela) do zero: isso cortava o crossfade no meio e piscava
+    // transparente por um instante até o novo efeito assíncrono (Three.js/
+    // GSAP/anime.js) terminar de montar. Só ativar/desativar o fundo animado
+    // (none ↔ variante) ainda deve remontar — aí sim é uma troca de esquema
+    // de fundo de verdade, que já usa o bg-crossfade normalmente.
     bgKey() {
       const bg = this.globalBg;
       // type='default': texto personalizado sem fundo próprio — o fundo continua
       // sendo a imagem de cada slide, então a key precisa acompanhá-la também.
-      if (bg && bg.type && bg.type !== 'default') return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}-${bg.animated_bg || 'none'}`;
+      if (bg && bg.type && bg.type !== 'default') {
+        const hasAnimated = !!(bg.animated_bg && bg.animated_bg !== 'none');
+        return `bg-${bg.type}-${bg.url || ''}-${bg.opacity ?? 100}-${hasAnimated ? 'anim' : 'none'}`;
+      }
       return `bg-default-${this.activeSlide.image || ''}-${resolveBgPositionIndex(this.image_position)}`;
     },
 
