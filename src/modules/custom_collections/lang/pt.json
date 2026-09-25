@@ -1,12 +1,10 @@
 {
   "title": "Coletâneas Personalizadas",
   "tabs": {
-    "songs": "Minhas Músicas",
-    "collections": "Coletâneas",
-    "search": "Buscar"
+    "editor": "Editor de Músicas",
+    "collections": "Coletâneas"
   },
   "actions": {
-    "new_song": "Nova Música",
     "new_collection": "Nova Coletânea",
     "edit": "Editar",
     "delete": "Excluir",
@@ -29,22 +27,15 @@
   "labels": {
     "name": "Nome",
     "songs_count": "música(s)",
-    "audio": "com áudio",
-    "slides": "slide(s)",
     "my_songs": "Minhas músicas",
-    "official_catalog": "Catálogo oficial",
-    "filter_collection_name": "Nome da coletânea",
-    "filter_song_name": "Nome da música"
+    "official_catalog": "Catálogo oficial"
   },
   "data": {
-    "empty_songs": "Nenhuma música pessoal. Crie no Editor de Músicas ou importe um .slja.",
     "empty_collections": "Nenhuma coletânea pessoal. Clique em + para criar.",
     "empty_collection_songs": "Coletânea vazia. Adicione músicas usando o botão acima.",
     "select_collection": "Selecione uma coletânea na lista ao lado",
-    "confirm_delete_song": "Excluir esta música? Esta ação não pode ser desfeita.",
     "confirm_delete_collection": "Excluir esta coletânea? As músicas continuam disponíveis em \"Minhas Músicas\".",
     "name_placeholder": "Nome da coletânea",
-    "empty_search_results": "Nenhuma música encontrada",
-    "search_hint": "Digite pra buscar em todas as suas coletâneas"
+    "empty_search_results": "Nenhuma música encontrada"
   }
 }

@@ -15,99 +15,43 @@
     <template v-slot:header>
       <div class="cc-header">
         <!-- Alternador em pílulas (não um v-tabs de verdade) -- pegada do
-             flute-app, que não mostra abas assim; cada "área" (Músicas/
-             Coletâneas/Buscar) continua existindo, só a navegação entre elas
-             fica discreta pra dar lugar à busca central + botão de ação. -->
+             flute-app. "Editor de Músicas" não é uma área com conteúdo aqui
+             dentro -- é um atalho que abre o editor de verdade (mesmo
+             módulo/janela/lógica de sempre, só que antes só era alcançável
+             pelo tile próprio em Utilitários, ver manifest.json#category). -->
         <div class="cc-segmented">
-          <button
-            v-for="opt in tabOptions" :key="opt.value"
-            class="cc-seg-btn"
-            :class="{ 'is-active': tab === opt.value }"
-            :title="opt.label"
-            @click="tab = opt.value"
-          >
-            <v-icon size="16">{{ opt.icon }}</v-icon>
-            <span class="cc-seg-label">{{ opt.label }}</span>
+          <button class="cc-seg-btn" :title="t('tabs.editor')" @click="openSlideEditor">
+            <v-icon size="16">mdi-presentation</v-icon>
+            <span class="cc-seg-label">{{ t('tabs.editor') }}</span>
+          </button>
+          <button class="cc-seg-btn is-active" :title="t('tabs.collections')">
+            <v-icon size="16">mdi-folder-music-outline</v-icon>
+            <span class="cc-seg-label">{{ t('tabs.collections') }}</span>
           </button>
         </div>
 
-        <div v-if="tab !== 'search'" class="cc-header-search">
+        <div class="cc-header-search">
           <v-icon size="18" class="cc-header-search-icon">mdi-magnify</v-icon>
           <input
             v-model="headerSearchQuery"
             class="cc-header-search-input"
-            :placeholder="tab === 'songs' ? t('actions.search_placeholder') : t('actions.search_collections_placeholder')"
+            :placeholder="t('actions.search_collections_placeholder')"
           />
         </div>
-        <v-spacer v-else />
 
-        <template v-if="tab === 'songs'">
-          <button class="cc-btn cc-btn-pill" @click="actNewSong">
-            <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_song') }}
-          </button>
-          <button class="cc-btn cc-btn-outline cc-btn-pill" @click="actImport">
-            <v-icon size="15">mdi-import</v-icon> {{ t('actions.import') }}
-          </button>
-        </template>
-        <template v-else-if="tab === 'collections'">
-          <button class="cc-btn cc-btn-pill" @click="actNewCollection">
-            <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_collection') }}
-          </button>
-        </template>
+        <button class="cc-btn cc-btn-pill" @click="actNewCollection">
+          <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_collection') }}
+        </button>
       </div>
     </template>
 
-    <!-- ── Aba: Minhas Músicas ───────────────────────────────────────────── -->
-    <div v-if="tab === 'songs'" class="cc-songs">
-      <div v-if="!songs.length" class="cc-empty">{{ t('data.empty_songs') }}</div>
-      <div v-else-if="!visibleSongs.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
-      <div v-else class="cc-song-grid">
-        <div
-          v-for="s in visibleSongs" :key="s.id"
-          class="cc-song-card"
-          :title="t('actions.present')"
-          @click="apresentar(s)"
-        >
-          <div class="cc-song-preview" :style="songPreviewStyle(s)">
-            <div class="cc-song-actions">
-              <button class="cc-icon-btn" :title="t('actions.edit')" @click.stop="editar(s)">
-                <v-icon size="14">mdi-pencil</v-icon>
-              </button>
-              <button class="cc-icon-btn" :title="t('actions.delete')" @click.stop="confirmDeleteSong(s)">
-                <v-icon size="14">mdi-delete</v-icon>
-              </button>
-              <v-menu>
-                <template #activator="{ props }">
-                  <button class="cc-icon-btn" v-bind="props" @click.stop>
-                    <v-icon size="14">mdi-dots-vertical</v-icon>
-                  </button>
-                </template>
-                <v-list density="compact">
-                  <v-list-item :title="t('actions.export')" prepend-icon="mdi-download" @click="exportSong(s)" />
-                  <v-list-item :title="t('actions.rename')" prepend-icon="mdi-rename-box" @click="renameSong(s)" />
-                </v-list>
-              </v-menu>
-            </div>
-            <div class="cc-song-preview-text" :style="{ color: s.slides[0]?.cor_letra || '#fff' }">
-              {{ truncate(s.slides[0]?.letra || s.nome, 70) }}
-            </div>
-          </div>
-          <div class="cc-song-name" :title="s.nome">{{ s.nome }}</div>
-          <div class="cc-song-sub">
-            {{ s.slides.length }} {{ t('labels.slides') }}
-            <span v-if="s.audio_name"> · {{ t('labels.audio') }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Aba: Coletâneas ───────────────────────────────────────────────── -->
+    <!-- ── Coletâneas ───────────────────────────────────────────────────── -->
     <!-- Grade de cards (mesmo estilo/paridade visual da aba "Minhas Músicas"
          acima) em vez da antiga lista+detalhe lado a lado -- clicar num card
          abre a coletânea em tela cheia (ver "selectedCollection" abaixo),
          com seta de voltar pra grade; nenhuma ação (renomear/excluir/trocar
          capa/tocar tudo/arrastar) muda, só o layout de navegação. -->
-    <div v-else-if="tab === 'collections'" class="cc-collections">
+    <div class="cc-collections">
       <!-- GRADE: nenhuma coletânea aberta -->
       <div v-if="!selectedCollection" class="cc-collection-grid">
         <div v-if="!collections.length" class="cc-empty">{{ t('data.empty_collections') }}</div>
@@ -244,65 +188,6 @@
       </div>
     </div>
 
-    <!-- ── Aba: Buscar (todas as coletâneas de uma vez) ───────────────────── -->
-    <div v-else class="cc-search">
-      <div class="cc-search-bar">
-        <input v-model="searchQuery" class="cc-input cc-search-input" :placeholder="t('actions.search_placeholder')" autofocus />
-        <div class="cc-search-filters">
-          <button
-            class="cc-filter-chip"
-            :class="{ 'is-active': searchFilters.includes('name') }"
-            @click="toggleSearchFilter('name')"
-          >
-            <v-icon size="13">{{ searchFilters.includes('name') ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
-            {{ t('labels.filter_collection_name') }}
-          </button>
-          <button
-            class="cc-filter-chip"
-            :class="{ 'is-active': searchFilters.includes('songs') }"
-            @click="toggleSearchFilter('songs')"
-          >
-            <v-icon size="13">{{ searchFilters.includes('songs') ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
-            {{ t('labels.filter_song_name') }}
-          </button>
-        </div>
-      </div>
-
-      <div v-if="!searchQuery.trim()" class="cc-empty">{{ t('data.search_hint') }}</div>
-      <div v-else-if="!searchResults.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
-      <div v-else class="cc-search-results">
-        <div
-          v-for="r in searchResults"
-          :key="`${r.collection.id}-${r.item.type}-${r.item.id}`"
-          class="cc-collection-song-row cc-search-result-row"
-          @click="apresentar(r.item)"
-        >
-          <v-icon
-            size="13"
-            class="cc-song-type-icon"
-            :title="r.item.type === 'official' ? t('labels.official_catalog') : t('labels.my_songs')"
-          >
-            {{ r.item.type === 'official' ? 'mdi-cloud-outline' : 'mdi-account-music-outline' }}
-          </v-icon>
-          <div class="cc-collection-song-name" :title="r.item.nome">
-            {{ r.item.nome }}
-            <span class="cc-search-result-collection">{{ r.collection.nome }}</span>
-          </div>
-          <div class="d-flex flex-nowrap" @click.stop>
-            <MusicMenuTable
-              v-if="r.item.type === 'official'"
-              :id_music="r.item.id"
-              :has_instrumental_music="r.item.has_instrumental_music"
-            />
-            <template v-else>
-              <v-btn variant="text" icon="mdi-play-box-multiple" density="compact" class="mx-1" :title="t('actions.present')" @click="apresentar(r.item)" />
-              <v-btn variant="text" icon="mdi-pencil" density="compact" class="mx-1" :title="t('actions.edit')" @click="editar(r.item)" />
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ── Diálogo: Adicionar música (própria ou do catálogo oficial) ────── -->
     <v-dialog v-model="addSongDialog" max-width="480" scrollable>
       <v-card>
@@ -355,7 +240,6 @@
       </v-card>
     </v-dialog>
 
-    <input ref="fileSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSlja" />
     <input ref="fileCollectionCover" type="file" accept="image/*,.heic,.heif" hidden @change="onPickCollectionCover" />
     <input ref="fileCollectionSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSljaToCollection" />
   </l-window>
@@ -376,30 +260,25 @@ export default {
   components: { LWindow, Draggable, MusicMenuTable },
 
   data: () => ({
-    tab: 'songs',
+    // Área exibida no corpo da janela -- só "collections" hoje (ver pílulas
+    // no cabeçalho: "Editor de Músicas" é um atalho que abre outro módulo,
+    // não uma área própria aqui dentro). Mantido (em vez de remover) pra não
+    // precisar reescrever loadAll()/deep-link de "core/collections".
+    tab: 'collections',
     // Busca local do cabeçalho (ver "cc-header-search" no template) -- filtra
-    // a grade de "Minhas Músicas" ou de "Coletâneas" pelo nome, conforme a
-    // área ativa; some na aba "Buscar" (que já tem sua própria busca
-    // combinada entre coletâneas, ver "searchQuery"/"searchResults" abaixo).
+    // a grade de coletâneas pelo nome.
     headerSearchQuery: '',
     songs: [],
     collections: [],
     selectedCollectionId: null,
-    // Cache de URL (file://) da imagem do 1º slide de cada música — preview
-    // do card em "Minhas Músicas".
-    previewImages: {},
     // Catálogo oficial (paridade Delphi: coletânea pode misturar músicas
     // próprias com músicas do catálogo, não só as criadas no Editor).
     officialMusics: [],
     officialMusicsLoading: false,
     addSongDialog: false,
     addSongSearch: '',
-    // Aba "Buscar" — busca por nome da coletânea e/ou nome da música em
-    // todas as coletâneas de uma vez (ver computed "searchResults" abaixo).
-    searchQuery: '',
-    searchFilters: ['name', 'songs'],
     // Cache de URL (file://) da capa de cada coletânea (ver
-    // resolveCollectionCovers) — mesmo padrão de "previewImages" acima.
+    // resolveCollectionCovers).
     collectionCovers: {},
     // "Reproduzir tudo" — fila sequencial pela coletânea selecionada.
     playingCollection: false,
@@ -461,51 +340,12 @@ export default {
         .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
         .slice(0, 60);
     },
-    // Alternador em pílulas do cabeçalho (ver "cc-segmented" no template) —
-    // ícone/rótulo de cada área, na mesma ordem das antigas abas.
-    tabOptions() {
-      return [
-        { value: 'songs', icon: 'mdi-music-note', label: this.t('tabs.songs') },
-        { value: 'collections', icon: 'mdi-folder-music-outline', label: this.t('tabs.collections') },
-        { value: 'search', icon: 'mdi-magnify', label: this.t('tabs.search') },
-      ];
-    },
-    // Busca local do cabeçalho — filtra a grade da área ativa (ver
+    // Busca local do cabeçalho — filtra a grade de coletâneas (ver
     // "headerSearchQuery" acima); nunca esconde nada quando vazia.
-    visibleSongs() {
-      const q = this.$string.clean((this.headerSearchQuery || '').trim());
-      if (!q) return this.songs;
-      return this.songs.filter((s) => this.$string.clean(s.nome || '').includes(q));
-    },
     visibleCollections() {
       const q = this.$string.clean((this.headerSearchQuery || '').trim());
       if (!q) return this.collections;
       return this.collections.filter((c) => this.$string.clean(c.nome || '').includes(q));
-    },
-    // Aba "Buscar" — mesma lógica de busca combinada (nome da coletânea e/ou
-    // nome da música) usada no módulo de coletâneas oficiais do flute-app,
-    // aqui varrendo todas as coletâneas próprias de uma vez em vez de precisar
-    // abrir uma por uma na aba "Coletâneas".
-    searchResults() {
-      const q = this.$string.clean((this.searchQuery || '').trim());
-      if (!q) return [];
-      const results = [];
-      const seen = new Set();
-      for (const c of this.collections) {
-        const collectionMatches = this.searchFilters.includes('name') && this.$string.clean(c.nome || '').includes(q);
-        for (const rawItem of c.items) {
-          const item = this.resolveCollectionItem(rawItem);
-          if (!item) continue;
-          const key = `${c.id}:${item.type}:${item.id}`;
-          if (seen.has(key)) continue;
-          const songMatches = this.searchFilters.includes('songs') && this.$string.clean(item.nome || '').includes(q);
-          if (collectionMatches || songMatches) {
-            seen.add(key);
-            results.push({ item, collection: c });
-          }
-        }
-      }
-      return results;
     },
     // Mesmo padrão de modules/core/album/interface/Index.vue (playingAll) —
     // detecta o operador fechando manualmente o player (oficial ou próprio)
@@ -580,34 +420,17 @@ export default {
     },
     /* METHODS OBRIGATÓRIAS - FIM */
 
-    truncate(text, max = 60) {
-      if (!text) return '';
-      return text.length > max ? text.slice(0, max - 1) + '…' : text;
-    },
-
-    songPreviewStyle(s) {
-      const slide = s.slides?.[0] || {};
-      const img = this.previewImages[s.id];
-      return {
-        background: slide.cor_fundo || '#000',
-        ...(img ? { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
-      };
-    },
-    async resolvePreviewImages(list) {
-      const map = {};
-      for (const s of list) {
-        const name = s.slides?.[0]?.imagem;
-        if (!name) continue;
-        const url = await CustomSongs.resolveImageUrl(s.id, name);
-        if (url) map[s.id] = url;
-      }
-      this.previewImages = map;
+    // "Editor de Músicas" (ver pílula no cabeçalho) -- mesma chamada de
+    // sempre, sem estado prévio (sem pending_song_id), pra abrir exatamente
+    // como abria a partir do tile em Utilitários: editor em branco, pronto
+    // pra criar uma música nova.
+    openSlideEditor() {
+      this.$modules.open('slide_editor');
     },
 
     async loadAll() {
       this.songs = await CustomSongs.listSongs();
       this.collections = await CustomSongs.listCollections();
-      this.resolvePreviewImages(this.songs);
       this.resolveCollectionCovers(this.collections);
       if (!this.officialMusics.length) this.loadOfficialMusics();
       // Deep-link de fora (ver modules/core/collections/interface/Index.vue
@@ -674,16 +497,6 @@ export default {
       }
     },
 
-    toggleSearchFilter(filter) {
-      if (this.searchFilters.includes(filter)) {
-        if (this.searchFilters.length > 1) {
-          this.searchFilters = this.searchFilters.filter((f) => f !== filter);
-        }
-        return;
-      }
-      this.searchFilters = [...this.searchFilters, filter];
-    },
-
     askName(title, defaultValue) {
       return new Promise((resolve) => {
         this.$alert.prompt({ title, translate: false, input_default: defaultValue }, (val) => resolve(val));
@@ -727,26 +540,12 @@ export default {
       await this.$popup.open('slide_editor');
     },
 
-    // ===== Músicas =====
-    async actNewSong() {
-      const nome = await this.askName(this.t('actions.new_song'), this.t('actions.new_song'));
-      if (!nome) return;
-      const s = CustomSongs.newSong(nome);
-      await CustomSongs.saveSong(s);
-      this.editar(s);
-      await this.loadAll();
-    },
+    // ===== Músicas (do próprio operador, dentro de uma coletânea) =====
     async renameSong(s) {
       const nome = await this.askName(this.t('actions.rename'), s.nome);
       if (!nome) return;
       s.nome = nome;
       await CustomSongs.saveSong(s);
-      await this.loadAll();
-    },
-    async confirmDeleteSong(s) {
-      const ok = await this.confirmYesNo(this.t('data.confirm_delete_song'));
-      if (!ok) return;
-      await CustomSongs.deleteSong(s.id);
       await this.loadAll();
     },
     async exportSong(s) {
@@ -781,29 +580,6 @@ export default {
       a.download = `${(s.nome || 'musica').replace(/[\\/:*?"<>|]/g, '_')}.slja`;
       a.click();
       URL.revokeObjectURL(url);
-    },
-
-    actImport() {
-      this.$refs.fileSlja?.click();
-    },
-    async onImportSlja(e) {
-      const files = Array.from(e.target.files || []);
-      e.target.value = '';
-      if (!files.length) return;
-
-      let ok = 0;
-      let fail = 0;
-      for (const f of files) {
-        try {
-          const song = await CustomSongs.parseSljaToSong(f);
-          await CustomSongs.saveSong(song);
-          ok++;
-        } catch {
-          fail++;
-        }
-      }
-      await this.loadAll();
-      this.$alert.info({ text: `${ok} importada(s)${fail ? `, ${fail} falha(s)` : ''}`, translate: false });
     },
 
     // ===== Coletâneas =====
@@ -870,9 +646,9 @@ export default {
     actImportSljaToCollection() {
       this.$refs.fileCollectionSlja?.click();
     },
-    // Importa .slja direto pra dentro da coletânea (sem passar por "Minhas
-    // Músicas" antes) — a música importada entra pra biblioteca (igual
-    // onImportSlja) E já é adicionada na coletânea selecionada num só passo.
+    // Importa .slja direto pra dentro da coletânea -- a música importada
+    // entra pra biblioteca (songs) E já é adicionada na coletânea selecionada
+    // num só passo.
     async onImportSljaToCollection(e) {
       const files = Array.from(e.target.files || []);
       e.target.value = '';
@@ -1117,71 +893,13 @@ export default {
   color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
-/* ── Aba Músicas ─────────────────────────────────────────────────────── */
-.cc-songs { padding: 12px 16px; }
-.cc-song-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-.cc-song-card {
-  width: 210px;
-  border-radius: 10px;
-  overflow: hidden;
-  cursor: pointer;
-  background: rgba(var(--v-theme-on-surface), 0.03);
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  transition: box-shadow 0.15s, transform 0.1s;
-}
-.cc-song-card:hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  transform: translateY(-1px);
-}
-.cc-song-preview {
-  position: relative;
-  height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  overflow: hidden;
-}
-.cc-song-actions {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  display: flex;
-  gap: 3px;
-  z-index: 1;
-}
-.cc-song-preview-text {
-  font-size: 11px;
-  text-align: center;
-  white-space: pre-line;
-  width: 100%;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-}
-.cc-song-name {
-  padding: 8px 10px 0;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cc-song-sub {
-  padding: 2px 10px 8px;
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-}
 
 /* ── Aba Coletâneas ──────────────────────────────────────────────────── */
 .cc-collections {
   height: 100%;
   overflow-y: auto;
 }
-/* Grade de cards -- mesma paridade visual da grade de "Minhas Músicas"
-   (.cc-song-grid/.cc-song-card acima) e do estilo do flute-app. */
+/* Grade de cards -- mesmo estilo do flute-app. */
 .cc-collection-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1320,66 +1038,6 @@ export default {
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── Aba Buscar ───────────────────────────────────────────────────────── */
-.cc-search {
-  padding: 12px 16px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.cc-search-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.cc-search-input {
-  flex: 1;
-  margin-bottom: 0;
-}
-.cc-search-filters {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.cc-filter-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  background: transparent;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.cc-filter-chip:hover { background: rgba(var(--v-theme-on-surface), 0.06); }
-.cc-filter-chip.is-active {
-  border-color: rgba(var(--v-theme-primary), 0.6);
-  color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.1);
-}
-.cc-search-results {
-  flex: 1;
-  overflow-y: auto;
-  margin-top: 8px;
-}
-.cc-search-result-row { cursor: pointer; }
-.cc-search-result-collection {
-  display: block;
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.55;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
