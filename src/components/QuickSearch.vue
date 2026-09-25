@@ -84,7 +84,7 @@
       </v-list>
 
       <!-- Sem resultados -->
-      <div v-else-if="search.trim()" class="pa-6 text-center">
+      <div v-else-if="search.trim() && !searchIsNumber" class="pa-6 text-center">
         <v-icon size="36" class="mb-2 text-disabled">mdi-music-note-off</v-icon>
         <div class="text-body-2 text-disabled">
           Nenhuma música encontrada para <strong>"{{ search }}"</strong>
@@ -92,10 +92,53 @@
       </div>
 
       <!-- Estado inicial -->
-      <div v-else class="pa-5 text-center text-disabled text-caption">
+      <div v-else-if="!searchIsNumber" class="pa-5 text-center text-disabled text-caption">
         <v-icon size="20" class="me-1">mdi-keyboard-outline</v-icon>
         Digite para buscar músicas
       </div>
+
+      <!-- Resultados por número nos Hinários -- catálogos separados (mesmo
+           número é uma música diferente em cada hinário), mostrados à parte
+           dos resultados por nome/álbum acima (ver Músicas/interface/Index.vue,
+           mesmo padrão). -->
+      <template v-if="searchIsNumber">
+        <v-divider v-if="results.length" />
+        <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">
+          Resultados por número nos Hinários
+        </div>
+        <div v-if="hymnalLoading" class="pa-4 d-flex justify-center">
+          <v-progress-circular indeterminate size="20" />
+        </div>
+        <template v-else-if="hymnalMatches.length">
+          <div v-for="h in hymnalMatches" :key="h.id" class="px-3 pb-2">
+            <div class="text-caption font-weight-bold mb-1">{{ h.name }}</div>
+            <v-list density="compact">
+              <v-list-item
+                v-for="s in h.songs"
+                :key="s.id_music"
+                :title="s.name"
+                rounded="lg"
+              >
+                <template v-slot:prepend>
+                  <v-chip size="small" class="mr-2" :color="$theme.primary()">{{ s.track }}</v-chip>
+                </template>
+                <template v-slot:append>
+                  <div @click.stop>
+                    <MusicMenuTable
+                      :id_music="s.id_music"
+                      :has_instrumental_music="s.has_instrumental_music"
+                      @action="dialog = false"
+                    />
+                  </div>
+                </template>
+              </v-list-item>
+            </v-list>
+          </div>
+        </template>
+        <div v-else class="text-caption text-medium-emphasis px-3 pb-3">
+          Nenhum hino encontrado com o número <strong>"{{ search.trim() }}"</strong>
+        </div>
+      </template>
 
       <!-- Rodapé -->
       <template v-if="results.length">
@@ -130,6 +173,9 @@ export default {
     allData: [],
     loading: false,
     selectedIdx: 0,
+    hymnalDatasets: [],
+    hymnalDataLoaded: false,
+    hymnalLoading: false,
   }),
 
   computed: {
@@ -150,6 +196,21 @@ export default {
     results() {
       return this.matchedResults.slice(0, 50);
     },
+    searchIsNumber() {
+      const s = this.search.trim();
+      return s !== '' && !isNaN(s);
+    },
+    // Os dois hinários são catálogos SEPARADOS (mesmo número é uma música
+    // diferente em cada um — ver sqlite-reader.js#_getHymnal) — carregados à
+    // parte do catálogo geral (allData), sob demanda, só quando a busca
+    // parece um número (ver Músicas/interface/Index.vue, mesmo padrão).
+    hymnalMatches() {
+      if (!this.searchIsNumber) return [];
+      const num = Number(this.search.trim());
+      return this.hymnalDatasets
+        .map((h) => ({ ...h, songs: h.songs.filter((s) => Number(s.track) === num) }))
+        .filter((h) => h.songs.length);
+    },
   },
 
   watch: {
@@ -164,6 +225,9 @@ export default {
     },
     results() {
       this.selectedIdx = 0;
+    },
+    searchIsNumber(isNum) {
+      if (isNum) this.loadHymnalData();
     },
   },
 
@@ -181,6 +245,26 @@ export default {
         }));
       } finally {
         this.loading = false;
+      }
+    },
+
+    async loadHymnalData() {
+      if (this.hymnalDataLoaded) return;
+      this.hymnalDataLoaded = true;
+      this.hymnalLoading = true;
+      try {
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const [hymnal, hymnal1996] = await Promise.all([
+          this.$database.get(`${locale}_hymnal`),
+          this.$database.get(`${locale}_hymnal_1996`),
+        ]);
+        const toArray = (d) => (Array.isArray(d) ? d : Object.values(d || {}));
+        this.hymnalDatasets = [
+          { id: 'hymnal', name: 'Hinário Adventista', songs: toArray(hymnal) },
+          { id: 'hymnal_1996', name: 'Hinário Adventista - 1996', songs: toArray(hymnal1996) },
+        ];
+      } finally {
+        this.hymnalLoading = false;
       }
     },
 
