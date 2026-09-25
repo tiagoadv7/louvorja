@@ -133,12 +133,21 @@ function parseSlja(iniText) {
       tipo: sec.tipo || (i === 1 ? "CAPA" : "LETRA"),
       letra: decodeLetra(sec.letra || ""),
       letra_aux: decodeLetra(sec.letra_aux || ""),
-      tamanho_letra: parseInt(sec.tamanho_letra || (i === 1 ? "18" : "14"), 10),
-      tamanho_letra_aux: parseInt(sec.tamanho_letra_aux || "10", 10),
-      cor_letra: sec.cor_letra || (i === 1 ? "#efb400" : "#FFFFFF"),
-      cor_letra_aux: sec.cor_letra_aux || "#efb400",
+      // Cor/tamanho de texto e cor de fundo NUNCA vêm do arquivo — mesmo
+      // quando o .slja tem esses campos preenchidos (todo .slja tem, o
+      // formato não representa "nunca customizado"), pra que o Fundo
+      // Personalizado (slide_bg) e o texto configurados NESTA instalação
+      // sempre valham pra conteúdo importado/tocado direto, em vez do
+      // arquivo carregar consigo o tema de quem o exportou (ver Slide.vue
+      // #style_text/#style_bg, que só usa o valor do slide quando não está
+      // vazio — deixando em branco aqui é o que faz a personalização atual
+      // valer). Só o conteúdo (letra, imagem, tempo) atravessa o import.
+      tamanho_letra: null,
+      tamanho_letra_aux: null,
+      cor_letra: "",
+      cor_letra_aux: "",
       fundo_letra: sec.fundo_letra === undefined ? true : sec.fundo_letra === "1",
-      cor_fundo: sec.cor_fundo || "#000000",
+      cor_fundo: "",
       imagem: sec.imagem || "",
       imagem_posicao: parseInt(sec.imagem_posicao || "5", 10),
       // tempo_hms (gravado pelo Electron, ver writeSlja abaixo) é a fonte

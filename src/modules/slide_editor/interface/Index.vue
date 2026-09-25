@@ -668,7 +668,11 @@ export default {
 
     thumbStyle(slide) {
       const url = this.resolvedImages[slide.imagem];
-      const style = { background: slide.cor_fundo };
+      // Miniatura da lista lateral só -- cor_fundo agora pode vir em branco
+      // (.slja importado/tocado direto, ver SljaConverter#parseSlja) pra
+      // valer a personalização de verdade na projeção; aqui é só um preview,
+      // cai num cinza neutro em vez de fundo nenhum.
+      const style = { background: slide.cor_fundo || "#222" };
       if (url) {
         style.backgroundImage = `linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.5)), url(${url})`;
         style.backgroundSize = "cover";
