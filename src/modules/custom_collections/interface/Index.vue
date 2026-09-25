@@ -17,6 +17,7 @@
         <v-tabs v-model="tab" density="compact" color="primary">
           <v-tab value="songs">{{ t('tabs.songs') }}</v-tab>
           <v-tab value="collections">{{ t('tabs.collections') }}</v-tab>
+          <v-tab value="search">{{ t('tabs.search') }}</v-tab>
         </v-tabs>
         <v-spacer />
         <template v-if="tab === 'songs'">
@@ -27,7 +28,7 @@
             <v-icon size="15">mdi-import</v-icon> {{ t('actions.import') }}
           </button>
         </template>
-        <template v-else>
+        <template v-else-if="tab === 'collections'">
           <button class="cc-btn" @click="actNewCollection">
             <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_collection') }}
           </button>
@@ -79,7 +80,7 @@
     </div>
 
     <!-- ── Aba: Coletâneas ───────────────────────────────────────────────── -->
-    <div v-else class="cc-collections">
+    <div v-else-if="tab === 'collections'" class="cc-collections">
       <div class="cc-collections-list">
         <div v-if="!collections.length" class="cc-empty">{{ t('data.empty_collections') }}</div>
         <div
@@ -215,6 +216,65 @@
       </div>
     </div>
 
+    <!-- ── Aba: Buscar (todas as coletâneas de uma vez) ───────────────────── -->
+    <div v-else class="cc-search">
+      <div class="cc-search-bar">
+        <input v-model="searchQuery" class="cc-input cc-search-input" :placeholder="t('actions.search_placeholder')" autofocus />
+        <div class="cc-search-filters">
+          <button
+            class="cc-filter-chip"
+            :class="{ 'is-active': searchFilters.includes('name') }"
+            @click="toggleSearchFilter('name')"
+          >
+            <v-icon size="13">{{ searchFilters.includes('name') ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
+            {{ t('labels.filter_collection_name') }}
+          </button>
+          <button
+            class="cc-filter-chip"
+            :class="{ 'is-active': searchFilters.includes('songs') }"
+            @click="toggleSearchFilter('songs')"
+          >
+            <v-icon size="13">{{ searchFilters.includes('songs') ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
+            {{ t('labels.filter_song_name') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!searchQuery.trim()" class="cc-empty">{{ t('data.search_hint') }}</div>
+      <div v-else-if="!searchResults.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
+      <div v-else class="cc-search-results">
+        <div
+          v-for="r in searchResults"
+          :key="`${r.collection.id}-${r.item.type}-${r.item.id}`"
+          class="cc-collection-song-row cc-search-result-row"
+          @click="apresentar(r.item)"
+        >
+          <v-icon
+            size="13"
+            class="cc-song-type-icon"
+            :title="r.item.type === 'official' ? t('labels.official_catalog') : t('labels.my_songs')"
+          >
+            {{ r.item.type === 'official' ? 'mdi-cloud-outline' : 'mdi-account-music-outline' }}
+          </v-icon>
+          <div class="cc-collection-song-name" :title="r.item.nome">
+            {{ r.item.nome }}
+            <span class="cc-search-result-collection">{{ r.collection.nome }}</span>
+          </div>
+          <div class="d-flex flex-nowrap" @click.stop>
+            <MusicMenuTable
+              v-if="r.item.type === 'official'"
+              :id_music="r.item.id"
+              :has_instrumental_music="r.item.has_instrumental_music"
+            />
+            <template v-else>
+              <v-btn variant="text" icon="mdi-play-box-multiple" density="compact" class="mx-1" :title="t('actions.present')" @click="apresentar(r.item)" />
+              <v-btn variant="text" icon="mdi-pencil" density="compact" class="mx-1" :title="t('actions.edit')" @click="editar(r.item)" />
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Diálogo: Adicionar música (própria ou do catálogo oficial) ────── -->
     <v-dialog v-model="addSongDialog" max-width="480" scrollable>
       <v-card>
@@ -301,6 +361,10 @@ export default {
     officialMusicsLoading: false,
     addSongDialog: false,
     addSongSearch: '',
+    // Aba "Buscar" — busca por nome da coletânea e/ou nome da música em
+    // todas as coletâneas de uma vez (ver computed "searchResults" abaixo).
+    searchQuery: '',
+    searchFilters: ['name', 'songs'],
     // Cache de URL (file://) da capa de cada coletânea (ver
     // resolveCollectionCovers) — mesmo padrão de "previewImages" acima.
     collectionCovers: {},
@@ -363,6 +427,31 @@ export default {
         .filter((m) => !has.has(Number(m.id_music)))
         .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
         .slice(0, 60);
+    },
+    // Aba "Buscar" — mesma lógica de busca combinada (nome da coletânea e/ou
+    // nome da música) usada no módulo de coletâneas oficiais do flute-app,
+    // aqui varrendo todas as coletâneas próprias de uma vez em vez de precisar
+    // abrir uma por uma na aba "Coletâneas".
+    searchResults() {
+      const q = this.$string.clean((this.searchQuery || '').trim());
+      if (!q) return [];
+      const results = [];
+      const seen = new Set();
+      for (const c of this.collections) {
+        const collectionMatches = this.searchFilters.includes('name') && this.$string.clean(c.nome || '').includes(q);
+        for (const rawItem of c.items) {
+          const item = this.resolveCollectionItem(rawItem);
+          if (!item) continue;
+          const key = `${c.id}:${item.type}:${item.id}`;
+          if (seen.has(key)) continue;
+          const songMatches = this.searchFilters.includes('songs') && this.$string.clean(item.nome || '').includes(q);
+          if (collectionMatches || songMatches) {
+            seen.add(key);
+            results.push({ item, collection: c });
+          }
+        }
+      }
+      return results;
     },
     // Mesmo padrão de modules/core/album/interface/Index.vue (playingAll) —
     // detecta o operador fechando manualmente o player (oficial ou próprio)
@@ -500,6 +589,7 @@ export default {
           id: Number(item.id),
           nome: m?.name || item.nome || '?',
           albums_names: m?.albums_names || '',
+          has_instrumental_music: m?.has_instrumental_music || false,
         };
       }
       const s = this.songs.find((song) => song.id === item.id);
@@ -522,6 +612,16 @@ export default {
       } finally {
         this.officialMusicsLoading = false;
       }
+    },
+
+    toggleSearchFilter(filter) {
+      if (this.searchFilters.includes(filter)) {
+        if (this.searchFilters.length > 1) {
+          this.searchFilters = this.searchFilters.filter((f) => f !== filter);
+        }
+        return;
+      }
+      this.searchFilters = [...this.searchFilters, filter];
     },
 
     askName(title, defaultValue) {
@@ -1084,6 +1184,66 @@ export default {
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Aba Buscar ───────────────────────────────────────────────────────── */
+.cc-search {
+  padding: 12px 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cc-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.cc-search-input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.cc-search-filters {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cc-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cc-filter-chip:hover { background: rgba(var(--v-theme-on-surface), 0.06); }
+.cc-filter-chip.is-active {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+.cc-search-results {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.cc-search-result-row { cursor: pointer; }
+.cc-search-result-collection {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.55;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

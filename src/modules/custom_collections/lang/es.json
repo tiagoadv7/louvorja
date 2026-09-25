@@ -2,7 +2,8 @@
   "title": "Colecciones Personalizadas",
   "tabs": {
     "songs": "Mis Canciones",
-    "collections": "Colecciones"
+    "collections": "Colecciones",
+    "search": "Buscar"
   },
   "actions": {
     "new_song": "Nueva Canción",
@@ -29,7 +30,9 @@
     "audio": "con audio",
     "slides": "diapositiva(s)",
     "my_songs": "Mis canciones",
-    "official_catalog": "Catálogo oficial"
+    "official_catalog": "Catálogo oficial",
+    "filter_collection_name": "Nombre de la colección",
+    "filter_song_name": "Nombre de la canción"
   },
   "data": {
     "empty_songs": "Ninguna canción personal. Créala en el Editor de Canciones o importa un .slja.",
@@ -39,6 +42,7 @@
     "confirm_delete_song": "¿Eliminar esta canción? Esta acción no se puede deshacer.",
     "confirm_delete_collection": "¿Eliminar esta colección? Las canciones seguirán disponibles en \"Mis Canciones\".",
     "name_placeholder": "Nombre de la colección",
-    "empty_search_results": "Ninguna canción encontrada"
+    "empty_search_results": "Ninguna canción encontrada",
+    "search_hint": "Escribe para buscar en todas tus colecciones"
   }
 }
