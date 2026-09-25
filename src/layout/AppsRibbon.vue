@@ -1,5 +1,8 @@
 <template>
-  <v-card flat :rounded="0">
+  <!-- rounded="t-xl" + overflow-hidden: mesmo padrão de CustomizationBar.vue
+       -- sem o overflow-hidden, o fundo do v-sheet/v-tabs-window (retos)
+       vaza por cima do canto arredondado do v-card, anulando o arredondado. -->
+  <v-card flat rounded="t-xl" class="overflow-hidden">
     <v-sheet color="red">
       <v-tabs v-model="tab" :bg-color="$theme.primary()" :border="0">
         <v-tab
@@ -8,6 +11,7 @@
           :value="group_key"
           v-show="countModules(group.modules) != 0"
           show-arrows
+          rounded="lg"
           class="px-8"
         >
           <v-icon v-if="group.icon" size="18" start>{{ group.icon }}</v-icon>
