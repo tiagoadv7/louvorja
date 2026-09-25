@@ -17,6 +17,7 @@
     "remove_from_collection": "Quitar de la colección",
     "add_to_collection": "Agregar canción",
     "search_placeholder": "Buscar canción...",
+    "search_collections_placeholder": "Buscar colección...",
     "play_all": "Reproducir todo",
     "stop_all": "Detener",
     "previous": "Canción anterior",

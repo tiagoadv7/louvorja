@@ -14,22 +14,43 @@
   >
     <template v-slot:header>
       <div class="cc-header">
-        <v-tabs v-model="tab" density="compact" color="primary">
-          <v-tab value="songs">{{ t('tabs.songs') }}</v-tab>
-          <v-tab value="collections">{{ t('tabs.collections') }}</v-tab>
-          <v-tab value="search">{{ t('tabs.search') }}</v-tab>
-        </v-tabs>
-        <v-spacer />
+        <!-- Alternador em pílulas (não um v-tabs de verdade) -- pegada do
+             flute-app, que não mostra abas assim; cada "área" (Músicas/
+             Coletâneas/Buscar) continua existindo, só a navegação entre elas
+             fica discreta pra dar lugar à busca central + botão de ação. -->
+        <div class="cc-segmented">
+          <button
+            v-for="opt in tabOptions" :key="opt.value"
+            class="cc-seg-btn"
+            :class="{ 'is-active': tab === opt.value }"
+            :title="opt.label"
+            @click="tab = opt.value"
+          >
+            <v-icon size="16">{{ opt.icon }}</v-icon>
+            <span class="cc-seg-label">{{ opt.label }}</span>
+          </button>
+        </div>
+
+        <div v-if="tab !== 'search'" class="cc-header-search">
+          <v-icon size="18" class="cc-header-search-icon">mdi-magnify</v-icon>
+          <input
+            v-model="headerSearchQuery"
+            class="cc-header-search-input"
+            :placeholder="tab === 'songs' ? t('actions.search_placeholder') : t('actions.search_collections_placeholder')"
+          />
+        </div>
+        <v-spacer v-else />
+
         <template v-if="tab === 'songs'">
-          <button class="cc-btn" @click="actNewSong">
+          <button class="cc-btn cc-btn-pill" @click="actNewSong">
             <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_song') }}
           </button>
-          <button class="cc-btn cc-btn-outline" @click="actImport">
+          <button class="cc-btn cc-btn-outline cc-btn-pill" @click="actImport">
             <v-icon size="15">mdi-import</v-icon> {{ t('actions.import') }}
           </button>
         </template>
         <template v-else-if="tab === 'collections'">
-          <button class="cc-btn" @click="actNewCollection">
+          <button class="cc-btn cc-btn-pill" @click="actNewCollection">
             <v-icon size="15">mdi-plus</v-icon> {{ t('actions.new_collection') }}
           </button>
         </template>
@@ -39,9 +60,10 @@
     <!-- ── Aba: Minhas Músicas ───────────────────────────────────────────── -->
     <div v-if="tab === 'songs'" class="cc-songs">
       <div v-if="!songs.length" class="cc-empty">{{ t('data.empty_songs') }}</div>
+      <div v-else-if="!visibleSongs.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
       <div v-else class="cc-song-grid">
         <div
-          v-for="s in songs" :key="s.id"
+          v-for="s in visibleSongs" :key="s.id"
           class="cc-song-card"
           :title="t('actions.present')"
           @click="apresentar(s)"
@@ -89,8 +111,9 @@
       <!-- GRADE: nenhuma coletânea aberta -->
       <div v-if="!selectedCollection" class="cc-collection-grid">
         <div v-if="!collections.length" class="cc-empty">{{ t('data.empty_collections') }}</div>
+        <div v-else-if="!visibleCollections.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
         <div
-          v-for="c in collections" :key="c.id"
+          v-for="c in visibleCollections" :key="c.id"
           class="cc-collection-card"
           :title="c.nome"
           @click="selectedCollectionId = c.id"
@@ -354,6 +377,11 @@ export default {
 
   data: () => ({
     tab: 'songs',
+    // Busca local do cabeçalho (ver "cc-header-search" no template) -- filtra
+    // a grade de "Minhas Músicas" ou de "Coletâneas" pelo nome, conforme a
+    // área ativa; some na aba "Buscar" (que já tem sua própria busca
+    // combinada entre coletâneas, ver "searchQuery"/"searchResults" abaixo).
+    headerSearchQuery: '',
     songs: [],
     collections: [],
     selectedCollectionId: null,
@@ -433,6 +461,27 @@ export default {
         .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
         .slice(0, 60);
     },
+    // Alternador em pílulas do cabeçalho (ver "cc-segmented" no template) —
+    // ícone/rótulo de cada área, na mesma ordem das antigas abas.
+    tabOptions() {
+      return [
+        { value: 'songs', icon: 'mdi-music-note', label: this.t('tabs.songs') },
+        { value: 'collections', icon: 'mdi-folder-music-outline', label: this.t('tabs.collections') },
+        { value: 'search', icon: 'mdi-magnify', label: this.t('tabs.search') },
+      ];
+    },
+    // Busca local do cabeçalho — filtra a grade da área ativa (ver
+    // "headerSearchQuery" acima); nunca esconde nada quando vazia.
+    visibleSongs() {
+      const q = this.$string.clean((this.headerSearchQuery || '').trim());
+      if (!q) return this.songs;
+      return this.songs.filter((s) => this.$string.clean(s.nome || '').includes(q));
+    },
+    visibleCollections() {
+      const q = this.$string.clean((this.headerSearchQuery || '').trim());
+      if (!q) return this.collections;
+      return this.collections.filter((c) => this.$string.clean(c.nome || '').includes(q));
+    },
     // Aba "Buscar" — mesma lógica de busca combinada (nome da coletânea e/ou
     // nome da música) usada no módulo de coletâneas oficiais do flute-app,
     // aqui varrendo todas as coletâneas próprias de uma vez em vez de precisar
@@ -479,6 +528,12 @@ export default {
   watch: {
     show(open) {
       if (open) this.loadAll();
+    },
+    // Trocar de área (Músicas/Coletâneas/Buscar) some com a busca local do
+    // cabeçalho anterior -- senão o texto digitado numa área ficava
+    // filtrando (invisível) a outra, escondendo itens sem motivo aparente.
+    tab() {
+      this.headerSearchQuery = '';
     },
     // Trocar de coletânea no meio de "Reproduzir tudo" pararia de fazer
     // sentido (a fila era da coletânea anterior) — encerra a sequência.
@@ -976,6 +1031,62 @@ export default {
   border-color: rgba(var(--v-theme-error), 0.5);
 }
 .cc-btn-danger-outline:hover { background: rgba(var(--v-theme-error), 0.08); }
+
+/* ── Cabeçalho estilo flute: pílulas + busca central + botão grande ──── */
+.cc-btn-pill { border-radius: 999px; padding: 8px 16px; }
+
+.cc-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  flex-shrink: 0;
+}
+.cc-seg-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.cc-seg-btn:hover { color: rgb(var(--v-theme-on-surface)); }
+.cc-seg-btn.is-active {
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+}
+.cc-seg-label { line-height: 1; }
+
+.cc-header-search {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.cc-header-search-icon { opacity: 0.55; flex-shrink: 0; }
+.cc-header-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: inherit;
+  font-size: 13px;
+}
+.cc-header-search-input::placeholder { color: rgba(var(--v-theme-on-surface), 0.45); }
 
 .cc-icon-btn-static {
   background: rgba(var(--v-theme-on-surface), 0.08);
