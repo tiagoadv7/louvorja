@@ -1,8 +1,9 @@
 <template>
-  <!-- rounded="t-xl" + overflow-hidden: mesmo padrão de CustomizationBar.vue
-       -- sem o overflow-hidden, o fundo do v-sheet/v-tabs-window (retos)
-       vaza por cima do canto arredondado do v-card, anulando o arredondado. -->
-  <v-card flat rounded="t-xl" class="overflow-hidden">
+  <!-- Sem arredondado aqui no container -- com overflow-hidden pra bater o
+       canto, as setas de rolagem do v-tabs/v-slide-group (show-arrows)
+       ficavam cortadas de forma estranha bem na ponta. Arredondado só nos
+       elementos internos (abas e tiles dos módulos, ver rounded="lg" abaixo). -->
+  <v-card flat :rounded="0">
     <v-sheet color="red">
       <v-tabs v-model="tab" :bg-color="$theme.primary()" :border="0">
         <v-tab
