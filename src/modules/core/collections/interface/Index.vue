@@ -363,6 +363,14 @@ export default {
       this.categories.splice(insertAt, 0, category);
     },
     setCategory(id = null) {
+      // Clicar numa aba lateral (categoria) enquanto uma coletânea
+      // personalizada está aberta (ver viewingCollection) deve sair dela e
+      // mostrar a grade de álbuns da categoria clicada — igual clicar na
+      // seta de voltar (closeCustomCollection) — em vez de ficar preso na
+      // coletânea até o usuário clicar na seta manualmente.
+      if (this.viewingCollection) {
+        this.closeCustomCollection();
+      }
       this.id_category = id;
     },
     openAlbum(id_album) {
