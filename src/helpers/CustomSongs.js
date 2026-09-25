@@ -109,6 +109,39 @@ async function listSongs() {
   return songs.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
+// Músicas salvas ANTES da correção em newSlide() (ver comentário lá) têm
+// cor_letra/cor_fundo/tamanho_letra sempre preenchidos com esses valores
+// fixos antigos, mesmo em slides nunca tocados pelo operador -- então
+// "apertar o play" numa música salva antes dessa correção ainda mostrava
+// o padrão do editor, não o Fundo Personalizado (slide_bg), diferente de
+// uma música nova. Aqui, na LEITURA (sem reescrever o arquivo), trata um
+// valor que bate exatamente com o antigo default como "nunca customizado"
+// e limpa pra valer o Fundo Personalizado — mesmo raciocínio de
+// SljaConverter#parseSlja. Só apaga o valor quando bate com o default
+// exato; qualquer cor/tamanho realmente escolhido pelo operador (ainda que
+// coincida por acaso) seria raro o bastante pra não valer a pena distinguir.
+const OLD_DEFAULT_COR_FUNDO = "#000000";
+const OLD_DEFAULT_COR_LETRA_AUX = "#efb400";
+const OLD_DEFAULT_TAMANHO_LETRA_AUX = 10;
+function clearsOldSlideDefaults(slide) {
+  if (!slide) return slide;
+  const isCapa = slide.tipo === "CAPA";
+  const oldCorLetra = isCapa ? "#efb400" : "#FFFFFF";
+  const oldTamanhoLetra = isCapa ? 18 : 14;
+  return {
+    ...slide,
+    cor_letra: slide.cor_letra === oldCorLetra ? "" : slide.cor_letra,
+    cor_letra_aux: slide.cor_letra_aux === OLD_DEFAULT_COR_LETRA_AUX ? "" : slide.cor_letra_aux,
+    cor_fundo: slide.cor_fundo === OLD_DEFAULT_COR_FUNDO ? "" : slide.cor_fundo,
+    tamanho_letra: slide.tamanho_letra === oldTamanhoLetra ? null : slide.tamanho_letra,
+    tamanho_letra_aux: slide.tamanho_letra_aux === OLD_DEFAULT_TAMANHO_LETRA_AUX ? null : slide.tamanho_letra_aux,
+  };
+}
+function normalizeSong(song) {
+  if (!song || !Array.isArray(song.slides)) return song;
+  return { ...song, slides: song.slides.map(clearsOldSlideDefaults) };
+}
+
 async function getSong(id) {
   if (!id) return null;
   const jsonPath = joinPath(await songDir(id), "song.json");
@@ -116,7 +149,7 @@ async function getSong(id) {
   const raw = await $electron.readFile(jsonPath, "utf8");
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    return normalizeSong(JSON.parse(raw));
   } catch {
     return null;
   }
