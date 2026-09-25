@@ -1,6 +1,7 @@
 import $appdata from "@/helpers/AppData";
 import $popup from "@/helpers/Popup";
 import $modules from "@/helpers/Modules";
+import $electron from "@/helpers/Electron";
 
 // YouTube e Canva bloqueiam ser exibidos dentro de outra página (iframe) nos
 // seus links "normais" (X-Frame-Options / Content-Security-Policy) — só
@@ -111,6 +112,21 @@ function toPlain(v) {
 // API oficial do player do YouTube (postMessage) pra controlar isso, já que
 // o <video> real fica dentro de um iframe de outra origem, inacessível
 // diretamente por JS.
+// Progresso (currentTime/duration) vindo da janela de saída — canal dedicado
+// (ver electron/preload.js#sendWebLinkProgress, chamado por WebLinkFrame.vue,
+// e o handler 'web-link:progress' em electron/main.js). Registrado aqui, no
+// escopo do módulo (não dentro de um componente), porque este helper não tem
+// uma janela/módulo próprio sempre montado como o video_player tem (ver
+// interface/Index.vue de lá) — só o handler dedicado do IPC já resolve, sem
+// precisar de um componente vivo escutando. Só a janela principal recebe
+// esse evento de verdade (main.js já filtra o sender), então é seguro
+// registrar isso incondicionalmente aqui (roda também na janela de saída,
+// mas ela nunca recebe o evento).
+$electron.on("web-link:progress", ({ currentTime, duration }) => {
+  $appdata.set("modules.web_link.config.current_time", currentTime);
+  $appdata.set("modules.web_link.config.duration", duration);
+});
+
 export default {
   isYoutube(url) {
     return !!extractYoutubeVideoId(url);

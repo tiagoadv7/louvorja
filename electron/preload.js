@@ -18,6 +18,7 @@ const RECEIVE_CHANNELS = [
   'video-pip:stop',
   'video-pip:closed',
   'video-player:progress',
+  'web-link:progress',
   'menu:open-output',
   'menu:close-output',
   'menu:save-data',
@@ -164,6 +165,13 @@ contextBridge.exposeInMainWorld('electron', {
   // nunca voltam por ali, então a barra do rodapé/painel nunca sabiam o
   // tempo real de reprodução e ficavam parados em 0:00.
   sendVideoProgress: (data) => ipcRenderer.send('video-player:progress', data),
+  // Mesmo canal dedicado acima, só que pro link do YouTube (WebLinkFrame.vue)
+  // -- mesmo problema: a janela de saída (is_popup=true) faz polling do
+  // tempo do player (a IFrame API não emite "timeupdate"), mas escrever no
+  // appdata genérico de lá nunca chegava na janela principal, então a barra
+  // do rodapé/aba "Online" nunca mostravam tempo nem deixavam arrastar pra
+  // buscar um ponto do vídeo.
+  sendWebLinkProgress: (data) => ipcRenderer.send('web-link:progress', data),
 
   // ── Sistema ───────────────────────────────────────────────────────────────
   getHostname: () => ipcRenderer.invoke('app:hostname'),

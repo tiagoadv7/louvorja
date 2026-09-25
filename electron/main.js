@@ -943,6 +943,13 @@ function registerIpcHandlers() {
       mainWindow.webContents.send('video-player:progress', data);
     }
   });
+  // Mesmo canal acima, só que pro link do YouTube (ver WebLinkFrame.vue/
+  // preload.js#sendWebLinkProgress).
+  ipcMain.on('web-link:progress', (event, data) => {
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('web-link:progress', data);
+    }
+  });
 
   // data.target (opcional): sincronização completa pedida por UMA janela
   // específica (ver 'output:ready' abaixo) — vai só pra ela. Sem isso, o

@@ -232,8 +232,17 @@ export default {
       clearInterval(this._progressInterval);
       this._progressInterval = setInterval(() => {
         if (!this.player || !this._playerReady) return;
-        this.$appdata.set('modules.web_link.config.current_time', this.player.getCurrentTime?.() || 0);
-        this.$appdata.set('modules.web_link.config.duration', this.player.getDuration?.() || 0);
+        const currentTime = this.player.getCurrentTime?.() || 0;
+        const duration = this.player.getDuration?.() || 0;
+        // Escreve local (cobre o caso raro de não ser popup, ex.: preview em
+        // dev) e manda pelo canal dedicado (ver helpers/WebLink.js) — é o
+        // canal dedicado que de fato chega na janela principal; a escrita
+        // direta em appdata daqui (is_popup=true) nunca volta por IPC (ver
+        // AppData.js), então sozinha deixava a barra do rodapé/aba "Online"
+        // sempre em 0:00 e sem permitir arrastar pra buscar o tempo.
+        this.$appdata.set('modules.web_link.config.current_time', currentTime);
+        this.$appdata.set('modules.web_link.config.duration', duration);
+        this.$electron.sendWebLinkProgress({ currentTime, duration });
       }, 500);
     },
 
@@ -314,6 +323,11 @@ export default {
     _closeWithFade() {
       if (!this.player || !this._playerReady) return;
       clearInterval(this._fadeInterval);
+      // "isFading" (LOCAL, não o de appdata abaixo) é o que de fato dispara o
+      // fade visual — liga a classe "wl-iframe--fading" no template (ver
+      // :class logo no topo). Sem isso, só o volume esmaecia; a tela cortava
+      // seca no instante em que a janela era destruída 400ms depois.
+      this.isFading = true;
       const DURATION = 400;
       const INTERVAL = 40;
       const steps = Math.max(1, Math.round(DURATION / INTERVAL));
@@ -327,8 +341,17 @@ export default {
         if (n >= steps) {
           clearInterval(this._fadeInterval);
           this._fadeInterval = null;
-          this.$appdata.set('modules.web_link.config.isFading', false);
           try { this.player.pauseVideo(); } catch { /* */ }
+          // Mesma limpeza de estado de _fadeOutAndStop() -- sem isso, a barra
+          // minimizada do rodapé (Player.vue) continuava lendo um videoId
+          // "tocando" que não existe mais (a janela já foi destruída),
+          // ficando presa mostrando os controles de um vídeo encerrado.
+          this.$appdata.set('modules.web_link.config.isFading', false);
+          this.$appdata.set('modules.web_link.config.isPlaying', false);
+          this.$appdata.set('modules.web_link.config.url', '');
+          this.$appdata.set('modules.web_link.config.videoId', null);
+          this.$appdata.set('modules.web_link.config.current_time', 0);
+          this.$appdata.set('modules.web_link.config.duration', 0);
         }
       }, INTERVAL);
     },
