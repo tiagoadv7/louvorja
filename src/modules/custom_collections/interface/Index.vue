@@ -80,43 +80,49 @@
     </div>
 
     <!-- ── Aba: Coletâneas ───────────────────────────────────────────────── -->
+    <!-- Grade de cards (mesmo estilo/paridade visual da aba "Minhas Músicas"
+         acima) em vez da antiga lista+detalhe lado a lado -- clicar num card
+         abre a coletânea em tela cheia (ver "selectedCollection" abaixo),
+         com seta de voltar pra grade; nenhuma ação (renomear/excluir/trocar
+         capa/tocar tudo/arrastar) muda, só o layout de navegação. -->
     <div v-else-if="tab === 'collections'" class="cc-collections">
-      <div class="cc-collections-list">
+      <!-- GRADE: nenhuma coletânea aberta -->
+      <div v-if="!selectedCollection" class="cc-collection-grid">
         <div v-if="!collections.length" class="cc-empty">{{ t('data.empty_collections') }}</div>
         <div
           v-for="c in collections" :key="c.id"
-          class="cc-collection-item"
-          :class="{ 'is-active': selectedCollectionId === c.id }"
+          class="cc-collection-card"
+          :title="c.nome"
           @click="selectedCollectionId = c.id"
         >
-          <span
-            class="cc-color-dot"
+          <div
+            class="cc-collection-card-cover"
             :style="collectionCovers[c.id] ? { backgroundImage: `url(${collectionCovers[c.id]})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: c.cor }"
           >
-            <v-icon v-if="!collectionCovers[c.id]" size="14" color="rgba(255,255,255,0.75)">mdi-music</v-icon>
-          </span>
-          <div class="cc-collection-info">
-            <div class="cc-collection-name" :title="c.nome">{{ c.nome }}</div>
-            <div class="cc-collection-count">{{ c.items.length }} {{ t('labels.songs_count') }}</div>
-          </div>
-          <v-menu>
-            <template #activator="{ props }">
-              <button class="cc-icon-btn" v-bind="props" @click.stop>
-                <v-icon size="14">mdi-dots-vertical</v-icon>
+            <div class="cc-collection-card-actions">
+              <button class="cc-icon-btn" :title="t('actions.change_cover')" @click.stop="openCoverPickerFor(c)">
+                <v-icon size="14">mdi-camera-outline</v-icon>
               </button>
-            </template>
-            <v-list density="compact">
-              <v-list-item :title="t('actions.rename')" prepend-icon="mdi-rename-box" @click="renameCollection(c)" />
-              <v-list-item :title="t('actions.delete')" prepend-icon="mdi-delete" base-color="error" @click="confirmDeleteCollection(c)" />
-            </v-list>
-          </v-menu>
+              <button class="cc-icon-btn" :title="t('actions.rename')" @click.stop="renameCollection(c)">
+                <v-icon size="14">mdi-rename-box</v-icon>
+              </button>
+              <button class="cc-icon-btn" :title="t('actions.delete')" @click.stop="confirmDeleteCollection(c)">
+                <v-icon size="14">mdi-delete</v-icon>
+              </button>
+            </div>
+            <v-icon v-if="!collectionCovers[c.id]" size="42" color="rgba(255,255,255,0.55)">mdi-music-box-multiple</v-icon>
+          </div>
+          <div class="cc-collection-card-name" :title="c.nome">{{ c.nome }}</div>
+          <div class="cc-collection-card-sub">{{ c.items.length }} {{ t('labels.songs_count') }}</div>
         </div>
       </div>
 
-      <div class="cc-collection-body">
-        <div v-if="!selectedCollection" class="cc-empty">{{ t('data.select_collection') }}</div>
-        <template v-else>
-          <div class="cc-collection-body-head">
+      <!-- DETALHE: coletânea aberta -->
+      <div v-else class="cc-collection-body">
+        <div class="cc-collection-body-head">
+          <button class="cc-icon-btn cc-icon-btn-static cc-collection-back" :title="t('actions.back_to_collections')" @click="selectedCollectionId = null">
+            <v-icon size="16">mdi-arrow-left</v-icon>
+          </button>
             <div
               class="cc-collection-cover"
               :style="collectionCovers[selectedCollection.id] ? { backgroundImage: `url(${collectionCovers[selectedCollection.id]})` } : { background: selectedCollection.cor }"
@@ -212,7 +218,6 @@
               </div>
             </template>
           </draggable>
-        </template>
       </div>
     </div>
 
@@ -772,6 +777,13 @@ export default {
     actSetCollectionCover() {
       this.$refs.fileCollectionCover?.click();
     },
+    // Atalho pro botão de câmera no card da grade (ver aba "Coletâneas" no
+    // template) -- seleciona a coletânea do card clicado antes de abrir o
+    // seletor de arquivo, sem precisar entrar no detalhe primeiro.
+    openCoverPickerFor(c) {
+      this.selectedCollectionId = c.id;
+      this.actSetCollectionCover();
+    },
     async onPickCollectionCover(e) {
       const file = e.target.files[0];
       e.target.value = '';
@@ -1054,55 +1066,68 @@ export default {
 
 /* ── Aba Coletâneas ──────────────────────────────────────────────────── */
 .cc-collections {
-  display: flex;
   height: 100%;
-}
-.cc-collections-list {
-  width: 240px;
-  flex-shrink: 0;
   overflow-y: auto;
-  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
-.cc-collection-item {
+/* Grade de cards -- mesma paridade visual da grade de "Minhas Músicas"
+   (.cc-song-grid/.cc-song-card acima) e do estilo do flute-app. */
+.cc-collection-grid {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
-  border-radius: 6px;
-  transition: background 0.1s;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 16px;
 }
-.cc-collection-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
-.cc-collection-item.is-active { background: rgba(var(--v-theme-primary), 0.12); }
-.cc-color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background-size: cover;
-  background-position: center;
+.cc-collection-card {
+  width: 170px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.cc-collection-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+.cc-collection-card-cover {
+  position: relative;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
 }
-.cc-collection-info { flex: 1; min-width: 0; }
-.cc-collection-name {
+.cc-collection-card-actions {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 3px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cc-collection-card:hover .cc-collection-card-actions { opacity: 1; }
+.cc-collection-card-name {
+  padding: 8px 10px 0;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cc-collection-count {
+.cc-collection-card-sub {
+  padding: 2px 10px 8px;
   font-size: 11px;
   color: rgba(var(--v-theme-on-surface), 0.55);
 }
+.cc-collection-back { flex-shrink: 0; }
 
 .cc-collection-body {
-  flex: 1;
-  min-width: 0;
+  height: 100%;
   padding: 12px 16px;
   overflow-y: auto;
 }

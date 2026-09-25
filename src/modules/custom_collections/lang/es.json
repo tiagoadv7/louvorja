@@ -22,7 +22,8 @@
     "previous": "Canción anterior",
     "next": "Siguiente canción",
     "change_cover": "Cambiar portada",
-    "remove_cover": "Quitar portada"
+    "remove_cover": "Quitar portada",
+    "back_to_collections": "Volver a las colecciones"
   },
   "labels": {
     "name": "Nombre",

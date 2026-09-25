@@ -335,6 +335,7 @@ import CustomSongs from "@/helpers/CustomSongs";
 import SljaConverter from "@/helpers/SljaConverter";
 import ImageConvert from "@/helpers/ImageConvert";
 import CustomSongsPlayback from "@/helpers/CustomSongsPlayback";
+import $audioBus from "@/helpers/AudioBus";
 
 export default {
   name: "SlideEditorModule",
@@ -1185,6 +1186,9 @@ export default {
         });
         return;
       }
+      // Avisa media/soundmaster/video_player pra pararem — sem isso, o áudio
+      // de uma música própria tocava junto com o que já estivesse ativo lá.
+      $audioBus.requestFocus("slide_editor");
       // Seek pro tempo do slide atual antes de iniciar (paridade Delphi).
       const slide = this.activeSlide;
       if (slide && slide.tempo_seconds > 0) el.currentTime = slide.tempo_seconds;
@@ -1288,12 +1292,35 @@ export default {
       this.$modules.open(this.module_id);
       this.$popup.open(this.module_id);
     });
+
+    // Outro dono de áudio (media, soundmaster, video_player) começou a tocar
+    // -- encerra com fade, mesmo efeito de "terminar a música" que Media.js
+    // já faz do lado oficial (ver $audioBus.listen("media", ...)). Sem isso,
+    // apresentar uma música própria (ex.: coletânea personalizada) e depois
+    // tocar outro áudio/vídeo deixava as duas trilhas tocando juntas. Em modo
+    // apresentação, encerra a projeção de vez (igual CustomSongsPlayback.
+    // stopAndClose acima); fora dele (editando), só pausa o áudio, sem fechar
+    // o editor embaixo do operador.
+    this._audioFocusHandler = $audioBus.listen("slide_editor", () => {
+      const el = this.$refs.audioEl;
+      if (!el || el.paused) return;
+      const savedVolume = el.volume;
+      this.fadeVolume(el, savedVolume, 0, 250, () => {
+        el.pause();
+        el.volume = savedVolume;
+        if (this.presentationMode) {
+          this.$modules.close(this.module_id);
+          this.$popup.close();
+        }
+      });
+    });
   },
   beforeUnmount() {
     clearTimeout(this._projTimer);
     clearInterval(this._fadeTimer);
     if (this._keyHandler) window.removeEventListener("keydown", this._keyHandler);
     if (this._openFileHandler) this.$electron.off("open-slja-file", this._openFileHandler);
+    $audioBus.unlisten(this._audioFocusHandler);
   },
 };
 </script>

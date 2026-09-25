@@ -22,7 +22,8 @@
     "previous": "Música anterior",
     "next": "Próxima música",
     "change_cover": "Alterar capa",
-    "remove_cover": "Remover capa"
+    "remove_cover": "Remover capa",
+    "back_to_collections": "Voltar pras coletâneas"
   },
   "labels": {
     "name": "Nome",
