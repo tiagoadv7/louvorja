@@ -427,7 +427,9 @@ function resolveOutputDisplay(displayId) {
   const savedBounds  = displayId ? null : Store.get('output_display_bounds');
 
   let target = findSavedDisplay(allDisplays, targetId, savedBounds);
+  let usedFallback = false;
   if (!target) {
+    usedFallback = true;
     if (targetId) {
       console.warn(`[Display] Monitor de saída salvo (id ${targetId}) não encontrado — usando fallback.`);
       sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'output' });
@@ -435,13 +437,20 @@ function resolveOutputDisplay(displayId) {
     target = largestExternalDisplay(allDisplays, primary) || primary;
   }
 
-  // Sempre grava o monitor de fato usado (escolhido, reconhecido por bounds
-  // OU fallback) — não só quando há uma escolha explícita. É essa memória
-  // (id + bounds, mesmo critério de findSavedDisplay) que o boot usa pra
-  // "reconhecer" o mesmo arranjo de monitores da vez anterior (ver
-  // ipcMain.once('app:loaded')) e decidir se restaura a projeção sozinho.
-  Store.set('output_display_id', target.id);
-  Store.set('output_display_bounds', target.bounds);
+  // Grava o monitor escolhido (explícito) OU reconhecido como o mesmo salvo
+  // (por id/bounds) — é essa memória que o boot usa pra "reconhecer" o mesmo
+  // arranjo de monitores da vez anterior (ver ipcMain.once('app:loaded')) e
+  // decidir se restaura a projeção sozinho. NUNCA grava quando caiu no
+  // fallback (maior externo/primário) por não achar a salva — gravar aí
+  // sobrescrevia a memória do monitor externo com o primário sempre que a
+  // saída abria com só o monitor principal conectado, e mesmo depois do
+  // externo voltar o boot seguinte "reconhecia" o primário (que está sempre
+  // presente) em vez de continuar tentando achar o externo de novo — era
+  // isso que fazia a projeção ficar presa cobrindo a tela do operador.
+  if (!usedFallback) {
+    Store.set('output_display_id', target.id);
+    Store.set('output_display_bounds', target.bounds);
+  }
 
   return { target, isExternal: target.id !== primary.id };
 }
@@ -564,7 +573,9 @@ function resolveReturnDisplay(displayId) {
   const savedBounds = displayId ? null : Store.get('return_display_bounds');
 
   let target = findSavedDisplay(allDisplays, targetId, savedBounds);
+  let usedFallback = false;
   if (!target) {
+    usedFallback = true;
     if (targetId) {
       console.warn(`[Display] Monitor de retorno salvo (id ${targetId}) não encontrado — usando fallback.`);
       sendToRenderer('output-display-not-found', { savedId: targetId, kind: 'return' });
@@ -572,10 +583,14 @@ function resolveReturnDisplay(displayId) {
     target = largestExternalDisplay(allDisplays, primary) || primary;
   }
 
-  // Sempre grava o monitor de fato usado — mesmo motivo de resolveOutputDisplay
-  // (permite ao boot reconhecer o mesmo arranjo de monitores da vez anterior).
-  Store.set('return_display_id', target.id);
-  Store.set('return_display_bounds', target.bounds);
+  // Grava só quando é escolha explícita ou reconhecida como a mesma salva —
+  // nunca no fallback (mesmo motivo de resolveOutputDisplay, ver comentário
+  // lá): gravar aí destruiria a memória do monitor externo assim que a
+  // janela de retorno abrisse com ele desconectado.
+  if (!usedFallback) {
+    Store.set('return_display_id', target.id);
+    Store.set('return_display_bounds', target.bounds);
+  }
 
   return { target };
 }
