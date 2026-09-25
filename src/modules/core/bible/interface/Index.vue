@@ -257,7 +257,7 @@
               </v-list>
             </div>
             <div style="height: 48px">
-              <v-toolbar density="compact">
+              <v-toolbar density="compact" rounded="lg">
                 <v-spacer />
                 <v-divider vertical />
                 <v-btn

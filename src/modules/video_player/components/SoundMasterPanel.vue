@@ -60,15 +60,22 @@
     <v-expand-transition>
       <div v-if="showSettings" class="sm-settings">
         <v-row dense>
-          <v-col cols="4">
+          <v-col cols="3">
             <v-text-field v-model.number="fadeInMs" type="number" min="0" max="5000" step="100"
               label="Fade In (ms)" density="compact" variant="outlined" hide-details />
           </v-col>
-          <v-col cols="4">
+          <v-col cols="3">
+            <v-text-field
+              v-model.number="crossFadeMs" type="number" min="0" max="8000" step="100"
+              label="Cross Fade (ms)" density="compact" variant="outlined" hide-details
+              title="Duração do crossfade ao trocar de uma faixa pra outra enquanto uma já está tocando"
+            />
+          </v-col>
+          <v-col cols="3">
             <v-text-field v-model.number="fadeOutMs" type="number" min="0" max="8000" step="100"
               label="Fade Out (ms)" density="compact" variant="outlined" hide-details />
           </v-col>
-          <v-col cols="4">
+          <v-col cols="3">
             <div class="sm-setting-label">Atenuação: {{ Math.round(duckingLevel * 100) }}%</div>
             <v-slider v-model="duckingLevel" min="0" max="1" step="0.05"
               hide-details density="compact" color="primary" />
@@ -250,6 +257,11 @@ export default {
     isTalkover:    false,
     fadeInMs:      1200,
     fadeOutMs:     2500,
+    // Duração do crossfade real ao trocar de um pad principal pra outro
+    // enquanto o anterior ainda está tocando (ver playMain) -- distinta de
+    // fadeInMs/fadeOutMs, que continuam valendo pro início "a frio" (nada
+    // tocando antes) e pro Parar/Pausar (ver togglePlay/stopMain).
+    crossFadeMs:   1500,
     duckingLevel:  0.15,
     activeMainId:  null,
     // Reprodução externa (ex.: áudio da Liturgia) — usa a mesma engine/config
@@ -420,6 +432,7 @@ export default {
   mounted() {
     this.fadeInMs     = this.userdata.fade_in_ms    ?? 1200;
     this.fadeOutMs    = this.userdata.fade_out_ms   ?? 2500;
+    this.crossFadeMs  = this.userdata.cross_fade_ms ?? 1500;
     this.duckingLevel = this.userdata.ducking_level ?? 0.15;
     this.masterVolume = this.userdata.master_volume ?? 1.0;
 
@@ -681,15 +694,21 @@ export default {
       // tocando junto com o pad da coletânea.
       $audioBus.requestFocus('soundmaster');
 
-      // Crossfade: fade out o audio anterior enquanto o novo entra
-      const outAudio = this._mainAudio;
-      const outId    = this.activeMainId;
+      // Crossfade de verdade: faixa anterior já tocando -> fade out dela E
+      // fade in da nova se sobrepõem pela MESMA duração (crossFadeMs), em vez
+      // de fadeOutMs/fadeInMs (que continuam valendo só pro início "a frio" e
+      // pro Parar/Pausar, ver togglePlay/stopMain) — sem isso, cada lado
+      // esvanecia numa duração diferente e cortada (fadeOutMs limitado a
+      // 1200ms), sem soar como um crossfade real entre as duas faixas.
+      const outAudio     = this._mainAudio;
+      const outId        = this.activeMainId;
+      const isCrossfade  = !!outAudio && !outAudio.paused;
       if (outAudio) {
         const outKey = `main_out_${outId}`;
         clearInterval(this._fades['main']); // cancela fade anterior no slot 'main'
-        if (this.fadeOutMs > 0 && !outAudio.paused) {
+        if (isCrossfade && this.crossFadeMs > 0) {
           // Fade out independente (não bloqueia o novo)
-          this.fade(outKey, outAudio, outAudio.volume, 0, Math.min(this.fadeOutMs, 1200), () => {
+          this.fade(outKey, outAudio, outAudio.volume, 0, this.crossFadeMs, () => {
             outAudio.pause(); outAudio.src = '';
           });
         } else {
@@ -714,8 +733,9 @@ export default {
         }
       });
 
+      const fadeInDuration = isCrossfade && this.crossFadeMs > 0 ? this.crossFadeMs : this.fadeInMs;
       audio.play().then(() => {
-        this.fade('main', audio, 0, this.effVol(pad.volume, true), this.fadeInMs);
+        this.fade('main', audio, 0, this.effVol(pad.volume, true), fadeInDuration);
         clearInterval(this._ticker);
         this._ticker = setInterval(() => this.tick(), 200);
       }).catch(() => {
@@ -817,7 +837,7 @@ export default {
       return {
         version: '1.0',
         createdAt: new Date().toISOString(),
-        settings: { fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs, duckingLevel: this.duckingLevel, masterVolume: this.masterVolume },
+        settings: { fadeInMs: this.fadeInMs, crossFadeMs: this.crossFadeMs, fadeOutMs: this.fadeOutMs, duckingLevel: this.duckingLevel, masterVolume: this.masterVolume },
         mainPads: this.mainPads.map(p => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
         fxPads:   this.fxPads.map(p  => ({ id: p.id, name: p.name, filePath: p.filePath, volume: p.volume, isLooping: p.isLooping })),
       };
@@ -825,6 +845,7 @@ export default {
     _applySnapshot(data) {
       if (data.settings) Object.assign(this, {
         fadeInMs:     data.settings.fadeInMs     ?? this.fadeInMs,
+        crossFadeMs:  data.settings.crossFadeMs  ?? this.crossFadeMs,
         fadeOutMs:    data.settings.fadeOutMs    ?? this.fadeOutMs,
         duckingLevel: data.settings.duckingLevel ?? this.duckingLevel,
         masterVolume: data.settings.masterVolume ?? this.masterVolume,
@@ -861,6 +882,7 @@ export default {
       });
       if (!name) return;
       this.userdata.fade_in_ms    = this.fadeInMs;
+      this.userdata.cross_fade_ms = this.crossFadeMs;
       this.userdata.fade_out_ms   = this.fadeOutMs;
       this.userdata.ducking_level = this.duckingLevel;
       const snapshot = this._buildSnapshot();

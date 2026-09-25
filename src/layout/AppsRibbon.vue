@@ -29,7 +29,7 @@
           >
             <v-card
               flat
-              :rounded="0"
+              rounded="lg"
               v-if="
                 (module.language
                   ? module.language == language
