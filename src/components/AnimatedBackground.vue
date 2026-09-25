@@ -65,19 +65,6 @@
         }"
       />
     </div>
-    <div v-else-if="variant === 'cadentes'" class="anim-bg-layer anim-bg-meteors">
-      <span
-        v-for="(m, i) in meteorDefs" :key="i"
-        class="anim-bg-meteor"
-        :style="{
-          top: `${m.top}%`, left: `${m.left}%`,
-          animationDelay: `${m.delay}s`, animationDuration: `${m.duration}s`,
-        }"
-      />
-    </div>
-    <div v-else-if="variant === 'chuva'" class="anim-bg-layer anim-bg-rain">
-      <div ref="rainLayer" class="anim-bg-rain-drops" />
-    </div>
     <div v-else-if="variant === 'neblina'" class="anim-bg-layer anim-bg-fog">
       <span class="anim-bg-fog-band anim-bg-fog-band--1" />
       <span class="anim-bg-fog-band anim-bg-fog-band--2" />
@@ -117,8 +104,6 @@
 //   fumaca   → CSS puro: manchas com border-radius mudando (fumaça/tinta)
 //   nuvens   → CSS puro: nuvens desfocadas deslizando horizontalmente
 //   vaga-lumes → CSS puro: pontos quentes vagando devagar, piscando (fireflies)
-//   cadentes → CSS puro: estrelas cadentes cruzando a tela de vez em quando
-//   chuva    → GSAP: linhas de chuva caindo em diagonal (grade repetida)
 //   neblina  → CSS puro: faixas de névoa largas e baixas, deslizando devagar
 //   liquido  → GSAP: manchas grandes sobrepostas (mix-blend) fluindo devagar
 //
@@ -177,16 +162,6 @@ export default {
       size: 3 + Math.random() * 3,
       delay: Math.random() * 8,
       duration: 6 + Math.random() * 6,
-    })),
-    // Estrelas cadentes — poucas (não é chuva de meteoros) e um ciclo bem
-    // mais longo/espalhado que fireflyDefs, pra cruzar a tela raramente,
-    // sem competir com o conteúdo. top/left = ponto de partida (canto
-    // superior esquerdo da diagonal), não posição fixa.
-    meteorDefs: Array.from({ length: 6 }, () => ({
-      top: Math.random() * 35,
-      left: Math.random() * 60,
-      delay: Math.random() * 20,
-      duration: 5 + Math.random() * 4,
     })),
   }),
   watch: {
@@ -251,10 +226,9 @@ export default {
       else if (this.variant === "neve") this._setupSnow();
       else if (this.variant === "raios") this._setupRays();
       else if (this.variant === "brasas") this._setupEmbers();
-      else if (this.variant === "chuva") this._setupRain();
       else if (this.variant === "liquido") this._setupLiquid();
-      // "estrelas"/"bokeh"/"fumaca"/"nuvens"/"vaga-lumes"/"cadentes"/"neblina"
-      // são só CSS (animação via @keyframes) — nada a inicializar.
+      // "estrelas"/"bokeh"/"fumaca"/"nuvens"/"vaga-lumes"/"neblina" são só
+      // CSS (animação via @keyframes) — nada a inicializar.
     },
     _teardown() {
       if (this._three) {
@@ -496,20 +470,6 @@ export default {
           easing: "linear",
           loop: true,
         });
-      });
-    },
-
-    // ── GSAP: linhas de chuva caindo em diagonal (grade repetida) ──────────
-    async _setupRain() {
-      const el = this.$refs.rainLayer;
-      if (!el) return;
-      const { gsap } = await import("gsap");
-      gsap.set(el, { backgroundPosition: "0px 0px" });
-      this._gsapTween = gsap.to(el, {
-        backgroundPosition: "-24px 130px",
-        duration: 0.7,
-        ease: "none",
-        repeat: -1,
       });
     },
 
@@ -828,57 +788,6 @@ export default {
   50%  { transform: translate(6%, -8%);    opacity: 0.25; }
   70%  { opacity: 0.8; }
   100% { transform: translate(-4%, 5%);    opacity: 0.12; }
-}
-
-/* Estrelas cadentes — poucas riscas de luz cruzando a tela em diagonal de
-   vez em quando (ver meteorDefs: ciclo longo/espalhado, não é chuva de
-   meteoros) — vmax na translação final pra cruzar proporcional à tela
-   inteira, não só ao tamanho do próprio elemento. */
-.anim-bg-meteors {
-  position: relative;
-  background: linear-gradient(180deg, #05060f 0%, #0b0f22 100%);
-}
-.anim-bg-meteor {
-  position: absolute;
-  width: 2px;
-  height: 85px;
-  border-radius: 2px;
-  filter: blur(0.5px);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--anim-color) 20%, white 80%), transparent);
-  opacity: 0;
-  animation-name: anim-bg-meteor-fall;
-  animation-timing-function: ease-in;
-  animation-iteration-count: infinite;
-}
-@keyframes anim-bg-meteor-fall {
-  0%   { transform: translate(-8vmax, -5vmax) rotate(25deg); opacity: 0; }
-  8%   { opacity: 0.85; }
-  40%  { opacity: 0.85; }
-  55%  { transform: translate(70vmax, 42vmax) rotate(25deg); opacity: 0; }
-  100% { transform: translate(70vmax, 42vmax) rotate(25deg); opacity: 0; }
-}
-
-/* Chuva — grade de linhas diagonais repetida (mesma técnica de "grade"/
-   synthwave, só com ângulo/espaçamento diferentes), rolando rápido via
-   GSAP (ver _setupRain) pra dar a sensação de gotas caindo. */
-.anim-bg-rain {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, #0b1420 0%, #0a1c2e 100%);
-}
-.anim-bg-rain-drops {
-  position: absolute;
-  top: -20%;
-  left: -15%;
-  right: -15%;
-  bottom: -20%;
-  background-image: repeating-linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--anim-color) 45%, white 55%) 0 1px,
-    transparent 1px 90px
-  );
-  filter: blur(0.4px);
-  opacity: 0.5;
 }
 
 /* Neblina — faixas largas e baixas, bem desfocadas, deslizando devagar

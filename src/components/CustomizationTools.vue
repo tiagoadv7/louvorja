@@ -411,8 +411,6 @@ export default {
         { label: this.$t("components.customization.animated_bg.fumaca"), value: "fumaca" },
         { label: this.$t("components.customization.animated_bg.nuvens"), value: "nuvens" },
         { label: this.$t("components.customization.animated_bg.vaga-lumes"), value: "vaga-lumes" },
-        { label: this.$t("components.customization.animated_bg.cadentes"), value: "cadentes" },
-        { label: this.$t("components.customization.animated_bg.chuva"), value: "chuva" },
         { label: this.$t("components.customization.animated_bg.neblina"), value: "neblina" },
         { label: this.$t("components.customization.animated_bg.liquido"), value: "liquido" },
       ];
