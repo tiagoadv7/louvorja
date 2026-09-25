@@ -18,6 +18,9 @@
     "data": {
         "records": "Registros totales",
         "not_found": "No se encontraron registros con los filtros seleccionados. Intente cambiar los filtros de búsqueda.",
-        "custom_collections_results": "Resultados en Colecciones Personalizadas"
+        "custom_collections_results": "Resultados en Colecciones Personalizadas",
+        "hymnal_results": "Resultados por número en los Himnarios",
+        "hymnal_name": "Himnario Adventista",
+        "hymnal_1996_name": "Himnario Adventista - 1996"
     }
 }

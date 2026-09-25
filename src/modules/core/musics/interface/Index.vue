@@ -161,6 +161,37 @@
       </div>
     </template>
 
+    <!-- Resultados por número nos Hinários -- dois catálogos separados (ver
+         hymnalMatches), cada um mostrado à parte com seu próprio nome, já
+         que o mesmo número é uma música diferente em cada hinário. -->
+    <template v-if="userdata.search.track && searchIsNumber">
+      <v-divider class="my-1" />
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">
+        {{ t("data.hymnal_results") }}
+      </div>
+      <template v-if="hymnalMatches.length">
+        <div v-for="h in hymnalMatches" :key="h.id" class="px-3 pb-2">
+          <div class="text-caption font-weight-bold mb-1">{{ h.name }}</div>
+          <v-list density="compact">
+            <v-list-item v-for="s in h.songs" :key="s.id_music" :title="s.name">
+              <template v-slot:prepend>
+                <v-chip size="small" class="mr-2" :color="$theme.primary()">{{ s.track }}</v-chip>
+              </template>
+              <template v-slot:append>
+                <MusicMenuTable
+                  :id_music="s.id_music"
+                  :has_instrumental_music="s.has_instrumental_music"
+                />
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+      </template>
+      <div v-else class="text-caption text-medium-emphasis px-3 pb-2">
+        {{ t("data.not_found") }}
+      </div>
+    </template>
+
     <template v-slot:footer>
       <div class="w-100">
         <LetterPaginate v-model="letter" />
@@ -272,6 +303,54 @@ const customCollectionMatches = computed(() => {
   const q = proxy.$string.clean(search.value || "");
   if (!q) return [];
   return customSongs.value.filter((s) => proxy.$string.clean(s.nome || "").includes(q));
+});
+
+/* -------------------------------------------------- */
+/* HINÁRIOS (busca por número)                        */
+/* -------------------------------------------------- */
+// Os dois hinários são catálogos SEPARADOS (categorias diferentes no banco,
+// ver electron/sqlite-reader.js#_getHymnal) — o mesmo número (ex.: 100) é
+// uma música diferente em cada um. A Table acima só carrega pt_musics
+// (catálogo geral), então buscar por número dentro de um hinário específico
+// não dá pra fazer com :searchable_fields/:filter dela (mesmo motivo das
+// Coletâneas Personalizadas acima) — carrega os dois hinários à parte, sob
+// demanda, só quando a busca parece um número E o filtro "Número" está
+// ligado, e mostra cada resultado já identificando de qual hinário veio.
+const hymnalDatasets = ref([]);
+const hymnalDataLoaded = ref(false);
+
+async function loadHymnalData() {
+  if (hymnalDataLoaded.value) return;
+  hymnalDataLoaded.value = true;
+  const locale = proxy.$i18n?.locale?.value || proxy.$i18n?.locale || "pt";
+  const [hymnal, hymnal1996] = await Promise.all([
+    proxy.$database.get(`${locale}_hymnal`),
+    proxy.$database.get(`${locale}_hymnal_1996`),
+  ]);
+  const toArray = (d) => (Array.isArray(d) ? d : Object.values(d || {}));
+  hymnalDatasets.value = [
+    { id: "hymnal", name: t("data.hymnal_name"), songs: toArray(hymnal) },
+    { id: "hymnal_1996", name: t("data.hymnal_1996_name"), songs: toArray(hymnal1996) },
+  ];
+}
+
+const searchIsNumber = computed(() => {
+  const s = (search.value || "").trim();
+  return s !== "" && !isNaN(s);
+});
+
+watch(
+  [searchIsNumber, search_track],
+  ([isNum, on]) => { if (isNum && on) loadHymnalData(); },
+  { immediate: true },
+);
+
+const hymnalMatches = computed(() => {
+  if (!searchIsNumber.value) return [];
+  const num = Number(search.value);
+  return hymnalDatasets.value
+    .map((h) => ({ ...h, songs: h.songs.filter((s) => Number(s.track) === num) }))
+    .filter((h) => h.songs.length);
 });
 
 // Álbuns desativados pelo operador (ver Menu.vue > "Gerenciar Álbuns") —
