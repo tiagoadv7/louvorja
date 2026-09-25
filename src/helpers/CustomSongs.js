@@ -58,17 +58,24 @@ async function songDir(id) {
 }
 
 function newSlide(overrides = {}) {
-  const isFirst = overrides.tipo === "CAPA";
   return {
     id: crypto.randomUUID(),
     tipo: "LETRA",
     letra: "",
     letra_aux: "",
-    tamanho_letra: isFirst ? 18 : 14,
-    tamanho_letra_aux: 10,
-    cor_letra: isFirst ? "#efb400" : "#FFFFFF",
-    cor_letra_aux: "#efb400",
-    cor_fundo: "#000000",
+    // Tamanho/cor de texto e cor de fundo ficam em branco por padrão —
+    // Slide.vue só usa o valor do slide quando ele não está vazio (ver
+    // style_text/style_bg em components/Slide.vue), então deixar em branco
+    // aqui é o que faz o Fundo Personalizado (slide_bg) valer pra músicas
+    // novas/da Coletânea Personalizada, igual já vale pra .slja importado/
+    // aberto direto (ver SljaConverter#parseSlja — mesmo raciocínio). Um
+    // slide só passa a ter cor/tamanho próprios quando o operador escolhe
+    // no seletor do Editor pra ESSE slide especificamente.
+    tamanho_letra: null,
+    tamanho_letra_aux: null,
+    cor_letra: "",
+    cor_letra_aux: "",
+    cor_fundo: "",
     imagem: "",
     imagem_posicao: 5,
     fundo_letra: true,
