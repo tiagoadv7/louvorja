@@ -57,7 +57,12 @@
                 "raios": "Rayos de Luz",
                 "brasas": "Brasas",
                 "fumaca": "Humo",
-                "nuvens": "Nubes"
+                "nuvens": "Nubes",
+                "vaga-lumes": "Luciérnagas",
+                "cadentes": "Estrellas Fugaces",
+                "chuva": "Lluvia",
+                "neblina": "Neblina",
+                "liquido": "Gradiente Líquido"
             }
         }
     },

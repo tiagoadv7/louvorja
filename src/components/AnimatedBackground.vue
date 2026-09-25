@@ -54,6 +54,40 @@
       <span class="anim-bg-cloud anim-bg-cloud--2" />
       <span class="anim-bg-cloud anim-bg-cloud--3" />
     </div>
+    <div v-else-if="variant === 'vaga-lumes'" class="anim-bg-layer anim-bg-fireflies">
+      <span
+        v-for="(f, i) in fireflyDefs" :key="i"
+        class="anim-bg-firefly"
+        :style="{
+          top: `${f.top}%`, left: `${f.left}%`,
+          width: `${f.size}px`, height: `${f.size}px`,
+          animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s`,
+        }"
+      />
+    </div>
+    <div v-else-if="variant === 'cadentes'" class="anim-bg-layer anim-bg-meteors">
+      <span
+        v-for="(m, i) in meteorDefs" :key="i"
+        class="anim-bg-meteor"
+        :style="{
+          top: `${m.top}%`, left: `${m.left}%`,
+          animationDelay: `${m.delay}s`, animationDuration: `${m.duration}s`,
+        }"
+      />
+    </div>
+    <div v-else-if="variant === 'chuva'" class="anim-bg-layer anim-bg-rain">
+      <div ref="rainLayer" class="anim-bg-rain-drops" />
+    </div>
+    <div v-else-if="variant === 'neblina'" class="anim-bg-layer anim-bg-fog">
+      <span class="anim-bg-fog-band anim-bg-fog-band--1" />
+      <span class="anim-bg-fog-band anim-bg-fog-band--2" />
+      <span class="anim-bg-fog-band anim-bg-fog-band--3" />
+    </div>
+    <div v-else-if="variant === 'liquido'" ref="liquidLayer" class="anim-bg-layer anim-bg-liquid">
+      <span class="anim-bg-liquid-blob anim-bg-liquid-blob--1" />
+      <span class="anim-bg-liquid-blob anim-bg-liquid-blob--2" />
+      <span class="anim-bg-liquid-blob anim-bg-liquid-blob--3" />
+    </div>
 
     <!-- Glow ambiente — camada extra por cima de QUALQUER variante acima
          (ver comentário no <style>), pra todo fundo animado ter um brilho
@@ -82,6 +116,11 @@
 //   brasas   → anime.js (v4): partículas subindo com brilho quente (fogo/brasa)
 //   fumaca   → CSS puro: manchas com border-radius mudando (fumaça/tinta)
 //   nuvens   → CSS puro: nuvens desfocadas deslizando horizontalmente
+//   vaga-lumes → CSS puro: pontos quentes vagando devagar, piscando (fireflies)
+//   cadentes → CSS puro: estrelas cadentes cruzando a tela de vez em quando
+//   chuva    → GSAP: linhas de chuva caindo em diagonal (grade repetida)
+//   neblina  → CSS puro: faixas de névoa largas e baixas, deslizando devagar
+//   liquido  → GSAP: manchas grandes sobrepostas (mix-blend) fluindo devagar
 //
 // (bokeh/raios/brasas/fumaça/nuvens inspirados nas categorias de fundos de
 // motion pra igreja tipo Worshipwide/WorshipHouse Media — mesmo espírito
@@ -129,6 +168,24 @@ export default {
       delay: Math.random() * 6,
       duration: 10 + Math.random() * 10,
     })),
+    // Vaga-lumes — mesma ideia de starDefs/bokehDefs (gerado uma vez só).
+    fireflyDefs: Array.from({ length: 22 }, () => ({
+      top: Math.random() * 100,
+      left: Math.random() * 100,
+      size: 3 + Math.random() * 3,
+      delay: Math.random() * 8,
+      duration: 6 + Math.random() * 6,
+    })),
+    // Estrelas cadentes — poucas (não é chuva de meteoros) e um ciclo bem
+    // mais longo/espalhado que fireflyDefs, pra cruzar a tela raramente,
+    // sem competir com o conteúdo. top/left = ponto de partida (canto
+    // superior esquerdo da diagonal), não posição fixa.
+    meteorDefs: Array.from({ length: 6 }, () => ({
+      top: Math.random() * 35,
+      left: Math.random() * 60,
+      delay: Math.random() * 20,
+      duration: 5 + Math.random() * 4,
+    })),
   }),
   watch: {
     variant() {
@@ -160,8 +217,10 @@ export default {
       else if (this.variant === "neve") this._setupSnow();
       else if (this.variant === "raios") this._setupRays();
       else if (this.variant === "brasas") this._setupEmbers();
-      // "estrelas"/"bokeh"/"fumaca"/"nuvens" são só CSS (animação via
-      // @keyframes) — nada a inicializar.
+      else if (this.variant === "chuva") this._setupRain();
+      else if (this.variant === "liquido") this._setupLiquid();
+      // "estrelas"/"bokeh"/"fumaca"/"nuvens"/"vaga-lumes"/"cadentes"/"neblina"
+      // são só CSS (animação via @keyframes) — nada a inicializar.
     },
     _teardown() {
       if (this._three) {
@@ -405,6 +464,39 @@ export default {
         });
       });
     },
+
+    // ── GSAP: linhas de chuva caindo em diagonal (grade repetida) ──────────
+    async _setupRain() {
+      const el = this.$refs.rainLayer;
+      if (!el) return;
+      const { gsap } = await import("gsap");
+      gsap.set(el, { backgroundPosition: "0px 0px" });
+      this._gsapTween = gsap.to(el, {
+        backgroundPosition: "-24px 130px",
+        duration: 0.7,
+        ease: "none",
+        repeat: -1,
+      });
+    },
+
+    // ── GSAP: manchas grandes sobrepostas fluindo devagar (mesh líquido) ──
+    async _setupLiquid() {
+      const el = this.$refs.liquidLayer;
+      if (!el) return;
+      const { gsap } = await import("gsap");
+      const blobs = el.querySelectorAll(".anim-bg-liquid-blob");
+      const tl = gsap.timeline({ repeat: -1, yoyo: true });
+      blobs.forEach((b, i) => {
+        tl.to(b, {
+          xPercent: 20 - i * 8,
+          yPercent: -15 + i * 10,
+          scale: 1.2,
+          duration: 14 + i * 3,
+          ease: "sine.inOut",
+        }, 0);
+      });
+      this._gsapTween = tl;
+    },
   },
 };
 </script>
@@ -539,6 +631,7 @@ export default {
   width: 5px;
   height: 5px;
   border-radius: 50%;
+  filter: blur(0.6px);
   background: color-mix(in srgb, var(--anim-color) 35%, white 65%);
 }
 
@@ -550,6 +643,7 @@ export default {
 .anim-bg-star {
   position: absolute;
   border-radius: 50%;
+  filter: blur(0.5px);
   background: color-mix(in srgb, var(--anim-color) 30%, white 70%);
   animation-name: anim-bg-twinkle;
   animation-timing-function: ease-in-out;
@@ -612,6 +706,7 @@ export default {
   width: 4px;
   height: 4px;
   border-radius: 50%;
+  filter: blur(0.6px);
   background: color-mix(in srgb, var(--anim-color) 70%, #ffb800 30%);
   box-shadow: 0 0 6px 2px color-mix(in srgb, var(--anim-color) 60%, #ff8800 40%);
 }
@@ -674,6 +769,134 @@ export default {
   0%   { transform: translateX(-30%); }
   100% { transform: translateX(130%); }
 }
+
+/* Vaga-lumes — pontos quentes vagando devagar em trajetória curta e
+   piscando (opacidade sobe/desce fora de fase do movimento), cor sempre
+   misturada com âmbar/dourado pra dar o ar de "luz de vaga-lume" mesmo se
+   a cor escolhida for fria (mesma lógica de "brasas" com laranja). */
+.anim-bg-fireflies {
+  position: relative;
+  background: linear-gradient(180deg, #05140a 0%, #0a2413 100%);
+}
+.anim-bg-firefly {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(1px);
+  background: color-mix(in srgb, var(--anim-color) 55%, #ffe9a8 45%);
+  box-shadow: 0 0 8px 3px color-mix(in srgb, var(--anim-color) 55%, #ffcf5c 45%);
+  animation-name: anim-bg-firefly-wander;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes anim-bg-firefly-wander {
+  0%   { transform: translate(0, 0);       opacity: 0.12; }
+  20%  { opacity: 0.85; }
+  50%  { transform: translate(6%, -8%);    opacity: 0.25; }
+  70%  { opacity: 0.8; }
+  100% { transform: translate(-4%, 5%);    opacity: 0.12; }
+}
+
+/* Estrelas cadentes — poucas riscas de luz cruzando a tela em diagonal de
+   vez em quando (ver meteorDefs: ciclo longo/espalhado, não é chuva de
+   meteoros) — vmax na translação final pra cruzar proporcional à tela
+   inteira, não só ao tamanho do próprio elemento. */
+.anim-bg-meteors {
+  position: relative;
+  background: linear-gradient(180deg, #05060f 0%, #0b0f22 100%);
+}
+.anim-bg-meteor {
+  position: absolute;
+  width: 2px;
+  height: 85px;
+  border-radius: 2px;
+  filter: blur(0.5px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--anim-color) 20%, white 80%), transparent);
+  opacity: 0;
+  animation-name: anim-bg-meteor-fall;
+  animation-timing-function: ease-in;
+  animation-iteration-count: infinite;
+}
+@keyframes anim-bg-meteor-fall {
+  0%   { transform: translate(-8vmax, -5vmax) rotate(25deg); opacity: 0; }
+  8%   { opacity: 0.85; }
+  40%  { opacity: 0.85; }
+  55%  { transform: translate(70vmax, 42vmax) rotate(25deg); opacity: 0; }
+  100% { transform: translate(70vmax, 42vmax) rotate(25deg); opacity: 0; }
+}
+
+/* Chuva — grade de linhas diagonais repetida (mesma técnica de "grade"/
+   synthwave, só com ângulo/espaçamento diferentes), rolando rápido via
+   GSAP (ver _setupRain) pra dar a sensação de gotas caindo. */
+.anim-bg-rain {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0b1420 0%, #0a1c2e 100%);
+}
+.anim-bg-rain-drops {
+  position: absolute;
+  top: -20%;
+  left: -15%;
+  right: -15%;
+  bottom: -20%;
+  background-image: repeating-linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--anim-color) 45%, white 55%) 0 1px,
+    transparent 1px 90px
+  );
+  filter: blur(0.4px);
+  opacity: 0.5;
+}
+
+/* Neblina — faixas largas e baixas, bem desfocadas, deslizando devagar
+   (mesma keyframe de "nuvens", só mais largas/opacas/baixas pra ler como
+   névoa rente ao chão em vez de nuvens no céu). */
+.anim-bg-fog {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0d1117 0%, #1a2230 100%);
+}
+.anim-bg-fog-band {
+  position: absolute;
+  width: 140%;
+  height: 40%;
+  border-radius: 50%;
+  filter: blur(min(7vmin, 55px));
+  opacity: 0.3;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--anim-color) 25%, white 55%), transparent 75%);
+  animation-name: anim-bg-fog-drift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+.anim-bg-fog-band--1 { bottom: -10%; left: -20%; animation-duration: 40s; }
+.anim-bg-fog-band--2 { bottom: 5%;   left: -30%; opacity: 0.22; animation-duration: 55s; animation-delay: -15s; }
+.anim-bg-fog-band--3 { bottom: -20%; left: -10%; opacity: 0.26; animation-duration: 48s; animation-delay: -25s; }
+@keyframes anim-bg-fog-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(20%); }
+}
+
+/* Gradiente Líquido — manchas grandes sobrepostas (mix-blend: screen)
+   fluindo devagar via GSAP (ver _setupLiquid) — igual "Manchas Flutuantes"
+   (anime.js) em espírito, mas com blobs maiores/mais sobrepostos e mistura
+   aditiva, lendo mais como um gradiente contínuo "respirando" do que
+   manchas isoladas boiando. */
+.anim-bg-liquid {
+  position: relative;
+  background: #0d1117;
+}
+.anim-bg-liquid-blob {
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  border-radius: 50%;
+  filter: blur(min(6vmin, 50px));
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+.anim-bg-liquid-blob--1 { top: -5%; left: 55%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 80%, white 15%), transparent 70%); }
+.anim-bg-liquid-blob--2 { top: 25%; left: 10%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 55%, white 40%), transparent 70%); }
+.anim-bg-liquid-blob--3 { top: 45%; left: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 70%, black 10%), transparent 70%); }
 
 /* Glow ambiente — CSS puro, por cima de TODAS as variantes (renderizado
    depois de todas no template, então fica no topo do empilhamento). Um
