@@ -226,8 +226,17 @@ const t = (key) => {
   const result = moduleContainer.value.t(key);
   return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
+// Fallback com o mesmo formato (search/filter) usado abaixo -- necessário
+// porque a ref "moduleContainer" só é preenchida num post-render effect (ver
+// setRef() no runtime-core do Vue: o valor é atribuído via
+// queuePostRenderEffect, não durante o mount em si), então no PRIMEIRO
+// render deste componente -- que já avalia o slot "header" (search_name,
+// disabled, etc.) e o template (v-model="userdata.search.name") -- o valor
+// real ainda não existe. Sem esse fallback, ".search"/".filter" em undefined
+// derruba esse primeiro render (a janela nunca chega a aparecer, embora
+// modules.musics.show já esteja true).
 const userdata = computed(() => {
-  return moduleContainer.value?.userdata;
+  return moduleContainer.value?.userdata ?? { search: {}, filter: {} };
 });
 /* ########################################################### */
 /* ########################################################### */
