@@ -36,6 +36,7 @@
     "select_collection": "Selecione uma coletânea na lista ao lado",
     "confirm_delete_collection": "Excluir esta coletânea? As músicas continuam disponíveis em \"Minhas Músicas\".",
     "name_placeholder": "Nome da coletânea",
-    "empty_search_results": "Nenhuma música encontrada"
+    "empty_search_results": "Nenhuma música encontrada",
+    "empty_search_results_collections": "Nenhuma coletânea encontrada"
   }
 }

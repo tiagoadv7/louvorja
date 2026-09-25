@@ -480,6 +480,11 @@ export default {
     // então esse handoff precisa do próprio watcher.
     pendingSongId(id) {
       if (!id) return;
+      // Handoff de verdade pra uma música específica supera qualquer sessão
+      // "em branco" anterior aberta pela pílula (ver onMinimize/
+      // "opened_standalone") — sem isso, minimizar depois disto ainda
+      // redirecionaria pra Coletâneas Personalizadas por engano.
+      this.$appdata.set(`modules.${this.module_id}.opened_standalone`, false);
       this.$appdata.set(`modules.${this.module_id}.pending_song_id`, "");
       this.loadSongById(id);
     },
@@ -487,6 +492,7 @@ export default {
     // no arquivo — ver mounted() abaixo e electron/main.js#openSljaFile).
     pendingSljaPath(path) {
       if (!path) return;
+      this.$appdata.set(`modules.${this.module_id}.opened_standalone`, false);
       this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, "");
       this.loadSljaFromPath(path);
     },
@@ -555,6 +561,21 @@ export default {
     // reabre) saber que não é uma abertura nova e pular o reset pra "Nova
     // música" (ver comentário lá).
     onMinimize() {
+      // Sessão nasceu da pílula "Editor de Músicas" em Coletâneas
+      // Personalizadas (ver custom_collections/interface/Index.vue#
+      // openSlideEditor) -- minimizar aqui deve minimizar aquela janela, não
+      // criar um ícone próprio de "Editor de Músicas" no rodapé pra uma
+      // sessão que o operador só pensa nela como parte das coletâneas.
+      // Fecha de vez (não minimize) -- eager mantém o componente montado e
+      // o estado em edição intacto de qualquer forma, sem precisar do
+      // ícone-mini-player pra "continuar tocando" (não há apresentação
+      // ativa nesse caminho, é edição em branco).
+      if (this.$appdata.get("modules.slide_editor.opened_standalone", false)) {
+        this.$appdata.set("modules.slide_editor.opened_standalone", false);
+        this.$modules.close(this.module_id);
+        this.$modules.minimize("custom_collections");
+        return;
+      }
       this._restoringFromMinimize = true;
       this.$modules.minimize(this.module_id);
     },

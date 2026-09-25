@@ -35,7 +35,7 @@
           <input
             v-model="headerSearchQuery"
             class="cc-header-search-input"
-            :placeholder="t('actions.search_collections_placeholder')"
+            :placeholder="selectedCollection ? t('actions.search_placeholder') : t('actions.search_collections_placeholder')"
           />
         </div>
 
@@ -55,7 +55,7 @@
       <!-- GRADE: nenhuma coletânea aberta -->
       <div v-if="!selectedCollection" class="cc-collection-grid">
         <div v-if="!collections.length" class="cc-empty">{{ t('data.empty_collections') }}</div>
-        <div v-else-if="!visibleCollections.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
+        <div v-else-if="!visibleCollections.length" class="cc-empty">{{ t('data.empty_search_results_collections') }}</div>
         <div
           v-for="c in visibleCollections" :key="c.id"
           class="cc-collection-card"
@@ -133,6 +133,7 @@
           </div>
 
           <div v-if="!selectedCollectionSongs.length" class="cc-empty">{{ t('data.empty_collection_songs') }}</div>
+          <div v-else-if="!visibleCollectionSongs.length" class="cc-empty">{{ t('data.empty_search_results') }}</div>
           <draggable
             v-else
             v-model="selectedCollectionSongs"
@@ -141,7 +142,11 @@
             @end="persistCollectionOrder"
           >
             <template #item="{ element, index }">
-              <div class="cc-collection-song-row" :class="{ 'is-playing': playingCollection && index === _queueIdx }">
+              <div
+                v-show="matchesHeaderSearch(element)"
+                class="cc-collection-song-row"
+                :class="{ 'is-playing': playingCollection && index === _queueIdx }"
+              >
                 <v-icon size="16" class="cc-drag-handle">mdi-drag-vertical</v-icon>
                 <v-icon
                   size="13"
@@ -340,12 +345,18 @@ export default {
         .filter((m) => !q || (m._nc || '').includes(q) || (m._ac || '').includes(q))
         .slice(0, 60);
     },
-    // Busca local do cabeçalho — filtra a grade de coletâneas (ver
-    // "headerSearchQuery" acima); nunca esconde nada quando vazia.
+    // Busca local do cabeçalho — mesmo campo filtra duas coisas diferentes
+    // conforme o contexto: a grade de coletâneas (por nome) quando nenhuma
+    // está aberta, ou as músicas da coletânea aberta (por nome) quando uma
+    // está selecionada (ver "matchesHeaderSearch" abaixo, usado pra não
+    // esconder linhas do <draggable> de verdade e quebrar o reordenar).
     visibleCollections() {
       const q = this.$string.clean((this.headerSearchQuery || '').trim());
       if (!q) return this.collections;
       return this.collections.filter((c) => this.$string.clean(c.nome || '').includes(q));
+    },
+    visibleCollectionSongs() {
+      return this.selectedCollectionSongs.filter((s) => this.matchesHeaderSearch(s));
     },
     // Mesmo padrão de modules/core/album/interface/Index.vue (playingAll) —
     // detecta o operador fechando manualmente o player (oficial ou próprio)
@@ -379,6 +390,11 @@ export default {
     // sentido (a fila era da coletânea anterior) — encerra a sequência.
     selectedCollectionId() {
       if (this.playingCollection) this._stopPlayAllCollection();
+      // Abrir/fechar uma coletânea muda o que a busca do cabeçalho filtra
+      // (coletâneas vs músicas dela, ver "visibleCollections"/
+      // "matchesHeaderSearch") -- some com o texto anterior, senão um filtro
+      // de nome de coletânea ficava (invisível) tentando filtrar músicas.
+      this.headerSearchQuery = '';
     },
     // Player oficial ($media) fechado (não minimizado) com a sequência ativa
     // → operador encerrou manualmente, não deixa "playingCollection" preso.
@@ -416,6 +432,10 @@ export default {
       return result;
     },
     close() {
+      // Se fechar a janela, não manter o histórico -- reabrir depois sempre
+      // cai na grade de coletâneas, nunca direto numa coletânea específica
+      // (ver também loadAll(), que não seleciona nenhuma por padrão).
+      this.selectedCollectionId = null;
       this.$modules.close(this.module_id);
     },
     /* METHODS OBRIGATÓRIAS - FIM */
@@ -423,8 +443,13 @@ export default {
     // "Editor de Músicas" (ver pílula no cabeçalho) -- mesma chamada de
     // sempre, sem estado prévio (sem pending_song_id), pra abrir exatamente
     // como abria a partir do tile em Utilitários: editor em branco, pronto
-    // pra criar uma música nova.
+    // pra criar uma música nova. A flag marca que esta sessão do editor
+    // nasceu daqui (nenhum outro fluxo do app abre o slide_editor sem
+    // pending_song_id/pending_slja_path) -- ver slide_editor/interface/
+    // Index.vue#onMinimize, que usa isso pra minimizar esta janela (e não
+    // uma própria do editor) quando o operador clica em minimizar lá.
     openSlideEditor() {
+      this.$appdata.set('modules.slide_editor.opened_standalone', true);
       this.$modules.open('slide_editor');
     },
 
@@ -445,9 +470,6 @@ export default {
           this.selectedCollectionId = pendingId;
           this.tab = 'collections';
         }
-      }
-      if (!this.selectedCollectionId && this.collections.length) {
-        this.selectedCollectionId = this.collections[0].id;
       }
     },
     async resolveCollectionCovers(list) {
@@ -614,6 +636,15 @@ export default {
     openCoverPickerFor(c) {
       this.selectedCollectionId = c.id;
       this.actSetCollectionCover();
+    },
+    // Ver "visibleCollectionSongs"/"cc-collection-song-row" no template --
+    // esconde (v-show, não filtra o array) as linhas que não combinam com a
+    // busca do cabeçalho, sem tirar nenhum item do v-model do <draggable>
+    // (senão reordenar com o filtro ativo perderia as músicas escondidas).
+    matchesHeaderSearch(item) {
+      const q = this.$string.clean((this.headerSearchQuery || '').trim());
+      if (!q) return true;
+      return this.$string.clean(item.nome || '').includes(q);
     },
     async onPickCollectionCover(e) {
       const file = e.target.files[0];

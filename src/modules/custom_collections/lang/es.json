@@ -36,6 +36,7 @@
     "select_collection": "Selecciona una colección en la lista de al lado",
     "confirm_delete_collection": "¿Eliminar esta colección? Las canciones seguirán disponibles en \"Mis Canciones\".",
     "name_placeholder": "Nombre de la colección",
-    "empty_search_results": "Ninguna canción encontrada"
+    "empty_search_results": "Ninguna canción encontrada",
+    "empty_search_results_collections": "Ninguna colección encontrada"
   }
 }
