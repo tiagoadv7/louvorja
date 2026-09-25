@@ -162,8 +162,8 @@ const CATCH_ALL_SECTION = '🔧 Outras alterações';
  * repo e confundir a escolha (ver nota no topo do arquivo).
  *
  * Agrupa os commits por tipo (feat/fix/...) sob títulos com emoji, igual à
- * seção "Changelog" automática das releases do louvorja/violin-app — cada
- * item linka pro commit no GitHub, mesmo padrão de lá.
+ * seção "Changelog" automática das releases do louvorja/flute-app — só o
+ * texto do commit em cada item, sem link pro commit (mesmo padrão de lá).
  */
 async function buildChangelog(repoInfo) {
   let releases;
@@ -200,21 +200,20 @@ async function buildChangelog(repoInfo) {
 
   const commits = (compare.commits || [])
     .filter((c) => (c.parents || []).length <= 1) // ignora merges
-    .map((c) => ({ sha: c.sha, subject: String(c.commit?.message || '').split('\n')[0].trim() }))
+    .map((c) => ({ subject: String(c.commit?.message || '').split('\n')[0].trim() }))
     .filter((c) => c.subject)
     .filter((c) => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(c.subject)); // remove o próprio commit de bump de versão
 
   if (commits.length === 0) return null;
 
   const sections = new Map(); // título → linhas
-  for (const { sha, subject } of commits) {
+  for (const { subject } of commits) {
     const match = subject.match(/^(\w+)(\([^)]*\))?:\s*(.+)$/);
     const type = match ? match[1].toLowerCase() : null;
     const cleanSubject = match ? match[3] : subject;
     const title = (COMMIT_TYPE_SECTIONS.find(([t]) => t === type) || [null, CATCH_ALL_SECTION])[1];
     if (!sections.has(title)) sections.set(title, []);
-    const commitUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/commit/${sha}`;
-    sections.get(title).push(`- ${cleanSubject} ([ver commit](${commitUrl}))`);
+    sections.get(title).push(`- ${cleanSubject}`);
   }
 
   const orderedTitles = [...COMMIT_TYPE_SECTIONS.map(([, title]) => title), CATCH_ALL_SECTION]
