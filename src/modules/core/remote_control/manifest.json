@@ -1,12 +1,13 @@
 {
   "id": "remote_control",
-  "name": "Controle Remoto",
-  "description": "Conecta na aplicação desktop para fazer o acionamento remoto das músicas.",
+  "name": "Transmitir",
+  "description": "Ativa o servidor local de controle remoto e a página de transmissão (letras/fundo) para uso no OBS ou vMix.",
   "category": null,
   "showInMainMenu": true,
-  "icon": "mdi-remote",
+  "icon": "mdi-broadcast",
   "dependencies": [],
   "moduleOptions": {
-    "size": "small"
+    "width": 640,
+    "height": 640
   }
 }

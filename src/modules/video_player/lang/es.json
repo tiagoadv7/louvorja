@@ -1,0 +1,13 @@
+{
+  "title": "Medios",
+  "description": "Reproductor de vídeo/imagen para la proyección (con fundido de audio), superposición de imagen y mesa de sonido SoundMaster, en pestañas separadas en la misma ventana.",
+  "tab_video": "Vídeo",
+  "tab_online": "Online",
+  "tab_overlay": "Overlay",
+  "tab_capture": "Capturar Pantalla",
+  "tab_soundmaster": "SoundMaster",
+  "capture_no_source": "Elija una pantalla o ventana abajo para previsualizar",
+  "capture_send_to_return": "Mostrar en el Retorno",
+  "capture_refresh": "Actualizar",
+  "capture_no_sources": "No se encontró ninguna pantalla o ventana"
+}

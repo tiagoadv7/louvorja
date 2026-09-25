@@ -1,0 +1,26 @@
+{
+  "title": "Texto Dinámico",
+  "description": "Muestra una línea de texto en la proyección, con formato personalizable.",
+  "labels": {
+    "display": "Exhibición de Texto",
+    "formatting": "Formato",
+    "text_placeholder": "Escriba el texto...",
+    "font": "Fuente",
+    "size": "Tamaño",
+    "text_color": "Color del Texto",
+    "alignment": "Alineación"
+  },
+  "actions": {
+    "show_text": "Mostrar Texto",
+    "format": "Formatear",
+    "restore": "Restaurar",
+    "close": "Cerrar"
+  },
+  "customization": {
+    "background": "Fondo",
+    "color": "Color",
+    "image": "Imagen",
+    "transparency": "Transparencia",
+    "adjust": "Ajustar"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "title": "Overlay de Imagem",
+  "description": "Sobrepõe uma imagem (logo, aviso, quadro) por cima da projeção atual, com posição, tamanho e opacidade livres — sem substituir o que já está sendo exibido.",
+  "labels": {
+    "no_image": "Nenhuma imagem selecionada — clique em \"Importar imagem\" abaixo."
+  },
+  "actions": {
+    "import_image": "Importar imagem",
+    "remove_image": "Remover imagem",
+    "reset_position": "Redefinir posição"
+  },
+  "customization": {
+    "transparency": "Transparência",
+    "adjust": "Ajustar"
+  }
+}

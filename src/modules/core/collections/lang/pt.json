@@ -1,4 +1,18 @@
 {
     "title": "Coletâneas",
-    "all_collections": "Todas as Coletâneas"
+    "all_collections": "Todas as Coletâneas",
+    "custom_collections_category": "Coletâneas Personalizadas",
+    "table": {
+        "track": "Faixa",
+        "music_name": "Nome"
+    },
+    "actions": {
+        "play_all": "Reproduzir todos",
+        "stop_all": "Parar",
+        "present": "Apresentar",
+        "edit_in_editor": "Abrir no Editor"
+    },
+    "data": {
+        "empty_collection": "Coletânea vazia"
+    }
 }

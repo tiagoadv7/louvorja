@@ -1,11 +1,31 @@
+// No Electron, persiste no arquivo via IPC (electron-store).
+// No navegador, usa localStorage/sessionStorage como antes.
+
+const isElectron = () =>
+  typeof window !== "undefined" &&
+  typeof window.electron !== "undefined" &&
+  navigator.userAgent.includes("Electron");
+
 export default {
   set(item, data, type = "local") {
-    if (typeof data == "object") {
-      data = JSON.stringify(data);
+    const value = typeof data === "object" ? JSON.stringify(data) : data;
+
+    if (isElectron() && type === "local") {
+      // JSON round-trip remove wrappers reativos do Vue (Ref, Proxy)
+      // antes de enviar ao IPC (que usa structuredClone)
+      let plain;
+      try {
+        plain = JSON.parse(JSON.stringify(data));
+      } catch {
+        plain = data;
+      }
+      window.electron.storeSet(item, plain).catch(() => {});
     }
 
-    this.storage(type).setItem(item, data);
+    // Mantém o localStorage como cache/fallback
+    this.storage(type).setItem(item, value);
   },
+
   get(item, ifnull = null, type = "local") {
     let data = this.storage(type).getItem(item);
 
@@ -13,28 +33,26 @@ export default {
       return ifnull;
     }
 
-    if (ifnull == null) {
-      let data_parse;
-      try {
-        data_parse = JSON.parse(data);
-      } catch (e) {
-        data_parse = data;
-      }
-      return data_parse;
-    } else if (typeof ifnull == "object") {
+    // Always try JSON.parse for proper type coercion (handles "true"/"false"/numbers)
+    try {
       return JSON.parse(data);
-    } else {
+    } catch (e) {
       return data;
     }
   },
+
   remove(item, type = "local") {
+    if (isElectron() && type === "local") {
+      window.electron.storeRemove(item).catch(() => {});
+    }
     this.storage(type).removeItem(item);
   },
+
   removeAll(item, type = "local") {
     for (let i = this.storage(type).length - 1; i >= 0; i--) {
       const key = this.storage(type).key(i);
       if (key.split(":")[0] == item) {
-        this.remove(key);
+        this.remove(key, type);
       }
     }
   },
@@ -44,6 +62,22 @@ export default {
       return sessionStorage;
     } else {
       return localStorage;
+    }
+  },
+
+  // Carrega dados do electron-store para o localStorage na inicialização
+  async syncFromElectron(keys = []) {
+    if (!isElectron()) return;
+    for (const key of keys) {
+      try {
+        const value = await window.electron.storeGet(key);
+        if (value !== null && value !== undefined) {
+          const serialized = typeof value === "object" ? JSON.stringify(value) : String(value);
+          localStorage.setItem(key, serialized);
+        }
+      } catch (e) {
+        // Ignora erros de sincronização
+      }
     }
   },
 };

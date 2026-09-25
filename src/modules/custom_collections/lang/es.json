@@ -1,0 +1,42 @@
+{
+  "title": "Colecciones Personalizadas",
+  "tabs": {
+    "editor": "Editor de Canciones",
+    "collections": "Colecciones"
+  },
+  "actions": {
+    "new_collection": "Nueva Colección",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "export": "Exportar .slja",
+    "import": "Importar .slja",
+    "rename": "Renombrar",
+    "present": "Presentar",
+    "remove_from_collection": "Quitar de la colección",
+    "add_to_collection": "Agregar canción",
+    "search_placeholder": "Buscar canción...",
+    "search_collections_placeholder": "Buscar colección...",
+    "play_all": "Reproducir todo",
+    "stop_all": "Detener",
+    "previous": "Canción anterior",
+    "next": "Siguiente canción",
+    "change_cover": "Cambiar portada",
+    "remove_cover": "Quitar portada",
+    "back_to_collections": "Volver a las colecciones"
+  },
+  "labels": {
+    "name": "Nombre",
+    "songs_count": "canción(es)",
+    "my_songs": "Mis canciones",
+    "official_catalog": "Catálogo oficial"
+  },
+  "data": {
+    "empty_collections": "Ninguna colección personal. Haz clic en + para crear una.",
+    "empty_collection_songs": "Colección vacía. Agrega canciones con el botón de arriba.",
+    "select_collection": "Selecciona una colección en la lista de al lado",
+    "confirm_delete_collection": "¿Eliminar esta colección? Las canciones seguirán disponibles en \"Mis Canciones\".",
+    "name_placeholder": "Nombre de la colección",
+    "empty_search_results": "Ninguna canción encontrada",
+    "empty_search_results_collections": "Ninguna colección encontrada"
+  }
+}
