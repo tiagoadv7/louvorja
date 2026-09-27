@@ -114,6 +114,7 @@
           class="vp-preview-imgwrap"
           :class="{ 'vp-preview-imgwrap--picking': imageZoomPicking, 'vp-preview-imgwrap--zoomed': config.zoom > 1 }"
           :style="previewZoomWrapStyle"
+          @pointerdown="onZoomPickPointerDown"
           @click="onPreviewImageClick"
         >
           <img
@@ -123,6 +124,20 @@
             :style="previewImageStyle"
           />
         </div>
+        <!-- Retângulo de seleção do zoom (ver onZoomPickPointerDown) — fica
+             FORA do wrapper acima de propósito: a seleção é sempre feita
+             sobre a imagem "normal" (sem zoom aplicado ainda), então não deve
+             herdar nenhum transform de zoom já em vigor. -->
+        <div
+          v-if="zoomDragRect"
+          class="vp-zoom-selrect"
+          :style="{
+            left: zoomDragRect.x + '%',
+            top: zoomDragRect.y + '%',
+            width: zoomDragRect.w + '%',
+            height: zoomDragRect.h + '%',
+          }"
+        />
         <canvas
           v-else-if="config.mediaType === 'pdf'"
           ref="previewPdfCanvas"
@@ -152,7 +167,7 @@
           <button
             class="vp-img-ctrl-btn"
             :class="{ 'vp-img-ctrl-btn--on': imageZoomPicking || config.zoom > 1 }"
-            :title="config.zoom > 1 ? 'Remover ampliação' : (imageZoomPicking ? 'Clique na imagem para ampliar (clique aqui para cancelar)' : 'Ampliar (zoom), igual ao PowerPoint')"
+            :title="config.zoom > 1 ? 'Remover ampliação' : (imageZoomPicking ? 'Arraste sobre a imagem para escolher a área (clique aqui para cancelar)' : 'Ampliar (zoom), igual ao PowerPoint')"
             @click="toggleImageZoomMode"
           >
             <v-icon size="16">{{ config.zoom > 1 ? 'mdi-magnify-minus-outline' : 'mdi-magnify-plus-outline' }}</v-icon>
@@ -602,11 +617,21 @@ export default {
 
     // ── Aba "Vídeo" — modo imagem: ampliação (zoom) "estilo PowerPoint" ─────
     // Estado só de UI (não sincronizado) — true entre clicar no botão de
-    // ampliar e clicar na imagem pra escolher o ponto (ver
-    // toggleImageZoomMode/onPreviewImageClick abaixo). O zoom em si
+    // ampliar e arrastar sobre a imagem pra escolher a área (ver
+    // toggleImageZoomMode/onZoomPickPointerDown abaixo). O zoom em si
     // (config.zoom/zoomX/zoomY) já é compartilhado via $videoPlayer, igual
     // rotation/flip.
     imageZoomPicking: false,
+    // Retângulo sendo arrastado no momento (em % da imagem, 0-100) — só existe
+    // durante o gesto (pointerdown até pointerup), usado pra desenhar o
+    // feedback visual (.vp-zoom-selrect) e, ao soltar, calcular o zoom final.
+    zoomDragRect: null,
+    _zoomDragStart: null,
+    // Consumida por onPreviewImageClick logo após soltar o arraste — sem isso,
+    // o "click" que o navegador dispara depois do pointerup do próprio
+    // arraste seria interpretado como "clicou na imagem já ampliada" e
+    // desfaria o zoom que acabou de ser aplicado.
+    _justAppliedZoomDrag: false,
 
     // ── Aba "Online" (YouTube/Canva, via $webLink) ──────────────────────────
     onlineUrlInput: '',
@@ -931,9 +956,9 @@ export default {
     rotateRight() { this.$videoPlayer.rotateBy(90); },
     toggleFlip()  { this.$videoPlayer.toggleFlip(); },
 
-    // Já ampliado → o botão remove o zoom direto (sem precisar reclicar na
-    // imagem). Ainda não ampliado → só alterna o "modo mira" (o zoom de fato
-    // só é aplicado ao clicar na imagem, ver onPreviewImageClick).
+    // Já ampliado → o botão remove o zoom direto (sem precisar arrastar de
+    // novo). Ainda não ampliado → só alterna o "modo mira" (o zoom de fato só
+    // é aplicado ao arrastar sobre a imagem, ver onZoomPickPointerDown).
     toggleImageZoomMode() {
       if (this.config.zoom > 1) {
         this.$videoPlayer.resetImageZoom();
@@ -942,19 +967,60 @@ export default {
       }
       this.imageZoomPicking = !this.imageZoomPicking;
     },
-    // Clique na prévia: em modo mira, define o ponto ampliado; já ampliado
-    // (sem estar em modo mira), clicar na própria imagem remove o zoom — igual
-    // ao PowerPoint (clicar no slide ampliado volta ao normal).
-    onPreviewImageClick(event) {
-      if (this.imageZoomPicking) {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const cx = ((event.clientX - rect.left) / rect.width) * 100;
-        const cy = ((event.clientY - rect.top) / rect.height) * 100;
-        this.$videoPlayer.setImageZoom(cx, cy);
-        this.imageZoomPicking = false;
-        return;
-      }
+
+    // Clique na prévia (sem ter arrastado nada agora): só faz sentido quando
+    // já está ampliado e o operador quer voltar ao normal clicando na própria
+    // imagem — igual ao PowerPoint (clicar no slide ampliado volta ao
+    // normal). "_justAppliedZoomDrag" evita que o "click" disparado pelo
+    // navegador logo após o pointerup do arraste (ver onZoomPickPointerUp)
+    // seja lido como esse mesmo clique e desfaça o zoom recém-aplicado.
+    onPreviewImageClick() {
+      if (this._justAppliedZoomDrag) { this._justAppliedZoomDrag = false; return; }
+      if (this.imageZoomPicking) return; // arraste cancelado/menor que o mínimo — não conta como clique
       if (this.config.zoom > 1) this.$videoPlayer.resetImageZoom();
+    },
+
+    // Arrastar sobre a imagem (em modo mira) pra escolher a ÁREA que vira o
+    // zoom — mesmo padrão de Pointer Events já usado no arrastar/redimensionar
+    // da aba "Overlay de Imagem" acima (startOverlayDrag/_onOverlayPointerMove).
+    // A seleção é sempre feita sobre a imagem "normal": se já havia um zoom
+    // aplicado, remove antes de começar (ver toggleImageZoomMode — só entra
+    // aqui quando config.zoom não é > 1).
+    onZoomPickPointerDown(e) {
+      if (!this.imageZoomPicking) return;
+      e.preventDefault();
+      const frameRect = e.currentTarget.getBoundingClientRect();
+      this._zoomDragStart = { frameRect, clientX: e.clientX, clientY: e.clientY };
+      this.zoomDragRect = { x: 0, y: 0, w: 0, h: 0 };
+      window.addEventListener('pointermove', this._onZoomPickPointerMove);
+      window.addEventListener('pointerup', this._onZoomPickPointerUp, { once: true });
+    },
+    _onZoomPickPointerMove(e) {
+      if (!this._zoomDragStart) return;
+      const { frameRect, clientX: sx, clientY: sy } = this._zoomDragStart;
+      const clamp = (v) => Math.min(100, Math.max(0, v));
+      const x1 = clamp(((sx - frameRect.left) / frameRect.width) * 100);
+      const y1 = clamp(((sy - frameRect.top) / frameRect.height) * 100);
+      const x2 = clamp(((e.clientX - frameRect.left) / frameRect.width) * 100);
+      const y2 = clamp(((e.clientY - frameRect.top) / frameRect.height) * 100);
+      this.zoomDragRect = {
+        x: Math.min(x1, x2), y: Math.min(y1, y2),
+        w: Math.abs(x2 - x1), h: Math.abs(y2 - y1),
+      };
+    },
+    // Exige um tamanho mínimo (3% em cada eixo) pra contar como uma seleção de
+    // verdade — sem isso, um clique com tremor mínimo do mouse (sem intenção
+    // de arrastar) já aplicaria um zoom absurdamente grande (retângulo ~0).
+    _onZoomPickPointerUp() {
+      window.removeEventListener('pointermove', this._onZoomPickPointerMove);
+      const rect = this.zoomDragRect;
+      this.zoomDragRect = null;
+      this._zoomDragStart = null;
+      this.imageZoomPicking = false;
+      if (rect && rect.w >= 3 && rect.h >= 3) {
+        this.$videoPlayer.setImageZoomRect(rect.x, rect.y, rect.w, rect.h);
+        this._justAppliedZoomDrag = true;
+      }
     },
 
     // ── Aba "Online" (YouTube/Canva) ─────────────────────────────────────
@@ -1447,6 +1513,16 @@ export default {
 .vp-preview-imgwrap { width: 100%; height: 100%; transition: transform 0.25s ease; }
 .vp-preview-imgwrap--picking { cursor: crosshair; }
 .vp-preview-imgwrap--zoomed:not(.vp-preview-imgwrap--picking) { cursor: zoom-out; }
+/* Retângulo de seleção do zoom, desenhado ao arrastar (ver zoomDragRect) —
+   pointer-events:none pra não roubar o pointermove/pointerup do próprio
+   arraste (tratados na window, ver onZoomPickPointerDown). */
+.vp-zoom-selrect {
+  position: absolute;
+  border: 2px dashed rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.2);
+  pointer-events: none;
+  z-index: 2;
+}
 .vp-preview-fading {
   position: absolute;
   bottom: 6px;

@@ -378,11 +378,15 @@ export default {
     this._persistToCurrentItem({ flip });
   },
 
-  // cx/cy: ponto clicado em % da imagem (0-100) — vira o centro da ampliação
-  // (ver imageZoomStyle acima). factor: 2.5x por padrão, mesma ordem de
-  // grandeza do zoom do PowerPoint.
-  setImageZoom(cx, cy, factor = 2.5) {
-    this.setConfig({ zoom: factor, zoomX: cx, zoomY: cy });
+  // x/y/w/h: retângulo arrastado pelo operador sobre a imagem, em % (0-100) —
+  // ver Index.vue#onZoomPickPointerDown. O centro do retângulo vira o centro
+  // da ampliação; a escala usa o MAIOR dos dois eixos (max, não min) pra que
+  // o retângulo escolhido preencha toda a tela ("cover"), sem sobrar tarja
+  // preta em nenhum lado — o excesso no eixo menor simplesmente sai da tela,
+  // igual ao zoom do PowerPoint.
+  setImageZoomRect(x, y, w, h) {
+    const zoom = Math.max(100 / Math.max(w, 1), 100 / Math.max(h, 1));
+    this.setConfig({ zoom, zoomX: x + w / 2, zoomY: y + h / 2 });
   },
   resetImageZoom() {
     this.setConfig({ zoom: 1, zoomX: 50, zoomY: 50 });
