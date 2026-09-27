@@ -168,7 +168,15 @@ export default {
     window.addEventListener('sync-files', this._syncFilesHandler);
 
     // 5b. Ouve evento global de verificar atualizações (disparado pelo Menu lateral)
-    this._checkUpdatesHandler = () => this.$refs.updater?.checkNow();
+    // -- verifica app E banco de dados juntos (mesmo comportamento do
+    // louvorja/flute-app: "Verificar atualizações" cobre os dois, não só o
+    // updater do app). A checagem do banco sozinha (DbUpdateDialog) só
+    // rodava automaticamente 1x, 6s após o boot -- sem isso, o operador não
+    // tinha como forçar uma nova verificação manual do banco.
+    this._checkUpdatesHandler = () => {
+      this.$refs.updater?.checkNow();
+      this.$refs.dbUpdater?.check();
+    };
     window.addEventListener('check-updates', this._checkUpdatesHandler);
 
     // 5c. Ouve o clique no alerta de atualização da barra de sistema (ver
@@ -181,6 +189,7 @@ export default {
     // 6. Ouve "Verificar atualizações" do menu nativo
     const onCheckUpdates = this.$electron.on('menu:check-updates', () => {
       this.$refs.updater?.checkNow();
+      this.$refs.dbUpdater?.check();
     });
     if (onCheckUpdates) this._handlers.push(['menu:check-updates', onCheckUpdates]);
 
