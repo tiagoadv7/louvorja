@@ -58,13 +58,42 @@ function emptyConfig() {
     currentTime: 0, duration: 0, isFading: false,
     stopToken: 0,
     // "video" (padrão), "image" ou "pdf" — imagem/pdf não usam
-    // play/pause/volume/talkover; imagem só rotation/flip, pdf só
+    // play/pause/volume/talkover; imagem só rotation/flip/zoom, pdf só
     // pdfPage/pdfPageCount (navegação de página, igual ao FreeShow).
     mediaType: "video",
     rotation: 0,
     flip: false,
+    // Zoom "estilo PowerPoint" (ver setImageZoom/resetImageZoom abaixo):
+    // zoom=1 é o padrão (sem ampliação); zoomX/zoomY é o ponto clicado (em %
+    // da própria imagem, 0-100), usado como centro da ampliação. Ao contrário
+    // de rotation/flip, não é lembrado por item (_persistToCurrentItem) nem
+    // salvo na playlist — é um recurso de apresentação momentâneo, igual ao
+    // zoom do PowerPoint (troca de slide/imagem sempre volta ao normal).
+    zoom: 1,
+    zoomX: 50,
+    zoomY: 50,
     pdfPage: 1,
     pdfPageCount: 0,
+  };
+}
+
+// Ampliação "estilo PowerPoint": escala a partir do PONTO clicado (zoomX/zoomY,
+// em % da própria imagem) mantendo-o centralizado na tela — funciona igual em
+// qualquer tamanho de contêiner (prévia pequena do operador ou a projeção em
+// tela cheia) porque translate(%) resolve sempre contra a caixa do PRÓPRIO
+// elemento (não a caixa já escalada), então a mesma % de zoomX/zoomY produz o
+// mesmo resultado visual nos dois lugares. transform-origin "0 0" (canto),
+// não o centro padrão, porque a matemática abaixo já assume esse referencial.
+export function imageZoomStyle(config) {
+  const zoom = config?.zoom || 1;
+  if (zoom <= 1) return {};
+  const zx = config.zoomX ?? 50;
+  const zy = config.zoomY ?? 50;
+  const tx = 50 - zoom * zx;
+  const ty = 50 - zoom * zy;
+  return {
+    transform: `translate(${tx}%, ${ty}%) scale(${zoom})`,
+    transformOrigin: "0 0",
   };
 }
 
@@ -80,6 +109,7 @@ export default {
   toFileUrl,
   isImageFile,
   isPdfFile,
+  imageZoomStyle,
   // Duração real do arquivo (em segundos) — usado pela Liturgia para
   // preencher a Duração automaticamente ao anexar um vídeo/áudio, sem
   // duplicar aqui a conversão de caminho local pra file:// (ver toFileUrl).
@@ -246,6 +276,7 @@ export default {
       mediaType,
       rotation: item.rotation || 0,
       flip: !!item.flip,
+      zoom: 1, zoomX: 50, zoomY: 50,
       isPlaying: false, currentTime: 0, duration: item.duration || 0,
       loop: false,
       pdfPage: 1,
@@ -307,6 +338,7 @@ export default {
       mediaType: item.mediaType,
       rotation: item.rotation || 0,
       flip: !!item.flip,
+      zoom: 1, zoomX: 50, zoomY: 50,
       isPlaying: isVideo, currentTime: 0,
       loop: false,
       pdfPage: 1,
@@ -344,6 +376,16 @@ export default {
     const flip = !this.getConfig().flip;
     this.setConfig({ flip });
     this._persistToCurrentItem({ flip });
+  },
+
+  // cx/cy: ponto clicado em % da imagem (0-100) — vira o centro da ampliação
+  // (ver imageZoomStyle acima). factor: 2.5x por padrão, mesma ordem de
+  // grandeza do zoom do PowerPoint.
+  setImageZoom(cx, cy, factor = 2.5) {
+    this.setConfig({ zoom: factor, zoomX: cx, zoomY: cy });
+  },
+  resetImageZoom() {
+    this.setConfig({ zoom: 1, zoomX: 50, zoomY: 50 });
   },
 
   _persistToCurrentItem(patch) {

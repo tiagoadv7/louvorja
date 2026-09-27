@@ -109,13 +109,20 @@
         </button>
 
         <v-icon v-if="!config.src" size="46" style="opacity:0.2">mdi-movie-open-outline</v-icon>
-        <img
+        <div
           v-else-if="config.mediaType === 'image'"
-          :key="config.src"
-          :src="config.src"
-          class="vp-preview-video"
-          :style="previewImageStyle"
-        />
+          class="vp-preview-imgwrap"
+          :class="{ 'vp-preview-imgwrap--picking': imageZoomPicking, 'vp-preview-imgwrap--zoomed': config.zoom > 1 }"
+          :style="previewZoomWrapStyle"
+          @click="onPreviewImageClick"
+        >
+          <img
+            :key="config.src"
+            :src="config.src"
+            class="vp-preview-video"
+            :style="previewImageStyle"
+          />
+        </div>
         <canvas
           v-else-if="config.mediaType === 'pdf'"
           ref="previewPdfCanvas"
@@ -141,6 +148,14 @@
             @click="toggleFlip"
           >
             <v-icon size="16">mdi-flip-horizontal</v-icon>
+          </button>
+          <button
+            class="vp-img-ctrl-btn"
+            :class="{ 'vp-img-ctrl-btn--on': imageZoomPicking || config.zoom > 1 }"
+            :title="config.zoom > 1 ? 'Remover ampliação' : (imageZoomPicking ? 'Clique na imagem para ampliar (clique aqui para cancelar)' : 'Ampliar (zoom), igual ao PowerPoint')"
+            @click="toggleImageZoomMode"
+          >
+            <v-icon size="16">{{ config.zoom > 1 ? 'mdi-magnify-minus-outline' : 'mdi-magnify-plus-outline' }}</v-icon>
           </button>
         </div>
       </div>
@@ -585,6 +600,14 @@ export default {
     _pipHandlers: [],
     _focusHandler: null,
 
+    // ── Aba "Vídeo" — modo imagem: ampliação (zoom) "estilo PowerPoint" ─────
+    // Estado só de UI (não sincronizado) — true entre clicar no botão de
+    // ampliar e clicar na imagem pra escolher o ponto (ver
+    // toggleImageZoomMode/onPreviewImageClick abaixo). O zoom em si
+    // (config.zoom/zoomX/zoomY) já é compartilhado via $videoPlayer, igual
+    // rotation/flip.
+    imageZoomPicking: false,
+
     // ── Aba "Online" (YouTube/Canva, via $webLink) ──────────────────────────
     onlineUrlInput: '',
     onlineSubTab: 'catalog', // 'catalog' | 'custom' — não persiste entre aberturas de propósito
@@ -640,6 +663,14 @@ export default {
       const rotation = this.config.rotation || 0;
       const flipScale = this.config.flip ? -1 : 1;
       return { transform: `rotate(${rotation}deg) scaleX(${flipScale})` };
+    },
+    // Ampliação (zoom) aplicada num wrapper SEPARADO do <img> (ver template) —
+    // de propósito, senão o transform-origin do zoom (o ponto clicado, não o
+    // centro) também mudaria o eixo do rotate/flip acima, girando a imagem
+    // fora do lugar. Mesmo cálculo usado na projeção (ver Popup.vue), central
+    // em $videoPlayer.imageZoomStyle para não duplicar a matemática.
+    previewZoomWrapStyle() {
+      return this.$videoPlayer.imageZoomStyle(this.config);
     },
 
     // ── Aba "Online" — mesma config compartilhada que a Liturgia já lê/grava
@@ -899,6 +930,32 @@ export default {
     rotateLeft()  { this.$videoPlayer.rotateBy(-90); },
     rotateRight() { this.$videoPlayer.rotateBy(90); },
     toggleFlip()  { this.$videoPlayer.toggleFlip(); },
+
+    // Já ampliado → o botão remove o zoom direto (sem precisar reclicar na
+    // imagem). Ainda não ampliado → só alterna o "modo mira" (o zoom de fato
+    // só é aplicado ao clicar na imagem, ver onPreviewImageClick).
+    toggleImageZoomMode() {
+      if (this.config.zoom > 1) {
+        this.$videoPlayer.resetImageZoom();
+        this.imageZoomPicking = false;
+        return;
+      }
+      this.imageZoomPicking = !this.imageZoomPicking;
+    },
+    // Clique na prévia: em modo mira, define o ponto ampliado; já ampliado
+    // (sem estar em modo mira), clicar na própria imagem remove o zoom — igual
+    // ao PowerPoint (clicar no slide ampliado volta ao normal).
+    onPreviewImageClick(event) {
+      if (this.imageZoomPicking) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const cx = ((event.clientX - rect.left) / rect.width) * 100;
+        const cy = ((event.clientY - rect.top) / rect.height) * 100;
+        this.$videoPlayer.setImageZoom(cx, cy);
+        this.imageZoomPicking = false;
+        return;
+      }
+      if (this.config.zoom > 1) this.$videoPlayer.resetImageZoom();
+    },
 
     // ── Aba "Online" (YouTube/Canva) ─────────────────────────────────────
     // Só adiciona à fila (botão diz "Adicionar") — carregar/tocar de verdade
@@ -1384,6 +1441,12 @@ export default {
   overflow: hidden;
 }
 .vp-preview-video { width: 100%; height: 100%; object-fit: contain; }
+/* Wrapper do zoom (ver previewZoomWrapStyle) -- width/height:100% pra ocupar
+   o mesmo espaço que a <img> ocupava sozinha antes; o transform de ampliação
+   vai aqui, não na <img> (que já tem o próprio transform de rotate/flip). */
+.vp-preview-imgwrap { width: 100%; height: 100%; transition: transform 0.25s ease; }
+.vp-preview-imgwrap--picking { cursor: crosshair; }
+.vp-preview-imgwrap--zoomed:not(.vp-preview-imgwrap--picking) { cursor: zoom-out; }
 .vp-preview-fading {
   position: absolute;
   bottom: 6px;

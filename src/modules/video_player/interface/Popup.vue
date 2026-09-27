@@ -1,12 +1,17 @@
 <template>
   <div v-if="shouldRender" class="vp-popup-root">
-    <img
+    <div
       v-if="config.mediaType === 'image'"
-      :src="config.src"
-      class="vp-image"
-      :class="{ 'vp-image--fading': imageFading }"
-      :style="imageStyle"
-    />
+      class="vp-image-zoomwrap"
+      :style="zoomWrapStyle"
+    >
+      <img
+        :src="config.src"
+        class="vp-image"
+        :class="{ 'vp-image--fading': imageFading }"
+        :style="imageStyle"
+      />
+    </div>
     <canvas
       v-else-if="config.mediaType === 'pdf'"
       ref="pdfCanvas"
@@ -88,6 +93,12 @@ export default {
       const rotation = this.config.rotation || 0;
       const flipScale = this.config.flip ? -1 : 1;
       return { transform: `rotate(${rotation}deg) scaleX(${flipScale})` };
+    },
+    // Zoom "estilo PowerPoint" (ver Index.vue#previewZoomWrapStyle e
+    // helpers/VideoPlayer.js#imageZoomStyle) — mesmo wrapper separado do
+    // rotate/flip acima, pelo mesmo motivo (transform-origin diferente).
+    zoomWrapStyle() {
+      return this.$videoPlayer.imageZoomStyle(this.config);
     },
   },
 
@@ -438,6 +449,17 @@ export default {
      object-fit: contain) e o fade do ESC ficavam pretos em vez de deixar
      ver o que está atrás da projeção. */
   background: transparent;
+  /* Clipa o <img> ampliado (zoom "estilo PowerPoint", ver .vp-image-zoomwrap)
+     às bordas da tela — sem isso, zoom>1 poderia deixar o conteúdo
+     ultrapassar visualmente os limites da janela. */
+  overflow: hidden;
+}
+/* Wrapper do zoom (ver zoomWrapStyle) -- separado do <img> (que já tem o
+   próprio transform de rotate/flip, com outro transform-origin). */
+.vp-image-zoomwrap {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.25s ease;
 }
 .vp-video {
   width: 100%;

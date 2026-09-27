@@ -1,12 +1,17 @@
 <template>
   <div v-if="isActive" class="vps-root">
-    <img
+    <div
       v-if="config.mediaType === 'image'"
-      :key="config.src"
-      :src="config.src"
-      class="vps-media"
-      :style="mediaStyle"
-    />
+      class="vps-image-zoomwrap"
+      :style="zoomWrapStyle"
+    >
+      <img
+        :key="config.src"
+        :src="config.src"
+        class="vps-media"
+        :style="mediaStyle"
+      />
+    </div>
     <video
       v-else
       ref="video"
@@ -55,6 +60,11 @@ export default {
       const rotation = this.config.rotation || 0;
       const flipScale = this.config.flip ? -1 : 1;
       return { transform: `rotate(${rotation}deg) scaleX(${flipScale})` };
+    },
+    // Zoom "estilo PowerPoint" (ver interface/Index.vue e interface/Popup.vue) —
+    // mirror do retorno também reflete o zoom aplicado na saída principal.
+    zoomWrapStyle() {
+      return this.$videoPlayer.imageZoomStyle(this.config);
     },
   },
 
@@ -128,5 +138,10 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.vps-image-zoomwrap {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.25s ease;
 }
 </style>
