@@ -1,0 +1,13 @@
+{
+  "title": "Mídia",
+  "description": "Reprodutor de vídeo/imagem para a projeção (com fade de áudio), overlay de imagem e mesa de som SoundMaster, em abas separadas na mesma janela.",
+  "tab_video": "Vídeo",
+  "tab_online": "Online",
+  "tab_overlay": "Overlay",
+  "tab_capture": "Capturar Tela",
+  "tab_soundmaster": "SoundMaster",
+  "capture_no_source": "Escolha uma tela ou janela abaixo para pré-visualizar",
+  "capture_send_to_return": "Mostrar no Retorno",
+  "capture_refresh": "Atualizar",
+  "capture_no_sources": "Nenhuma tela ou janela encontrada"
+}

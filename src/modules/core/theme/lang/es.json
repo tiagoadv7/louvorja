@@ -1,5 +1,14 @@
 {
     "title": "Apariencia",
+    "theme_subtitle": "Elige el modo de colores para el programa",
+    "mode_auto": "Automático",
+    "mode_light": "Modo Claro",
+    "mode_dark": "Modo Oscuro",
     "light-themes": "Temas Claros",
-    "dark-themes": "Temas Oscuros"
+    "dark-themes": "Temas Oscuros",
+    "monitors": "Monitor de Salida",
+    "loading-monitors": "Detectando monitores...",
+    "no-monitors": "Ningún monitor detectado.",
+    "primary": "Principal",
+    "identify-monitors": "Identificar Monitores"
 }

@@ -16,6 +16,12 @@ export default class BaseModule {
       translations: manifest.translations || {},
       system: manifest.system ?? false,
       customization: manifest.customization || {},
+      // Módulo pode ser escondido da grade de tiles via Gerenciar Álbuns
+      // (ver AlbumsManagerDialog.vue/helpers/Modules.js#getGroups) — precisa
+      // estar nessa lista explícita, senão o construtor descarta o campo
+      // (é isso que já acontecia silenciosamente com qualquer campo do
+      // manifest.json que não estivesse aqui).
+      manageable: manifest.manageable || false,
     };
   }
 

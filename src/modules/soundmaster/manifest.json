@@ -1,0 +1,14 @@
+{
+  "id": "soundmaster",
+  "name": "SoundMaster",
+  "description": "Mesa de som profissional com pads de áudio, efeitos e controle de volume. Editado a partir da aba \"SoundMaster\" do módulo Mídia (video_player) — sem tela própria (ver interface/Index.vue).",
+  "category": null,
+  "icon": "mdi-tune-vertical",
+  "showInMainMenu": false,
+  "customization": {
+    "fade_in_ms":     { "default": 1200 },
+    "fade_out_ms":    { "default": 2500 },
+    "ducking_level":  { "default": 0.15 },
+    "master_volume":  { "default": 1.0 }
+  }
+}

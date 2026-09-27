@@ -1,0 +1,28 @@
+{
+  "title": "Texto Interactivo",
+  "description": "Editor de texto libre con formato, proyectado en vivo mientras escribe.",
+  "actions": {
+    "import_txt": "Importar Texto",
+    "export_txt": "Exportar Texto",
+    "clear": "Limpiar",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar"
+  },
+  "labels": {
+    "font": "Fuente",
+    "size": "Tamaño",
+    "text_color": "Color del Texto",
+    "highlight_color": "Resaltado"
+  },
+  "data": {
+    "clear_confirm": "¿Limpiar todo el texto?"
+  },
+  "customization": {
+    "background": "Fondo",
+    "color": "Color",
+    "image": "Imagen",
+    "transparency": "Transparencia",
+    "adjust": "Ajustar"
+  }
+}

@@ -1,6 +1,16 @@
 {
     "alerts": {
         "not_loaded": "¡Ocurrió un error al cargar este audio!",
+        "not_loaded_offline": "Audio no disponible localmente.",
+        "not_loaded_offline_detail": "El archivo de audio no se encontró en el dispositivo. ¿Deseas abrir el Centro de Descargas para descargar el audio y las imágenes de este álbum?",
+        "btn_download": "Descargar Álbum",
+        "choose_play_title": "Este audio aún no se ha descargado",
+        "choose_play_detail": "Este audio no se encontró en el dispositivo, pero hay internet disponible. ¿Deseas descargar solo esta canción, descargar el álbum completo, o solo reproducir en línea esta vez?",
+        "btn_play_online": "Reproducir en Línea",
+        "btn_download_song": "Descargar Canción",
+        "desc_play_online": "Reproduce ahora directo de internet, sin descargar.",
+        "desc_download_song": "Descarga solo este audio para reproducir sin conexión en el futuro.",
+        "desc_download_album": "Abre el Centro de Descargas para descargar el álbum completo.",
         "close": "¿Quieres cerrar esta presentacion?",
         "open_remote": "La música se abre en tu aplicación de escritorio.",
         "open_remote_error": "Se produjo un error al reproducir tu música en la aplicación de escritorio. Comprueba si la transmisión está activada o desactiva la conexión remota para reproducirla en esta ubicación."

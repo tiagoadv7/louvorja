@@ -59,16 +59,31 @@ export default {
       return this.module?.config;
     },
     lyric() {
-      return this.module?.data?.lyric
-        ?.slice()
-        .sort((a, b) => a.order - b.order);
+      // A API online expõe o campo como `lyric`; o leitor SQLite offline expõe o
+      // mesmo conteúdo como `slides` (mesmo fallback que Media.js::slides() já usa) —
+      // sem isso, a janela "Letra" abre vazia sempre que os dados vêm do modo offline.
+      const data = this.module?.data;
+      const arr = Object.values(data?.lyric || data?.slides || {});
+      return arr.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
   },
   methods: {
     /* METHODS OBRIGATÓRIOS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIOS - FIM */
   },

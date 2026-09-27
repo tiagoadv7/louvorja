@@ -1,0 +1,18 @@
+{
+  "id": "interactive_text",
+  "name": "Texto Interativo",
+  "description": "Editor de texto livre com formatação, projetado ao vivo enquanto você digita.",
+  "category": "utilities",
+  "icon": "mdi-text-box-edit-outline",
+  "showInMainMenu": false,
+  "moduleOptions": {
+    "width": 900,
+    "height": 620
+  },
+  "customization": {
+    "background_color": { "type": "color", "label": "customization.color", "default": "#000000" },
+    "image": { "type": "image", "label": "customization.image", "default": "" },
+    "image_opacity": { "type": "opacity", "label": "customization.transparency", "default": 100 },
+    "image_fit": { "type": "object-fit", "label": "customization.adjust", "default": "cover" }
+  }
+}

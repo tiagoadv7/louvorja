@@ -46,6 +46,13 @@
               :label="t('inputs.filter_instrumental')"
             />
           </div>
+          <div>
+            <Checkbox
+              switch
+              v-model="userdata.filter.custom_collections"
+              :label="t('inputs.filter_custom_collections')"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -61,6 +68,7 @@
         track: search_track,
       }"
       :filter="{ has_instrumental_music: filter_instrumental_music }"
+      :disabled_albums="disabled_albums"
       :scroll="scroll"
       :has_scroll="has_scroll"
       sort_by="name"
@@ -125,6 +133,65 @@
       class="ma-2"
     />
 
+    <!-- Resultados de "Coletâneas Personalizadas" -- fonte totalmente
+         separada do catálogo (arquivos do usuário, não a tabela pt_musics),
+         então não dá pra usar o :filter/:searchable_fields da Table acima
+         (ver DataTable.vue, filtra só DENTRO de um dataset já carregado).
+         Clicar num resultado abre o módulo custom_collections já na
+         coletânea que contém aquela música (mesmo deep-link usado por
+         "Coletâneas" > categoria "Coletâneas Personalizadas", ver
+         modules/core/collections/interface/Index.vue#openAlbum). -->
+    <template v-if="userdata.filter.custom_collections && search">
+      <v-divider class="my-1" />
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">
+        {{ t("data.custom_collections_results") }}
+      </div>
+      <v-list v-if="customCollectionMatches.length" density="compact">
+        <v-list-item
+          v-for="song in customCollectionMatches"
+          :key="song.id"
+          :title="song.nome"
+          rounded="lg"
+          prepend-icon="mdi-folder-music-outline"
+          @click="openCustomSong(song)"
+        />
+      </v-list>
+      <div v-else class="text-caption text-medium-emphasis px-3 pb-2">
+        {{ t("data.not_found") }}
+      </div>
+    </template>
+
+    <!-- Resultados por número nos Hinários -- dois catálogos separados (ver
+         hymnalMatches), cada um mostrado à parte com seu próprio nome, já
+         que o mesmo número é uma música diferente em cada hinário. -->
+    <template v-if="userdata.search.track && searchIsNumber">
+      <v-divider class="my-1" />
+      <div class="text-caption text-medium-emphasis px-3 pt-2 pb-1">
+        {{ t("data.hymnal_results") }}
+      </div>
+      <template v-if="hymnalMatches.length">
+        <div v-for="h in hymnalMatches" :key="h.id" class="px-3 pb-2">
+          <div class="text-caption font-weight-bold mb-1">{{ h.name }}</div>
+          <v-list density="compact">
+            <v-list-item v-for="s in h.songs" :key="s.id_music" :title="s.name">
+              <template v-slot:prepend>
+                <v-chip size="small" class="mr-2" :color="$theme.primary()">{{ s.track }}</v-chip>
+              </template>
+              <template v-slot:append>
+                <MusicMenuTable
+                  :id_music="s.id_music"
+                  :has_instrumental_music="s.has_instrumental_music"
+                />
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+      </template>
+      <div v-else class="text-caption text-medium-emphasis px-3 pb-2">
+        {{ t("data.not_found") }}
+      </div>
+    </template>
+
     <template v-slot:footer>
       <div class="w-100">
         <LetterPaginate v-model="letter" />
@@ -148,20 +215,40 @@ import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 const moduleContainer = ref(null);
 const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+  if (!moduleContainer.value) {
+    const tr = manifest.translations?.['pt'];
+    if (tr) {
+      const val = key.split('.').reduce((obj, k) => obj?.[k], tr);
+      if (typeof val === 'string') return val;
+    }
+    return key;
+  }
+  const result = moduleContainer.value.t(key);
+  return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
+// Fallback com o mesmo formato (search/filter) usado abaixo -- necessário
+// porque a ref "moduleContainer" só é preenchida num post-render effect (ver
+// setRef() no runtime-core do Vue: o valor é atribuído via
+// queuePostRenderEffect, não durante o mount em si), então no PRIMEIRO
+// render deste componente -- que já avalia o slot "header" (search_name,
+// disabled, etc.) e o template (v-model="userdata.search.name") -- o valor
+// real ainda não existe. Sem esse fallback, ".search"/".filter" em undefined
+// derruba esse primeiro render (a janela nunca chega a aparecer, embora
+// modules.musics.show já esteja true).
 const userdata = computed(() => {
-  return moduleContainer.value?.userdata;
+  return moduleContainer.value?.userdata ?? { search: {}, filter: {} };
 });
 /* ########################################################### */
 /* ########################################################### */
 /* ########################################################### */
 
+import { watch } from "vue";
 import Table from "@/components/DataTable.vue";
 import Search from "@/components/inputs/Search.vue";
 import Checkbox from "@/components/inputs/CheckBox.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import LetterPaginate from "@/components/LetterPagination.vue";
+import CustomSongs from "@/helpers/CustomSongs";
 
 /* -------------------------------------------------- */
 /* STATE                                              */
@@ -197,6 +284,91 @@ const filter_instrumental_music = computed(() => {
   return userdata.value.filter.instrumental_music;
 });
 
+/* -------------------------------------------------- */
+/* COLETÂNEAS PERSONALIZADAS (busca opcional)         */
+/* -------------------------------------------------- */
+// Carregado uma única vez, sob demanda (só quando o operador liga o
+// checkbox pela primeira vez) -- são arquivos locais do usuário, não a
+// tabela pt_musics já carregada pela Table acima, então não tem custo de
+// rede, mas também não precisa ler disco à toa se ninguém usar isso.
+const customSongs = ref([]);
+const customCollectionsList = ref([]);
+const customCollectionsLoaded = ref(false);
+
+async function loadCustomCollectionsData() {
+  if (customCollectionsLoaded.value) return;
+  customCollectionsLoaded.value = true;
+  customSongs.value = await CustomSongs.listSongs();
+  customCollectionsList.value = await CustomSongs.listCollections();
+}
+
+watch(
+  () => userdata.value.filter.custom_collections,
+  (on) => { if (on) loadCustomCollectionsData(); },
+  { immediate: true },
+);
+
+const customCollectionMatches = computed(() => {
+  const q = proxy.$string.clean(search.value || "");
+  if (!q) return [];
+  return customSongs.value.filter((s) => proxy.$string.clean(s.nome || "").includes(q));
+});
+
+/* -------------------------------------------------- */
+/* HINÁRIOS (busca por número)                        */
+/* -------------------------------------------------- */
+// Os dois hinários são catálogos SEPARADOS (categorias diferentes no banco,
+// ver electron/sqlite-reader.js#_getHymnal) — o mesmo número (ex.: 100) é
+// uma música diferente em cada um. A Table acima só carrega pt_musics
+// (catálogo geral), então buscar por número dentro de um hinário específico
+// não dá pra fazer com :searchable_fields/:filter dela (mesmo motivo das
+// Coletâneas Personalizadas acima) — carrega os dois hinários à parte, sob
+// demanda, só quando a busca parece um número E o filtro "Número" está
+// ligado, e mostra cada resultado já identificando de qual hinário veio.
+const hymnalDatasets = ref([]);
+const hymnalDataLoaded = ref(false);
+
+async function loadHymnalData() {
+  if (hymnalDataLoaded.value) return;
+  hymnalDataLoaded.value = true;
+  const locale = proxy.$i18n?.locale?.value || proxy.$i18n?.locale || "pt";
+  const [hymnal, hymnal1996] = await Promise.all([
+    proxy.$database.get(`${locale}_hymnal`),
+    proxy.$database.get(`${locale}_hymnal_1996`),
+  ]);
+  const toArray = (d) => (Array.isArray(d) ? d : Object.values(d || {}));
+  hymnalDatasets.value = [
+    { id: "hymnal", name: t("data.hymnal_name"), songs: toArray(hymnal) },
+    { id: "hymnal_1996", name: t("data.hymnal_1996_name"), songs: toArray(hymnal1996) },
+  ];
+}
+
+const searchIsNumber = computed(() => {
+  const s = (search.value || "").trim();
+  return s !== "" && !isNaN(s);
+});
+
+watch(
+  [searchIsNumber, search_track],
+  ([isNum, on]) => { if (isNum && on) loadHymnalData(); },
+  { immediate: true },
+);
+
+const hymnalMatches = computed(() => {
+  if (!searchIsNumber.value) return [];
+  const num = Number(search.value);
+  return hymnalDatasets.value
+    .map((h) => ({ ...h, songs: h.songs.filter((s) => Number(s.track) === num) }))
+    .filter((h) => h.songs.length);
+});
+
+// Álbuns desativados pelo operador (ver Menu.vue > "Gerenciar Álbuns") —
+// músicas cujo(s) álbum(ns) estão TODOS desativados somem desta listagem
+// (ver DataTable.vue#filterData, prop disabled_albums).
+const disabled_albums = computed(() => {
+  return proxy.$userdata.get("options.disabled_albums", []);
+});
+
 const disabled = computed(() => {
   return (
     !search_name.value &&
@@ -228,6 +400,21 @@ function hasScroll(value) {
 
 function openAlbum(id_album) {
   proxy.$media.openAlbum(id_album);
+}
+
+// Abre a coletânea personalizada que contém essa música (pode estar em mais
+// de uma -- pega a primeira) no módulo custom_collections, já selecionada
+// (mesmo deep-link de collections/interface/Index.vue#openAlbum). Sem
+// nenhuma coletânea encontrada (música ainda não adicionada a nenhuma),
+// abre o módulo mesmo assim, só sem apontar pra uma coletânea específica.
+function openCustomSong(song) {
+  const collection = customCollectionsList.value.find((c) =>
+    (c.items || []).some((i) => i.type === "custom" && i.id === song.id)
+  );
+  if (collection) {
+    proxy.$appdata.set("modules.custom_collections.open_collection_id", collection.id);
+  }
+  proxy.$modules.open("custom_collections");
 }
 
 function close() {
