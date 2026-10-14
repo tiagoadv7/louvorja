@@ -151,14 +151,22 @@
                 >
                   <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
-                <div class="lt-item-info">
-                  <div
-                    :class="['lt-item-name', {
-                      'lt-item-name--categoria': item.type === 'categoria',
-                      'lt-item-name--playable': item.type === 'musica' && item.id_music,
-                    }]"
-                    @click="onMusicNameClick(item, $event)"
-                  >{{ item.name }}</div>
+                <!-- Música (pendente ou já resolvida): nome + tipo (linha de
+                     baixo) envolvidos NUM SÓ bloco clicável/hover (igual ao
+                     álbum estender até a Duração — ver
+                     core/album/interface/Index.vue#.am-music-name) em vez de
+                     só a linha do nome, senão a área de clique/hover ficava
+                     pequena e não cobria "Clique para escolher a música"
+                     embaixo. Outros tipos (categoria, link, mídia, arquivo)
+                     continuam com nome e tipo soltos, sem esse wrapper. -->
+                <div v-if="item.type === 'musica'" class="lt-item-info">
+                  <div class="lt-item-name-group" @click="onMusicNameClick(item, idx, $event)">
+                    <div class="lt-item-name">{{ item.name }}</div>
+                    <div class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
+                  </div>
+                </div>
+                <div v-else class="lt-item-info">
+                  <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
                   <div v-if="item.type !== 'categoria'" class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
                 <div class="lt-item-dur" v-if="item.duration">
@@ -1714,10 +1722,20 @@ export default {
     // botão de play genérico), então onItemRowClick nunca toca música — só
     // esse clique no nome, isolado (stopPropagation), sem também disparar
     // toggleSelect (que rodaria se deixasse borbulhar pro clique da linha).
-    onMusicNameClick(item, event) {
-      if (item.type !== 'musica' || !item.id_music) return;
+    //
+    // "Escolhida na hora" (sem id_music, ver itemTypeLabel/"Clique para
+    // escolher a música") não tem o que executar ainda — abre o mesmo
+    // seletor dos botões "Cantado/Playback/Sem Áudio/Letra" logo abaixo (ver
+    // openPendingPicker), no modo "audio" por padrão, já que o texto da linha
+    // literalmente instrui a clicar pra escolher.
+    onMusicNameClick(item, idx, event) {
+      if (item.type !== 'musica') return;
       event.stopPropagation();
-      this.$media.open({ id_music: item.id_music, mode: 'audio' });
+      if (item.id_music) {
+        this.$media.open({ id_music: item.id_music, mode: 'audio' });
+      } else {
+        this.openPendingPicker(idx, 'audio');
+      }
     },
     toggleDone(idx) {
       if (this.dayItems[idx]?.type === 'categoria') return;
@@ -2426,24 +2444,20 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 .lt-item-name--categoria { text-align: center; font-weight: 700; }
-/* Nome de música clicável (ver onMusicNameClick) — igual ao álbum
-   (core/album/interface/Index.vue#.am-music-name): parece um botão (hover com
-   fundo, sem sublinhado de link), não um texto comum. */
-.lt-item-name--playable {
+/* Bloco clicável de música (ver onMusicNameClick) — nome + tipo (linha de
+   baixo) JUNTOS num hover só, igual ao álbum estender até a Duração (ver
+   core/album/interface/Index.vue#.am-music-name): parece um botão (hover com
+   fundo), não um texto comum, e cobre a área toda, não só a linha do nome. */
+.lt-item-name-group {
   cursor: pointer;
-  /* width:100% (não max-width) -- inline-block sozinho encolheria pro
-     tamanho do texto e quebraria o nowrap/ellipsis já aplicado em
-     .lt-item-name (que depende de uma largura restrita pra truncar nomes
-     longos com "…"). */
-  display: inline-block;
-  width: 100%;
   box-sizing: border-box;
+  width: 100%;
   padding: 2px 6px;
   margin: -2px -6px;
   border-radius: 4px;
   transition: background-color 0.15s ease;
 }
-.lt-item-name--playable:hover {
+.lt-item-name-group:hover {
   background-color: rgba(var(--v-theme-on-surface), 0.08);
 }
 
