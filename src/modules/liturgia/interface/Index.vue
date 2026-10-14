@@ -1728,11 +1728,18 @@ export default {
     // seletor dos botões "Cantado/Playback/Sem Áudio/Letra" logo abaixo (ver
     // openPendingPicker), no modo "audio" por padrão, já que o texto da linha
     // literalmente instrui a clicar pra escolher.
+    //
+    // startOrMarkItemTimer(idx): o botão de play do MusicMenuTable já chama
+    // isso via @action (ver template) — sem chamar aqui também, tocar pelo
+    // NOME deixava de marcar/iniciar o cronômetro de "concluído", então o
+    // item nunca ficava marcado como concluído por esse caminho (ficava como
+    // se nunca tivesse sido executado, mesmo a música tendo tocado).
     onMusicNameClick(item, idx, event) {
       if (item.type !== 'musica') return;
       event.stopPropagation();
       if (item.id_music) {
         this.$media.open({ id_music: item.id_music, mode: 'audio' });
+        this.startOrMarkItemTimer(idx);
       } else {
         this.openPendingPicker(idx, 'audio');
       }
