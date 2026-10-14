@@ -124,10 +124,22 @@
             :style="previewImageStyle"
           />
         </div>
-        <!-- Retângulo de seleção do zoom (ver onZoomPickPointerDown) — fica
-             FORA do wrapper acima de propósito: a seleção é sempre feita
-             sobre a imagem "normal" (sem zoom aplicado ainda), então não deve
-             herdar nenhum transform de zoom já em vigor. -->
+        <canvas
+          v-else-if="config.mediaType === 'pdf'"
+          ref="previewPdfCanvas"
+          class="vp-preview-video"
+        />
+        <video v-else :key="config.src" :src="config.src" class="vp-preview-video" muted preload="metadata" />
+        <!-- Retângulo de seleção do zoom (ver onZoomPickPointerDown) — FORA
+             da cadeia v-if/v-else-if acima de propósito: inserir um v-if novo
+             NO MEIO dela (como estava antes) quebra a cadeia sem erro nem
+             aviso do compilador — o canvas/video viram ramos do v-if daqui
+             em vez de continuarem ligados ao "config.mediaType === 'image'",
+             fazendo um <video> inválido (src de imagem) renderizar junto da
+             imagem o tempo todo. Também fica fora do wrapper da imagem de
+             propósito: a seleção é sempre feita sobre a imagem "normal" (sem
+             zoom aplicado ainda), então não deve herdar nenhum transform de
+             zoom já em vigor. -->
         <div
           v-if="zoomDragRect"
           class="vp-zoom-selrect"
@@ -138,12 +150,6 @@
             height: zoomDragRect.h + '%',
           }"
         />
-        <canvas
-          v-else-if="config.mediaType === 'pdf'"
-          ref="previewPdfCanvas"
-          class="vp-preview-video"
-        />
-        <video v-else :key="config.src" :src="config.src" class="vp-preview-video" muted preload="metadata" />
         <div v-if="config.isFading" class="vp-preview-fading">
           <v-icon size="14">mdi-volume-low</v-icon> Efeito de fade em andamento…
         </div>
