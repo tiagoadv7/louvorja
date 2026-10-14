@@ -152,7 +152,13 @@
                   <v-icon size="15" :color="item.color">{{ itemIcon(item) }}</v-icon>
                 </div>
                 <div class="lt-item-info">
-                  <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
+                  <div
+                    :class="['lt-item-name', {
+                      'lt-item-name--categoria': item.type === 'categoria',
+                      'lt-item-name--playable': item.type === 'musica' && item.id_music,
+                    }]"
+                    @click="onMusicNameClick(item, $event)"
+                  >{{ item.name }}</div>
                   <div v-if="item.type !== 'categoria'" class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
                 <div class="lt-item-dur" v-if="item.duration">
@@ -1702,6 +1708,17 @@ export default {
         this.toggleSelect(idx);
       }
     },
+    // Clicar no NOME de uma música executa direto — igual ao álbum (ver
+    // core/album/interface/Index.vue#playDefault) e ao Delphi. Música já tem
+    // seus próprios controles no MusicMenuTable (ver comentário acima, no
+    // botão de play genérico), então onItemRowClick nunca toca música — só
+    // esse clique no nome, isolado (stopPropagation), sem também disparar
+    // toggleSelect (que rodaria se deixasse borbulhar pro clique da linha).
+    onMusicNameClick(item, event) {
+      if (item.type !== 'musica' || !item.id_music) return;
+      event.stopPropagation();
+      this.$media.open({ id_music: item.id_music, mode: 'audio' });
+    },
     toggleDone(idx) {
       if (this.dayItems[idx]?.type === 'categoria') return;
       const l = [...this.dayItems];
@@ -2409,6 +2426,26 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 .lt-item-name--categoria { text-align: center; font-weight: 700; }
+/* Nome de música clicável (ver onMusicNameClick) — igual ao álbum
+   (core/album/interface/Index.vue#.am-music-name): parece um botão (hover com
+   fundo, sem sublinhado de link), não um texto comum. */
+.lt-item-name--playable {
+  cursor: pointer;
+  /* width:100% (não max-width) -- inline-block sozinho encolheria pro
+     tamanho do texto e quebraria o nowrap/ellipsis já aplicado em
+     .lt-item-name (que depende de uma largura restrita pra truncar nomes
+     longos com "…"). */
+  display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.lt-item-name--playable:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
+}
 
 /* Linhas de categoria têm cor de fundo sólida escolhida pelo usuário —
    texto/ícones fixos na cor do tema (on-surface) podem ficar ilegíveis

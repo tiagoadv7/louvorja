@@ -313,8 +313,13 @@ export default {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
+  display: inline-block;
+  padding: 2px 8px;
+  margin: -2px -8px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
 }
 .am-music-name:hover {
-  text-decoration: underline;
+  background-color: rgba(255, 255, 255, 0.15);
 }
 </style>
