@@ -80,10 +80,15 @@
             <td class="text-right">
               {{ item.track }}
             </td>
-            <td>
-              <a class="am-music-name" @click="playDefault(item)">{{ item.name }}</a>
+            <!-- Nome + Duração mesclados numa única célula (colspan) -- faz a
+                 área clicável/hover (ver .am-music-name) se estender até perto
+                 dos botões de ícone, não só em volta do texto do nome. -->
+            <td colspan="2" class="pa-0">
+              <a class="am-music-name" @click="playDefault(item)">
+                <span class="am-music-name-text">{{ item.name }}</span>
+                <span class="am-music-duration">{{ $datetime.shortTime(item.duration) }}</span>
+              </a>
             </td>
-            <td class="text-right">{{ $datetime.shortTime(item.duration) }}</td>
             <td>
               <div class="d-flex justify-end">
                 <MusicMenuTable
@@ -313,13 +318,25 @@ export default {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  display: inline-block;
-  padding: 2px 8px;
-  margin: -2px -8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 16px;
   border-radius: 4px;
   transition: background-color 0.15s ease;
 }
 .am-music-name:hover {
   background-color: rgba(255, 255, 255, 0.15);
+}
+.am-music-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.am-music-duration {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 </style>
