@@ -80,7 +80,9 @@
             <td class="text-right">
               {{ item.track }}
             </td>
-            <td>{{ item.name }}</td>
+            <td>
+              <a class="am-music-name" @click="playDefault(item)">{{ item.name }}</a>
+            </td>
             <td class="text-right">{{ $datetime.shortTime(item.duration) }}</td>
             <td>
               <div class="d-flex justify-end">
@@ -248,6 +250,13 @@ export default {
       }
     },
 
+    // Clicar no NOME da música executa direto — igual ao Delphi (lá o nome
+    // já era um link clicável). Mesma ação do primeiro botão de
+    // MusicMenuTable ("Cantado"), sem precisar abrir o menu.
+    playDefault(item) {
+      this.$media.open({ id_music: item.id_music, mode: "audio" });
+    },
+
     _startPlayAll() {
       if (!this.albumMusics.length) return;
       this.playingAll = true;
@@ -299,5 +308,13 @@ export default {
   justify-content: center;
   width: 36px;
   height: 36px;
+}
+.am-music-name {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.am-music-name:hover {
+  text-decoration: underline;
 }
 </style>
