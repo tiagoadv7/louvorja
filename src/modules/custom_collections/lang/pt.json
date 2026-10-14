@@ -1,0 +1,42 @@
+{
+  "title": "Coletâneas Personalizadas",
+  "tabs": {
+    "editor": "Editor de Músicas",
+    "collections": "Coletâneas"
+  },
+  "actions": {
+    "new_collection": "Nova Coletânea",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "export": "Exportar .slja",
+    "import": "Importar .slja",
+    "rename": "Renomear",
+    "present": "Apresentar",
+    "remove_from_collection": "Remover da coletânea",
+    "add_to_collection": "Adicionar música",
+    "search_placeholder": "Buscar música...",
+    "search_collections_placeholder": "Buscar coletânea...",
+    "play_all": "Reproduzir tudo",
+    "stop_all": "Parar",
+    "previous": "Música anterior",
+    "next": "Próxima música",
+    "change_cover": "Alterar capa",
+    "remove_cover": "Remover capa",
+    "back_to_collections": "Voltar pras coletâneas"
+  },
+  "labels": {
+    "name": "Nome",
+    "songs_count": "música(s)",
+    "my_songs": "Minhas músicas",
+    "official_catalog": "Catálogo oficial"
+  },
+  "data": {
+    "empty_collections": "Nenhuma coletânea pessoal. Clique em + para criar.",
+    "empty_collection_songs": "Coletânea vazia. Adicione músicas usando o botão acima.",
+    "select_collection": "Selecione uma coletânea na lista ao lado",
+    "confirm_delete_collection": "Excluir esta coletânea? As músicas continuam disponíveis em \"Minhas Músicas\".",
+    "name_placeholder": "Nome da coletânea",
+    "empty_search_results": "Nenhuma música encontrada",
+    "empty_search_results_collections": "Nenhuma coletânea encontrada"
+  }
+}

@@ -13,13 +13,28 @@ import manifest from "../manifest.json";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 const moduleContainer = ref(null);
 const t = (key) => {
-  return moduleContainer.value?.t(key) || key;
+  if (!moduleContainer.value) {
+    const tr = manifest.translations?.['pt'];
+    if (tr) {
+      const val = key.split('.').reduce((obj, k) => obj?.[k], tr);
+      if (typeof val === 'string') return val;
+    }
+    return key;
+  }
+  const result = moduleContainer.value.t(key);
+  return (result && result !== `modules.${manifest.id}.${key}`) ? result : key;
 };
+// A ref "moduleContainer" só é preenchida num post-render effect (Vue adia
+// via queuePostRenderEffect) -- se o template/slots deste módulo ler
+// "userdata.algumacoisa.X" (ou "appdata...") já no primeiro render, garanta
+// um fallback com a MESMA forma (ver musics/interface/Index.vue), senão
+// ".algumacoisa" em undefined derruba esse primeiro render e a janela nunca
+// chega a aparecer.
 const userdata = computed(() => {
-  return moduleContainer.value?.userdata;
+  return moduleContainer.value?.userdata ?? {};
 });
 const appdata = computed(() => {
-  return moduleContainer.value?.appdata;
+  return moduleContainer.value?.appdata ?? {};
 });
 /* ########################################################### */
 /* ########################################################### */

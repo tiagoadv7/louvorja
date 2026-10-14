@@ -1,0 +1,16 @@
+{
+  "title": "Superposición de Imagen",
+  "description": "Superpone una imagen (logo, aviso, cuadro) sobre la proyección actual, con posición, tamaño y opacidad libres — sin sustituir lo que ya se está mostrando.",
+  "labels": {
+    "no_image": "Ninguna imagen seleccionada — haga clic en \"Importar imagen\" abajo."
+  },
+  "actions": {
+    "import_image": "Importar imagen",
+    "remove_image": "Quitar imagen",
+    "reset_position": "Restablecer posición"
+  },
+  "customization": {
+    "transparency": "Transparencia",
+    "adjust": "Ajustar"
+  }
+}

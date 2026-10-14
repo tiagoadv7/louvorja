@@ -16,6 +16,7 @@
           v-if="countModules(group.modules) != 0"
           class="my-0 py-0"
         >
+          <v-icon v-if="group.icon" size="18" class="mr-2">{{ group.icon }}</v-icon>
           {{ $t(group.title) }}
         </v-expansion-panel-title>
         <v-expansion-panel-text
@@ -30,9 +31,10 @@
               >
                 <v-card
                   v-if="
-                    module.language
+                    (module.language
                       ? module.language == language
-                      : !module.development || (is_dev && module.development)
+                      : !module.development || (is_dev && module.development))
+                    && !(module.manifest?.onlineOnlyLanguages?.includes(language) && !is_online)
                   "
                   :color="
                     module.invalid
@@ -58,7 +60,7 @@
                       class="text-center font-weight-light text-title-small"
                       style="text-wrap: initial"
                     >
-                      <small>{{ module.title ? $t(module.title) : "" }}</small>
+                      <small>{{ moduleTitle(module) }}</small>
                     </v-card-title>
                   </v-card-text>
                 </v-card>
@@ -111,8 +113,17 @@ export default {
         }
       },
     },
+    // Ver comentário equivalente em layout/Menu.vue.
+    is_online() {
+      return !this.$appdata.get("offline_mode");
+    },
   },
   methods: {
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      return translated !== module.title ? translated : (module.manifest?.name || translated);
+    },
     sortModules(modules) {
       //Ordena pelo idioma selecionado
       return this.$modules.sort(modules, this.$t);

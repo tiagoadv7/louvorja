@@ -1,10 +1,13 @@
 <template>
+  <transition name="cl-visibility">
   <div
+    v-if="isActive"
     ref="container"
     class="d-flex"
     :class="alignClass"
     :style="containerStyle"
   >
+    <AnimatedBackground v-if="animatedBg !== 'none'" :variant="animatedBg" :color="animatedBgColor" />
     <img
       v-if="userdata.image"
       :src="userdata.image"
@@ -23,13 +26,16 @@
       {{ time }}
     </span>
   </div>
+  </transition>
 </template>
 
 <script>
 import manifest from "../manifest.json";
+import AnimatedBackground from "@/components/AnimatedBackground.vue";
 
 export default {
   name: "ClockPage",
+  components: { AnimatedBackground },
   data: () => ({
     s_width: 0,
     s_height: 0,
@@ -42,6 +48,12 @@ export default {
     },
     module() {
       return this.$modules.get(this.module_id);
+    },
+    // Fechar o painel do operador esconde o conteúdo na janela de saída
+    // (fica só a janela transparente), sem afetar o painel do próprio
+    // operador nem o estado "minimizado".
+    isActive() {
+      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     userdata() {
       return new Proxy(
@@ -86,6 +98,12 @@ export default {
     },
     imageFit() {
       return this.userdata.image_fit || "cover";
+    },
+    animatedBg() {
+      return this.userdata.animated_bg || "none";
+    },
+    animatedBgColor() {
+      return this.userdata.animated_bg_color || "#7aa0ff";
     },
     hourCycle() {
       return this.userdata.hour_cycle || "24h";
@@ -192,3 +210,14 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.cl-visibility-enter-active,
+.cl-visibility-leave-active {
+  transition: opacity 0.4s ease;
+}
+.cl-visibility-enter-from,
+.cl-visibility-leave-to {
+  opacity: 0;
+}
+</style>
