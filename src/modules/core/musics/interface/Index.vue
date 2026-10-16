@@ -49,6 +49,7 @@
           <div>
             <Checkbox
               switch
+              class="musics-cb-nowrap"
               v-model="userdata.filter.custom_collections"
               :label="t('inputs.filter_custom_collections')"
             />
@@ -421,3 +422,13 @@ function close() {
   search.value = "";
 }
 </script>
+
+<style scoped>
+/* "Coletâneas Personalizadas" é o rótulo mais longo desse grupo de switches
+   (flex-basis: 200px, ver template acima) -- sem isso, só ele quebra em duas
+   linhas, deixando essa linha mais alta que a de "Com Playback" acima. Só
+   este (não os outros filtros) porque só ele precisa da largura extra. */
+.musics-cb-nowrap :deep(.v-label) {
+  white-space: nowrap;
+}
+</style>
