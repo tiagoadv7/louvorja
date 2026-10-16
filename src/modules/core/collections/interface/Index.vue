@@ -110,6 +110,7 @@
           <tr>
             <th class="text-right" :style="{ backgroundColor: viewingCollection.cor, color: '#FFF' }">{{ t('table.track') }}</th>
             <th class="text-left" :style="{ backgroundColor: viewingCollection.cor, color: '#FFF' }">{{ t('table.music_name') }}</th>
+            <th class="text-right" :style="{ backgroundColor: viewingCollection.cor, color: '#FFF' }">{{ t('table.duration') }}</th>
             <th :style="{ backgroundColor: viewingCollection.cor, color: '#FFF', borderLeft: 'none' }">
               <div class="d-flex justify-end align-center pe-1">
                 <v-btn
@@ -128,11 +129,19 @@
         </thead>
         <tbody>
           <tr v-if="!viewingCollectionItems.length">
-            <td colspan="3" class="text-center py-4" style="opacity:0.7">{{ t('data.empty_collection') }}</td>
+            <td colspan="4" class="text-center py-4" style="opacity:0.7">{{ t('data.empty_collection') }}</td>
           </tr>
           <tr v-for="(item, index) in viewingCollectionItems" :key="`${item.type}-${item.id}`">
             <td class="text-right">{{ index + 1 }}</td>
-            <td>{{ item.name }}</td>
+            <!-- Nome + Duração mesclados numa única célula clicável (igual
+                 Álbum — ver core/album/interface/Index.vue#.am-music-name):
+                 clicar em qualquer parte dela executa a música. -->
+            <td colspan="2" class="pa-0">
+              <a class="ccv-music-name" @click="playViewingItemDefault(item)">
+                <span class="ccv-music-name-text">{{ item.name }}</span>
+                <span class="ccv-music-duration">{{ $datetime.shortTime(item.duration) }}</span>
+              </a>
+            </td>
             <td>
               <div class="d-flex justify-end">
                 <MusicMenuTable
@@ -230,6 +239,12 @@ export default {
     playingCustomCollection: false,
     _customQueueItems: [],
     _customQueueIdx: -1,
+    // Duração de música PRÓPRIA não é salva em disco (ver helpers/
+    // CustomSongs.js — sem campo "duration") -- precisa ser lida do arquivo
+    // de áudio (ver _getCustomSongDuration). Cache só em memória (por id),
+    // pra não reabrir/reprobar o mesmo arquivo toda vez que a coletânea for
+    // reaberta na mesma sessão.
+    _customDurationCache: {},
   }),
   computed: {
     /*show() {
@@ -400,8 +415,11 @@ export default {
         const officialById = new Map(this.officialMusicsCache.map((m) => [Number(m.id_music), m]));
         const songsById = new Map(songs.map((s) => [s.id, s]));
         this.viewingCollection = collection;
-        this.viewingCollectionItems = (collection.items || [])
-          .map((item) => {
+        // Promise.all (não só .map síncrono): duração de música própria
+        // precisa ler o arquivo de áudio (ver _getCustomSongDuration) -- não
+        // trava a oficial, que já tem a duração pronta no catálogo.
+        this.viewingCollectionItems = (await Promise.all((collection.items || [])
+          .map(async (item) => {
             if (item.type === "official") {
               const m = officialById.get(Number(item.id));
               return {
@@ -410,11 +428,13 @@ export default {
                 id_music: Number(item.id),
                 name: m?.name || item.nome || "?",
                 has_instrumental_music: m?.has_instrumental_music || false,
+                duration: m?.duration || 0,
               };
             }
             const s = songsById.get(item.id);
-            return s ? { type: "custom", id: s.id, name: s.nome, song: s } : null;
-          })
+            if (!s) return null;
+            return { type: "custom", id: s.id, name: s.nome, song: s, duration: await this._getCustomSongDuration(s) };
+          })))
           .filter(Boolean);
       } finally {
         this.viewingCollectionLoading = false;
@@ -430,6 +450,38 @@ export default {
       const data = await this.$database.get(`${locale}_musics`);
       const arr = Array.isArray(data) ? data : Object.values(data || {});
       this.officialMusicsCache = arr;
+    },
+    // Clicar no NOME executa direto -- igual Álbum/Liturgia/Coletâneas
+    // Personalizadas (ver core/album/interface/Index.vue#playDefault):
+    // oficial toca no $media (mesmo que o MusicMenuTable "Cantado"); própria
+    // abre o editor em modo apresentação (mesmo que o botão "Apresentar").
+    playViewingItemDefault(item) {
+      if (item.type === "official") {
+        this.$media.open({ id_music: item.id_music, mode: "audio" });
+      } else {
+        this.apresentarCustomSong(item);
+      }
+    },
+    // Duração de música própria não é salva em disco (ver comentário em
+    // _customDurationCache) -- lida na hora criando um <audio> descartável só
+    // pra ler a duração dos metadados, mesmo truque de helpers/VideoPlayer.js
+    // #probeDuration (lá é vídeo; aqui é sempre áudio).
+    async _getCustomSongDuration(song) {
+      if (!song.audio_name) return 0;
+      if (this._customDurationCache[song.id] != null) return this._customDurationCache[song.id];
+      const url = await CustomSongs.resolveAudioUrl(song.id, song.audio_name);
+      if (!url) return 0;
+      const duration = await new Promise((resolve) => {
+        const a = document.createElement("audio");
+        a.preload = "metadata";
+        const finish = (val) => { a.src = ""; resolve(val); };
+        a.addEventListener("loadedmetadata", () => finish(a.duration || 0), { once: true });
+        a.addEventListener("error", () => finish(0), { once: true });
+        setTimeout(() => finish(0), 8000);
+        a.src = url;
+      });
+      this._customDurationCache[song.id] = duration;
+      return duration;
     },
     // Igual apresentar()/editar() de custom_collections/interface/Index.vue —
     // "Apresentar" abre em modo apresentação (sem ferramentas de edição),
@@ -559,5 +611,32 @@ const t = (key) => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
+}
+/* Nome+Duração clicáveis -- mesmo padrão do Álbum (fundo colorido + texto
+   branco fixo, ver core/album/interface/Index.vue#.am-music-name). */
+.ccv-music-name {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.ccv-music-name:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.ccv-music-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ccv-music-duration {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 </style>

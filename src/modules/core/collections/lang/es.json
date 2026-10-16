@@ -4,7 +4,8 @@
     "custom_collections_category": "Colecciones Personalizadas",
     "table": {
         "track": "Pista",
-        "music_name": "Nombre"
+        "music_name": "Nombre",
+        "duration": "Duración"
     },
     "actions": {
         "play_all": "Reproducir todos",
