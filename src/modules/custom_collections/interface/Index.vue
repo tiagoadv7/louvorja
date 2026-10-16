@@ -155,7 +155,11 @@
                 >
                   {{ element.type === 'official' ? 'mdi-cloud-outline' : 'mdi-account-music-outline' }}
                 </v-icon>
-                <div class="cc-collection-song-name" :title="element.nome">
+                <!-- Clicar no nome executa direto -- mesmo botão "Apresentar"
+                     (oficial: $media.open; própria: slide_editor em modo
+                     apresentação), igual ao Álbum/Liturgia (ver
+                     core/album/interface/Index.vue#playDefault). -->
+                <div class="cc-collection-song-name" :title="element.nome" @click.stop="apresentar(element)">
                   {{ element.nome }}
                 </div>
 
@@ -1072,6 +1076,16 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Clicável (ver apresentar()) -- hover com fundo, estilo botão, igual ao
+     Álbum/Liturgia (core/album/interface/Index.vue#.am-music-name). */
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: -4px 0;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.cc-collection-song-name:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 /* ── Diálogo: adicionar música ───────────────────────────────────────── */
