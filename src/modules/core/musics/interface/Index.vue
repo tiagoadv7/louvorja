@@ -88,7 +88,9 @@
       <tbody>
         <tr v-for="item in data.data" :key="item.id_music">
           <td>
-            {{ item.name }}
+            <!-- Clicar no nome executa direto -- igual Álbum/Liturgia/
+                 Coletâneas (ver core/album/interface/Index.vue#playDefault). -->
+            <a class="ms-music-name" @click="playDefault(item)">{{ item.name }}</a>
             <div v-if="compact" class="pb-1">
               <v-chip
                 v-for="album in item.albums"
@@ -403,6 +405,12 @@ function openAlbum(id_album) {
   proxy.$media.openAlbum(id_album);
 }
 
+// Clicar no nome executa direto -- igual Álbum/Liturgia/Coletâneas (ver
+// core/album/interface/Index.vue#playDefault).
+function playDefault(item) {
+  proxy.$media.open({ id_music: item.id_music, mode: "audio" });
+}
+
 // Abre a coletânea personalizada que contém essa música (pode estar em mais
 // de uma -- pega a primeira) no módulo custom_collections, já selecionada
 // (mesmo deep-link de collections/interface/Index.vue#openAlbum). Sem
@@ -430,5 +438,23 @@ function close() {
    este (não os outros filtros) porque só ele precisa da largura extra. */
 .musics-cb-nowrap :deep(.v-label) {
   white-space: nowrap;
+}
+
+/* Nome clicável -- mesmo padrão do Álbum/Liturgia/Coletâneas (ver
+   core/album/interface/Index.vue#.am-music-name), mas só na célula do nome
+   (não mesclado com Duração, que tem a coluna de Álbum no meio quando não
+   compacto). */
+.ms-music-name {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-block;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.ms-music-name:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
 }
 </style>
