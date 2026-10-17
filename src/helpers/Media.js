@@ -349,6 +349,11 @@ const Media = {
         if (_willCrossfade) {
           this._crossfadeAudioTrack(audioUrl, $appdata.get("modules.media.config.volume") / 100);
         } else {
+          // Ver _onAudioError -- só mostra o aviso de "não carregado" se a
+          // falha for desta tentativa específica (evita alerta em todo
+          // stop()/close(), que também limpam/trocam audio.src e disparam
+          // "error" por conta própria, sem ser uma falha de carregamento).
+          this._pendingAudioUrl = audioUrl;
           audio.src = audioUrl;
           audio.load();
           this.play();
@@ -1418,6 +1423,27 @@ const Media = {
       this.endSong();
     }
   },
+  // "error" do <audio> dispara tanto pra uma URL de verdade que falhou
+  // (404, formato não suportado, etc.) quanto pra stop()/close() limpando
+  // audio.src -- _pendingAudioUrl (setado só na tentativa de carregar, ver
+  // open()) distingue os dois: só mostra o aviso quando era de fato uma
+  // tentativa de tocar algo que não foi concluída.
+  _onAudioError(audio) {
+    if (!this._pendingAudioUrl) return;
+    this._pendingAudioUrl = null;
+    this._crossfading = false;
+    if (typeof this._autoCloseCallback === 'function') {
+      // Modo "reproduzir todos": pula para a próxima faixa silenciosamente,
+      // igual ao caminho XHR já faz pra esse mesmo caso.
+      this._autoCloseCallback();
+      return;
+    }
+    const id_music = $appdata.get("modules.media.id_music");
+    $alert.error(
+      { text: "modules.media.alerts.not_loaded", error: audio?.error?.message || "" },
+      (a) => { if (a && id_music) this.open(id_music); }
+    );
+  },
   getElement() {
     let el;
     let id = "__audio";
@@ -1429,6 +1455,15 @@ const Media = {
       el.addEventListener("timeupdate", this.timeUpdate.bind(this));
       el.addEventListener("progress", this.timeUpdate.bind(this));
       el.addEventListener("ended", this._onAudioEnded.bind(this));
+      // Ver _onAudioError: cobre o caminho "reproduz direto" (localUrl ou
+      // lazy_load online, ver open() mais abaixo) que nunca teve tratamento
+      // de erro nenhum -- um áudio que não carrega (404, arquivo corrompido,
+      // etc.) falhava EM SILÊNCIO (slide aparecia, mas sem som, sem aviso
+      // nenhum pro operador). O caminho XHR (lazy_load desligado) já mostra
+      // o alerta "não carregado" há tempos; isso só estende a mesma cobertura
+      // pro outro caminho.
+      el.addEventListener("canplay", () => { this._pendingAudioUrl = null; });
+      el.addEventListener("error", () => this._onAudioError(el));
     } else {
       el = document.getElementById(id);
     }
