@@ -148,9 +148,12 @@ const COMMIT_TYPE_SECTIONS = [
   ['test', '🧪 Testes'],
   ['build', '📦 Infraestrutura'],
   ['ci', '📦 Infraestrutura'],
-  ['chore', '📦 Tarefas internas'],
 ];
 const CATCH_ALL_SECTION = '🔧 Outras alterações';
+// "chore" (ex.: "chore: versao 1.28.9-beta.3") é so bookkeeping interno
+// (bump de versao, etc.) -- nao aparece nas "Novidades desta versao" pro
+// usuario final, nem em nenhuma outra secao (CATCH_ALL incluido).
+const HIDDEN_TYPES = new Set(['chore']);
 
 /**
  * Monta o changelog da versão via API do GitHub: pega a release publicada
@@ -210,6 +213,7 @@ async function buildChangelog(repoInfo) {
   for (const { subject } of commits) {
     const match = subject.match(/^(\w+)(\([^)]*\))?:\s*(.+)$/);
     const type = match ? match[1].toLowerCase() : null;
+    if (type && HIDDEN_TYPES.has(type)) continue;
     const cleanSubject = match ? match[3] : subject;
     const title = (COMMIT_TYPE_SECTIONS.find(([t]) => t === type) || [null, CATCH_ALL_SECTION])[1];
     if (!sections.has(title)) sections.set(title, []);
