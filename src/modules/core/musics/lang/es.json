@@ -8,7 +8,7 @@
         "filter_album": "Álbum",
         "filter_track": "Número",
         "filter_instrumental": "Con Instrumental",
-        "filter_custom_collections": "Colecciones Personalizadas"
+        "filter_custom_collections": "Personalizadas"
     },
     "table": {
         "music_name": "Nombre",

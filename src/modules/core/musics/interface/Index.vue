@@ -49,7 +49,6 @@
           <div>
             <Checkbox
               switch
-              class="musics-cb-nowrap"
               v-model="userdata.filter.custom_collections"
               :label="t('inputs.filter_custom_collections')"
             />
@@ -86,18 +85,27 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in data.data" :key="item.id_music">
+        <!-- Linha inteira clicável (não só o nome) -- igual Álbum (nome
+             mesclado até perto dos botões, ver core/album/interface/
+             Index.vue#.am-music-name). Aqui não dá pra mesclar células (tem
+             a coluna de Álbum no meio quando não compacto), então o clique
+             vai na <tr> -- chips de álbum e os ícones do menu precisam de
+             .stop pra não também disparar a execução por baixo deles. -->
+        <tr
+          v-for="item in data.data"
+          :key="item.id_music"
+          class="ms-music-row"
+          @click="playDefault(item)"
+        >
           <td>
-            <!-- Clicar no nome executa direto -- igual Álbum/Liturgia/
-                 Coletâneas (ver core/album/interface/Index.vue#playDefault). -->
-            <a class="ms-music-name" @click="playDefault(item)">{{ item.name }}</a>
+            {{ item.name }}
             <div v-if="compact" class="pb-1">
               <v-chip
                 v-for="album in item.albums"
                 :key="album.id_album"
                 :color="$theme.primary()"
                 size="x-small"
-                @click="openAlbum(album.id_album)"
+                @click.stop="openAlbum(album.id_album)"
               >
                 {{ album.name }}
               </v-chip>
@@ -109,14 +117,14 @@
               :key="album.id_album"
               :color="$theme.primary()"
               density="compact"
-              @click="openAlbum(album.id_album)"
+              @click.stop="openAlbum(album.id_album)"
             >
               {{ album.name }}
             </v-chip>
           </td>
           <td class="text-right">{{ $datetime.shortTime(item.duration) }}</td>
           <td>
-            <div class="d-flex justify-end">
+            <div class="d-flex justify-end" @click.stop>
               <MusicMenuTable
                 :id_music="item.id_music"
                 :has_instrumental_music="item.has_instrumental_music"
@@ -432,29 +440,13 @@ function close() {
 </script>
 
 <style scoped>
-/* "Coletâneas Personalizadas" é o rótulo mais longo desse grupo de switches
-   (flex-basis: 200px, ver template acima) -- sem isso, só ele quebra em duas
-   linhas, deixando essa linha mais alta que a de "Com Playback" acima. Só
-   este (não os outros filtros) porque só ele precisa da largura extra. */
-.musics-cb-nowrap :deep(.v-label) {
-  white-space: nowrap;
-}
-
-/* Nome clicável -- mesmo padrão do Álbum/Liturgia/Coletâneas (ver
-   core/album/interface/Index.vue#.am-music-name), mas só na célula do nome
-   (não mesclado com Duração, que tem a coluna de Álbum no meio quando não
-   compacto). */
-.ms-music-name {
-  color: inherit;
-  text-decoration: none;
+/* Linha inteira clicável -- mesmo espírito do Álbum (clicar executa direto,
+   hover com fundo), só que na <tr> toda em vez de mesclar células (ver
+   template acima). */
+.ms-music-row {
   cursor: pointer;
-  display: inline-block;
-  padding: 4px 8px;
-  margin: -4px -8px;
-  border-radius: 4px;
-  transition: background-color 0.15s ease;
 }
-.ms-music-name:hover {
+.ms-music-row:hover {
   background-color: rgba(var(--v-theme-on-surface), 0.08);
 }
 </style>
