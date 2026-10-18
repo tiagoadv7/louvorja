@@ -560,15 +560,44 @@ export default {
   width: 40%;
   height: 40%;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 25%, white 75%), var(--anim-color) 45%, transparent 75%);
-  filter: blur(6px);
-  box-shadow: 0 0 min(18vmin, 140px) min(9vmin, 70px) color-mix(in srgb, var(--anim-color) 45%, transparent);
+  /* Degradê com queda bem mais longa/gradual (vários estágios intermediários
+     em vez de só 2 cores + "transparent 75%") — a versão antiga ficava
+     totalmente transparente já nos últimos 25% do raio, criando um "fosso"
+     sem cor logo ANTES da borda do círculo. Bem ali fora da borda, o
+     box-shadow (abaixo) começa a pintar com densidade praticamente cheia —
+     esse salto repentino (transparente por dentro, saturado por fora) é o
+     que lia como um anel/borda nítida em vez de brilho dissolvendo aos
+     poucos. Encostar o último stop em 100% (sem sobrar faixa transparente
+     antes da borda real do elemento) faz o degradê entregar o bastão pro
+     blur/box-shadow sem descontinuidade. */
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--anim-color) 25%, white 75%) 0%,
+    var(--anim-color) 40%,
+    color-mix(in srgb, var(--anim-color) 55%, transparent) 65%,
+    color-mix(in srgb, var(--anim-color) 20%, transparent) 85%,
+    transparent 100%
+  );
+  /* Blur bem mais forte que antes (6px) — pra um elemento de ~40% da tela,
+     6px mal arranhava a borda dura do border-radius:50%, deixando a silhueta
+     circular visível (efeito "bolha" amador). Um blur proporcional ao
+     tamanho (vmin) dissolve esse contorno numa transição suave de verdade,
+     tipo bloom de lente, em qualquer resolução/monitor. */
+  filter: blur(min(7vmin, 56px));
+  box-shadow: 0 0 min(20vmin, 160px) min(6vmin, 46px) color-mix(in srgb, var(--anim-color) 32%, transparent);
 }
 .anim-bg-glow--halo {
   width: 78%;
   height: 78%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--anim-color) 35%, transparent), transparent 70%);
-  filter: blur(24px);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--anim-color) 35%, transparent) 0%,
+    color-mix(in srgb, var(--anim-color) 18%, transparent) 55%,
+    transparent 100%
+  );
+  /* Halo já era bem maior (78%) então um blur grande dissolve de vez
+     qualquer resquício de aresta, sem pesar: são só 2 elementos na tela. */
+  filter: blur(min(9vmin, 72px));
   box-shadow: none;
 }
 
