@@ -53,6 +53,20 @@ function readFileAutoDetect(filePath) {
 }
 
 function setupIpc(mainWindow) {
+  // ── Config remota (URL base de arquivos) ────────────────────────────────────
+  // O processo main não tem acesso a import.meta.env (isso só existe no bundle
+  // do renderer, injetado pelo Vite em tempo de build) — então o protocolo
+  // app-local:// (ver mais abaixo) não tinha como saber o VITE_URL_FILES real
+  // configurado, e dependia de um valor fixo adivinhado no código. O renderer
+  // manda o valor de verdade aqui, uma vez, logo no boot (ver src/main.js),
+  // tanto em dev quanto no build final — resolve pra sempre o fallback ficar
+  // "esquecido" desatualizado se VITE_URL_FILES mudar de novo no futuro.
+  let _remoteFilesBaseUrl = '';
+  ipcMain.handle('config:set-remote-files-url', (_, url) => {
+    if (typeof url === 'string' && url) _remoteFilesBaseUrl = url;
+    return true;
+  });
+
   // ── Armazenamento persistente ──────────────────────────────────────────────
   ipcMain.handle('store:get', (_, key, defaultValue = null) => {
     return Store.get(key, defaultValue);
@@ -966,7 +980,7 @@ function setupIpc(mainWindow) {
                             folder === 'musicas' ? 'musics/pt' : folder;
           // filename pode ter subpasta: "2017 - Eu Creio/Arquivo.mp3"
           const encodedPath = filename.split('/').map(encodeURIComponent).join('/');
-          const filesBase   = (process.env.VITE_URL_FILES || 'https://api.louvorja.com.br/file').replace(/\/$/, '');
+          const filesBase   = (_remoteFilesBaseUrl || process.env.VITE_URL_FILES || 'https://files.louvorja.com.br').replace(/\/$/, '');
           const apiUrl      = `${filesBase}/${apiFolder}/${encodedPath}`;
           const resp = await net.fetch(apiUrl).catch(() => null);
           if (resp?.ok) return resp;

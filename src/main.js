@@ -13,6 +13,13 @@ import "./assets/styles/layout.scss";
 
 loadFonts();
 
+// Avisa o processo main qual é o VITE_URL_FILES real (import.meta.env só
+// existe aqui no renderer) — sem isso, o protocolo app-local:// (fallback
+// online do "Modo Offline", ver electron/ipc.js) não tem como saber essa URL
+// e cai num valor fixo adivinhado no código, que desatualiza se o .env mudar.
+// Feito o quanto antes, antes de qualquer mídia poder tocar.
+window.electron?.setRemoteFilesUrl?.(import.meta.env.VITE_URL_FILES);
+
 const app = createApp(App);
 
 //Modules

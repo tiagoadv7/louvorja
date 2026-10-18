@@ -82,6 +82,12 @@ contextBridge.exposeInMainWorld('electron', {
   showItemInFolder: (filePath) => ipcRenderer.invoke('app:show-item-in-folder', filePath),
   refreshWritableBase: () => ipcRenderer.invoke('app:refresh-writable-base'),
 
+  // ── Config remota ────────────────────────────────────────────────────────
+  // Informa ao processo main o VITE_URL_FILES real do renderer (ver comentário
+  // em electron/ipc.js) — sem isso o protocolo app-local:// não tem como saber
+  // essa URL (processo main não enxerga import.meta.env).
+  setRemoteFilesUrl: (url) => ipcRenderer.invoke('config:set-remote-files-url', url),
+
   // ── Arquivos de mídia locais ─────────────────────────────────────────────
   mediaGetBaseFolder: () => ipcRenderer.invoke('media:get-base-folder'),
   mediaSetBaseFolder: (folderPath) => ipcRenderer.invoke('media:set-base-folder', folderPath),
