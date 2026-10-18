@@ -9,6 +9,18 @@ import $database from "@/helpers/Database";
 import $electron from "@/helpers/Electron";
 import $audioBus from "@/helpers/AudioBus";
 
+// Boa parte do catálogo legado (hinários antigos, em especial) ainda tem o
+// nome do arquivo de áudio em .mp3 no banco local (SQLite/Modo Offline) --
+// nunca atualizado depois que o servidor migrou esses arquivos pra .opus, e
+// o .mp3 não existe mais no CDN. Sem isso, qualquer música ainda não baixada
+// localmente cujo nome no banco local ficou desatualizado falhava com "erro
+// ao carregar áudio" mesmo a música estando disponível, só que sob outra
+// extensão (ex.: Hinário Adventista 1996, faixa "Ó Deus de Amor").
+function withOpusFallback(url) {
+  if (!url || !/\.mp3(\?|#|$)/i.test(url)) return null;
+  return url.replace(/\.mp3(\?|#|$)/i, ".opus$1");
+}
+
 const Media = {
   async open(params) {
     // typeof null === "object" — sem o check explícito, open(null) (ex.: retry
@@ -354,6 +366,7 @@ const Media = {
           // stop()/close(), que também limpam/trocam audio.src e disparam
           // "error" por conta própria, sem ser uma falha de carregamento).
           this._pendingAudioUrl = audioUrl;
+          this._opusFallbackAttempted = false;
           audio.src = audioUrl;
           audio.load();
           this.play();
@@ -362,62 +375,14 @@ const Media = {
         //Se a opção lazy_load estiver desmarcada, execução lenta (o audio só é executado depois de totalmente carregado)
         $appdata.set("modules.media.config.lazy", false);
         let self = this;
-        let request = new XMLHttpRequest();
-        try {
-          request.open("GET", $appdata.get("modules.media.config.audio"), true);
-        } catch (error) {
-          self._crossfading = false;
-          if (typeof self._autoCloseCallback === 'function') {
-            self._autoCloseCallback();
-          } else {
-            $alert.error(
-              { text: "modules.media.alerts.not_loaded", error },
-              function (a) {
-                if (a) { self.open(id_music); }
-              },
-            );
-          }
-          return;
-        }
 
-        request.responseType = "blob";
-        request.onload = function () {
-          if (this.status == 200) {
-            const blobUrl = URL.createObjectURL(this.response);
-            if (_willCrossfade) {
-              self._crossfadeAudioTrack(blobUrl, $appdata.get("modules.media.config.volume") / 100);
-            } else {
-              audio.src = blobUrl;
-              audio.load();
-              self.play();
-            }
-          } else {
-            self._crossfading = false;
-            if (typeof self._autoCloseCallback === 'function') {
-              self._autoCloseCallback();
-            } else {
-              $alert.error(
-                {
-                  text: "modules.media.alerts.not_loaded",
-                  error: request.statusText || "",
-                },
-                function (a) {
-                  if (a) { self.open(id_music); }
-                },
-              );
-            }
-          }
-        };
-        request.onerror = function () {
+        const giveUp = (error) => {
           self._crossfading = false;
           if (typeof self._autoCloseCallback === 'function') {
             self._autoCloseCallback();
           } else {
             $alert.error(
-              {
-                text: "modules.media.alerts.not_loaded",
-                error: request.statusText || "",
-              },
+              { text: "modules.media.alerts.not_loaded", error: error || "" },
               function (a) {
                 if (a) { self.open(id_music); }
               },
@@ -425,7 +390,51 @@ const Media = {
           }
         };
 
-        request.send();
+        // isFallback evita um segundo retry caso o .opus também falhe (ver
+        // withOpusFallback) -- uma tentativa extra por abertura, não um loop.
+        const sendAudioRequest = (url, isFallback) => {
+          let request = new XMLHttpRequest();
+          try {
+            request.open("GET", url, true);
+          } catch (error) {
+            giveUp(error);
+            return;
+          }
+
+          request.responseType = "blob";
+          request.onload = function () {
+            if (this.status == 200) {
+              const blobUrl = URL.createObjectURL(this.response);
+              $appdata.set("modules.media.config.audio", url);
+              if (_willCrossfade) {
+                self._crossfadeAudioTrack(blobUrl, $appdata.get("modules.media.config.volume") / 100);
+              } else {
+                audio.src = blobUrl;
+                audio.load();
+                self.play();
+              }
+              return;
+            }
+            const fallbackUrl = !isFallback && withOpusFallback(url);
+            if (fallbackUrl) {
+              sendAudioRequest(fallbackUrl, true);
+            } else {
+              giveUp(request.statusText);
+            }
+          };
+          request.onerror = function () {
+            const fallbackUrl = !isFallback && withOpusFallback(url);
+            if (fallbackUrl) {
+              sendAudioRequest(fallbackUrl, true);
+            } else {
+              giveUp(request.statusText);
+            }
+          };
+
+          request.send();
+        };
+
+        sendAudioRequest($appdata.get("modules.media.config.audio"), false);
         $appdata.set("modules.media.loading", false);
       }
     } else {
@@ -1430,7 +1439,23 @@ const Media = {
   // tentativa de tocar algo que não foi concluída.
   _onAudioError(audio) {
     if (!this._pendingAudioUrl) return;
+    const failedUrl = this._pendingAudioUrl;
     this._pendingAudioUrl = null;
+    // Mesmo fallback mp3→opus do caminho XHR (ver withOpusFallback) -- uma
+    // tentativa extra por abertura, controlada por _opusFallbackAttempted
+    // (resetado a cada open() novo), não um loop caso o .opus também falhe.
+    if (!this._opusFallbackAttempted) {
+      const fallbackUrl = withOpusFallback(failedUrl);
+      if (fallbackUrl) {
+        this._opusFallbackAttempted = true;
+        this._pendingAudioUrl = fallbackUrl;
+        $appdata.set("modules.media.config.audio", fallbackUrl);
+        audio.src = fallbackUrl;
+        audio.load();
+        this.play();
+        return;
+      }
+    }
     this._crossfading = false;
     if (typeof this._autoCloseCallback === 'function') {
       // Modo "reproduzir todos": pula para a próxima faixa silenciosamente,
