@@ -202,6 +202,12 @@ export default {
     captureActive() {
       return this.captureSendToReturn && !!this.captureSourceId;
     },
+    slideEditorShow() {
+      return !!this.$appdata.get('modules.slide_editor.show');
+    },
+    slideEditorMinimized() {
+      return !!this.$appdata.get('modules.slide_editor.minimized');
+    },
     // Apresentação do Editor de Músicas (Coletâneas Personalizadas) — mesmo
     // padrão de "ativo" dos outros módulos. Ao contrário deles, NÃO ganha um
     // <div class="rs-module-mirror"> próprio: reaproveita o mesmo bloco
@@ -210,9 +216,19 @@ export default {
     // linha e "próxima letra" — só a FONTE dos dados muda (ver
     // slideEditorConfig e os computeds displayText/nextText/trackProgress/
     // slideCounter abaixo, que checam slideEditorActive primeiro).
+    // Precisa do mesmo "(show || minimized)" extra que mediaActive usa
+    // abaixo -- sem ele, fechar a música própria (slide_editor/interface/
+    // Index.vue#close(), que só zera show/minimized do painel, igual
+    // Media.js#close() faz com modules.media.show/minimized, SEM tocar em
+    // popup_module de propósito -- a projeção deve continuar até o operador
+    // encerrar explicitamente) deixava o retorno preso no último slide pra
+    // sempre: popup_module continuava 'slide_editor' e essa computed não
+    // checava mais nada além disso.
     slideEditorActive() {
-      if (this.returnPopupModule) return this.returnPopupModule === 'slide_editor';
-      return this.popupModule === 'slide_editor';
+      if (this.returnPopupModule) {
+        return this.returnPopupModule === 'slide_editor' && (this.slideEditorShow || this.slideEditorMinimized);
+      }
+      return this.popupModule === 'slide_editor' && (this.slideEditorShow || this.slideEditorMinimized);
     },
     // Campos já vêm "achatados" (um valor por slide, não um array de slides)
     // — ver slide_editor/interface/Index.vue#broadcastCurrentSlide(), que
