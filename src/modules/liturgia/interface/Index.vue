@@ -166,7 +166,10 @@
                   </div>
                 </div>
                 <div v-else class="lt-item-info">
-                  <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">{{ item.name }}</div>
+                  <div :class="['lt-item-name', { 'lt-item-name--categoria': item.type === 'categoria' }]">
+                    <v-icon v-if="item.type === 'categoria'" size="15" class="lt-cat-icon">{{ categoriaIcon(item.name) }}</v-icon>
+                    {{ item.name }}
+                  </div>
                   <div v-if="item.type !== 'categoria'" class="lt-item-sub">{{ itemTypeLabel(item) }}</div>
                 </div>
                 <div class="lt-item-dur" v-if="item.duration">
@@ -851,6 +854,27 @@ const TYPE_ICON = {
   agendados: 'mdi-calendar-check-outline',
 };
 
+// Ícone de cada categoria pelo nome que a pessoa deu a ela (ex.: "Louvor",
+// "Oração", "Oferta") -- a ordem importa, o primeiro padrão que bater vence
+// (ex.: "Pregação da Palavra" bate em /palavra/ antes de chegar num padrão
+// mais genérico). Cai em TYPE_ICON.categoria (a tag genérica) se nada bater.
+const CATEGORY_ICON_RULES = [
+  // louvor/adoração antes de oração: "adoração" contém "oração" como
+  // substring (ador-AÇÃO), então na ordem errada "Louvor e Adoração" caía
+  // sempre na regra de oração antes de chegar na de louvor.
+  [/louvor|ador[aá][cç][aã]o|c[aâ]ntico|m[uú]sica/i, 'mdi-music-note'],
+  [/ora[cç][aã]o|intercess/i, 'mdi-hands-pray'],
+  [/palavra|preg(a[cç][aã]o|ador)|serm[aã]o|mensagem|estudo/i, 'mdi-book-open-page-variant-outline'],
+  [/oferta|d[ií]zimo|contribui/i, 'mdi-hand-coin'],
+  [/comunh[aã]o|ceia/i, 'mdi-cup'],
+  [/aviso|an[uú]ncio|informe/i, 'mdi-bullhorn'],
+  [/testemunho/i, 'mdi-account-voice'],
+  [/batismo/i, 'mdi-water'],
+  [/abertura|boas[- ]vindas|recep[cç][aã]o/i, 'mdi-door-open'],
+  [/encerramento|b[eê]n[cç][aã]o|despedida/i, 'mdi-hand-wave'],
+  [/infantil|crian[cç]a/i, 'mdi-human-child'],
+];
+
 let _idSeq = 0;
 function newId() {
   _idSeq += 1;
@@ -1377,6 +1401,10 @@ export default {
       if (item.type === 'arquivo' && isAudioFile(item.url)) return 'mdi-music-note';
       if (item.type === 'arquivo' && isPowerPointFile(item.url)) return 'mdi-microsoft-powerpoint';
       return this.typeIcon(item.type);
+    },
+    categoriaIcon(name) {
+      const hit = CATEGORY_ICON_RULES.find(([re]) => re.test(name || ''));
+      return hit ? hit[1] : TYPE_ICON.categoria;
     },
     itemTypeLabel(item) {
       if (item.type === 'musica' && !item.id_music) return 'Clique para escolher a música';
@@ -2450,7 +2478,15 @@ export default {
   text-overflow: ellipsis;
   color: rgb(var(--v-theme-on-surface));
 }
-.lt-item-name--categoria { text-align: center; font-weight: 700; }
+.lt-item-name--categoria {
+  text-align: center;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.lt-cat-icon { flex-shrink: 0; opacity: 0.85; }
 /* Bloco clicável de música (ver onMusicNameClick) — nome + tipo (linha de
    baixo) JUNTOS num hover só, igual ao álbum estender até a Duração (ver
    core/album/interface/Index.vue#.am-music-name): parece um botão (hover com
