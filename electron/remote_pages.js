@@ -12,6 +12,68 @@ const ICON_VOLUME = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
   '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/>' +
   '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
 
+// Mesmo motivo do ICON_VOLUME acima (emoji renderizava inconsistente entre
+// plataformas) -- ícones em traço (stroke, currentColor). Visual geral (tema
+// claro, roxo/índigo como cor de destaque, botões sempre com texto + ícone,
+// nunca só ícone) inspirado nas telas do app irmão "Violin Remote"
+// (apps.apple.com/br/app/violin-remote/id6810058446), referenciado pelo
+// usuário como modelo de layout.
+const ICON_PATHS = {
+  RADIO: '<circle cx="12" cy="10" r="2"/><path d="M12 12v9"/><path d="M8.5 6.5a5 5 0 0 0 0 7"/>' +
+    '<path d="M15.5 6.5a5 5 0 0 1 0 7"/><path d="M5.6 3.6a9 9 0 0 0 0 12.8"/><path d="M18.4 3.6a9 9 0 0 1 0 12.8"/>',
+  SKIP_BACK: '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>',
+  CHEV_LEFT: '<polyline points="15 18 9 12 15 6"/>',
+  PLAY: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/>',
+  PAUSE: '<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>' +
+    '<rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>',
+  CHEV_RIGHT: '<polyline points="9 18 15 12 9 6"/>',
+  SKIP_FORWARD: '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>',
+  CLOSE: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  MIC: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>' +
+    '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+  SEARCH: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  VIDEO: '<rect x="2" y="5" width="14" height="14" rx="3"/><path d="M16 10l6-3v10l-6-3z"/>',
+  HEADPHONES: '<path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="2" y="14" width="5" height="7" rx="2"/><rect x="17" y="14" width="5" height="7" rx="2"/>',
+  SLIDERS: '<line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>' +
+    '<line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>' +
+    '<line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>' +
+    '<line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/>',
+  LIST: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>' +
+    '<line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  LINK: '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 4.76"/>' +
+    '<path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L12.9 19.24"/>',
+  // Mãos em oração (ícone sólido, não traço -- path do MDI "hands-pray",
+  // Apache-2.0, viewBox 24x24) -- usado no botão de Atenuar (talkover),
+  // que no uso real da igreja é ligado durante orações.
+  HANDS_PRAY: '<path fill="currentColor" stroke="none" d="M11.43 9.67C11.47 9.78 11.5 9.88 11.5 10V15.22C11.5 15.72 11.31 16.2 10.97 16.57L8.18 19.62L4.78 16.22L6 15L8.8 2.86C8.92 2.36 9.37 2 9.89 2C10.5 2 11 2.5 11 3.11V8.07C10.84 8.03 10.67 8 10.5 8C9.4 8 8.5 8.9 8.5 10V13C8.5 13.28 8.72 13.5 9 13.5S9.5 13.28 9.5 13V10C9.5 9.45 9.95 9 10.5 9C10.69 9 10.85 9.07 11 9.16C11.12 9.23 11.21 9.32 11.3 9.42C11.33 9.46 11.36 9.5 11.38 9.55C11.4 9.59 11.42 9.63 11.43 9.67M2 19L6 22L7.17 20.73L3.72 17.28L2 19M18 15L15.2 2.86C15.08 2.36 14.63 2 14.11 2C13.5 2 13 2.5 13 3.11V8.07C13.16 8.03 13.33 8 13.5 8C14.6 8 15.5 8.9 15.5 10V13C15.5 13.28 15.28 13.5 15 13.5S14.5 13.28 14.5 13V10C14.5 9.45 14.05 9 13.5 9C13.31 9 13.15 9.07 13 9.16C12.88 9.23 12.79 9.32 12.71 9.42C12.68 9.46 12.64 9.5 12.62 9.55C12.6 9.59 12.58 9.63 12.57 9.67C12.53 9.78 12.5 9.88 12.5 10V15.22C12.5 15.72 12.69 16.2 13.03 16.57L15.82 19.62L19.22 16.22L18 15M20.28 17.28L16.83 20.73L18 22L22 19L20.28 17.28Z"/>',
+  // Path do MDI "playlist-music" (Apache-2.0) -- mesmo ícone do módulo
+  // Liturgia no LouvorJA (ver src/modules/liturgia/manifest.json#icon), usado
+  // no botão "Abrir" da aba Liturgia aqui no remoto (antes usava o ícone de
+  // câmera/vídeo, sem relação nenhuma com o que o botão realmente abre).
+  PLAYLIST_MUSIC: '<path fill="currentColor" stroke="none" d="M15,6H3V8H15V6M15,10H3V12H15V10M3,16H11V14H3V16M17,6V14.18C16.69,14.07 16.35,14 16,14A3,3 0 0,0 13,17A3,3 0 0,0 16,20A3,3 0 0,0 19,17V8H22V6H17Z"/>',
+};
+function icon(name, size) {
+  return '<svg width="' + (size || 20) + '" height="' + (size || 20) + '" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    ICON_PATHS[name] + '</svg>';
+}
+
+// Ícone de Play/Pause que troca sozinho conforme o estado real de reprodução
+// -- antes sempre mostrava só o ícone de "play", mesmo com algo tocando (o
+// botão nunca tinha como saber o estado, só mandava a ação "toggle" às
+// cegas). As duas versões (play/pause) nascem juntas no HTML; o <script>
+// só alterna a classe "is-playing" no elemento com esse id (ver
+// .play-pause-icon no <style> e carregarVolume/carregarVideoVolume/
+// carregarSoundMaster mais abaixo) -- troca de ícone pura CSS, sem precisar
+// montar SVG no cliente (o <script> não tem acesso à função icon() daqui,
+// que só roda no processo main ao montar a página).
+function playPauseIcon(id, size) {
+  return '<span class="dpad-icon play-pause-icon" id="' + id + '" style="color:var(--primary)">' +
+    '<span class="icon-play">' + icon('PLAY', size) + '</span>' +
+    '<span class="icon-pause">' + icon('PAUSE', size) + '</span>' +
+    '</span>';
+}
+
 // A fonte usada nas letras (mesma "DIN Condensed" do LouvorJA Delphi — ver
 // fmMusica.pas: lblLetra.Font.Name := 'DIN Condensed') precisa ser embutida
 // como data URI aqui: mirrorPageHtml() é uma página HTML autônoma servida
@@ -45,131 +107,327 @@ function controlPageHtml() {
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Controle Remoto — LouvorJA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
+/* Paleta, tipografia (Plus Jakarta Sans) e componentes (cartões, botões,
+   sliders) seguindo de perto os mockups de referência fornecidos pelo
+   usuário ("Coletânea"/"Liturgia"/"Mídia" -- app-html, exportados de uma
+   ferramenta de design). Valores (cores, raios, espaçamento) replicados
+   com fidelidade; o HTML/JS funcional por trás de cada ID continua o
+   mesmo de antes, só o visual muda. */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  background:linear-gradient(135deg,#1b2a41 0%,#0d1b2a 100%);
-  min-height:100vh;color:#fff;padding:18px;padding-bottom:40px}
-h1{font-size:18px;text-align:center;margin-bottom:4px}
-.status{text-align:center;font-size:12px;color:rgba(255,255,255,.55);margin-bottom:18px;display:flex;
-  align-items:center;justify-content:center;gap:6px}
-.dot{width:9px;height:9px;border-radius:50%;background:#f1c40f;display:inline-block}
-.dot.ok{background:#2ecc71}.dot.err{background:#e74c3c}
-.card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:18px;
-  padding:18px;margin-bottom:16px}
-/* Botões lado a lado (mesmo padrão das ações de item da Liturgia), em vez do
-   D-pad em grade 3x3 anterior. */
-.dpad{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
-.dpad button{flex:0 0 auto;width:52px;height:52px;border:none;border-radius:50%;background:rgba(255,255,255,.09);
-  color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.dpad button:active{background:rgba(255,255,255,.22);transform:scale(.96)}
-.dpad button#closeBtn{background:rgba(231,76,60,.25)}
-input{width:100%;padding:12px 14px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.18);
-  border-radius:10px;color:#fff;font-size:15px;outline:none}
-input::placeholder{color:rgba(255,255,255,.35)}
-.results{margin-top:10px;max-height:40vh;overflow:auto}
-.result{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;
-  align-items:center;gap:8px}
-.result .name{flex:1;font-size:14px;min-width:0}
-.result .albums{display:block;font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;
+:root{
+  --primary:#F5A524;--primary-dark:#D4891A;--primary-soft:#2A2110;--primary-text-on:#1A1204;--primary-text-soft:#FFC35C;
+  --bg:#0A0F1C;--card:#121A2B;--card-border:#1C2539;
+  --surface-2:#0D1424;--surface-3:#1A2234;--border-2:#263049;
+  --text:#F2F4F8;--text-2:#C4CBD8;--text-muted:#8D97AB;--text-dim:#6B7690;
+  --success:#4ADE80;--success-bg:#0F2A1C;
+  --danger:#FF8A8A;--danger-bg:#2A1418;--danger-border:#4A2025;
+  --info:#7EA2FF;--info-bg:#17254A;
+  --radius:20px;--radius-md:16px;--radius-sm:14px;--radius-xs:12px;
+  --shadow:0 12px 32px rgba(0,0,0,.45);
+}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);min-height:100vh;color:var(--text)}
+input,button{font-family:inherit}
+/* Slider nativo com trilho preenchido via gradient (ver inline style de
+   cada input[type=range]) + thumb circular branco -- mesma técnica dos
+   mockups de referência. */
+/* .rng-wrap: o trilho (cinza) e o preenchimento (amarelo) viram duas divs
+   próprias por baixo do <input>, cada uma com seu próprio border-radius --
+   antes o preenchimento era só um gradient no mesmo elemento (ver
+   fillSlider), então a ponta onde o amarelo termina era sempre um corte reto
+   (nunca arredondada, só as pontas do trilho inteiro eram). O <input> em si
+   fica com o fundo transparente e só contribui com o thumb (bolinha) por
+   cima, então o arrastar/toque continua 100% nativo. */
+.rng-wrap{position:relative;flex:1;height:22px;display:flex;align-items:center}
+.rng-track{position:absolute;left:0;right:0;height:8px;border-radius:999px;background:var(--surface-3);pointer-events:none}
+.rng-fill{position:absolute;left:0;height:8px;border-radius:999px;background:var(--primary);pointer-events:none;
+  width:0%;transition:width .08s ease-out}
+.rng{position:relative;z-index:1;-webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:999px;
+  outline:none;margin:0;cursor:pointer;background:transparent}
+.rng::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;
+  background:#fff;border:0;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+.rng::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:0;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+.rng::-moz-range-track{background:transparent}
+.rng:focus-visible{box-shadow:0 0 0 3px rgba(245,165,36,.45)}
+.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
+  padding:20px 16px 16px;background:var(--bg)}
+.topbar-icon{width:36px;height:36px;border-radius:var(--radius-xs);background:var(--primary-soft);color:var(--primary);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.topbar-titles{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+.topbar-title{font-size:15px;font-weight:700;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-sub{font-size:12px;color:var(--text-muted)}
+h1{display:none}
+.status{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;flex-shrink:0;
+  background:var(--surface-3);color:var(--text-muted);font-size:12px;font-weight:600}
+.status.ok{background:var(--success-bg);color:var(--success)}
+.status.err{background:var(--danger-bg);color:var(--danger)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;flex-shrink:0;
+  box-shadow:0 0 0 3px currentColor,0 0 0 3px rgba(0,0,0,0);opacity:.95}
+/* padding-bottom reserva espaço pra barra de abas fixa no rodapé (.tabbar
+   abaixo) não cobrir o fim do conteúdo. */
+.main{max-width:560px;margin:0 auto;padding:4px 16px 16px;padding-bottom:88px}
+/* Abas (Controle/Mídia/Liturgia) -- organização sugerida pelo usuário. Cada
+   painel é só escondido via CSS; nenhum conteúdo/id interno dos cards muda
+   de aba pra aba. */
+.tab-panel{display:none}
+.tab-panel.active{display:flex;flex-direction:column;gap:14px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;
+  background:var(--card);border-top:1px solid var(--card-border);
+  padding:8px 4px calc(8px + env(safe-area-inset-bottom, 0px))}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  border:none;background:transparent;color:var(--text-muted);padding:4px 2px;
+  cursor:pointer;font-size:11px;font-weight:500;transition:color .12s ease}
+.tab-btn .dpad-icon{color:inherit}
+.tab-btn.active{color:var(--primary)}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:14px}
+.card-title{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.card-title-icon{width:34px;height:34px;border-radius:var(--radius-xs);display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;background:var(--surface-3);color:var(--text-2)}
+.card-title-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+.card-title-text .t{font-size:15px;font-weight:700}
+.card-title-text .s{font-size:12px;color:var(--text-muted)}
+/* Linha de navegação: pontas só-ícone + meio com rótulo (um deles em
+   destaque na cor de marca) -- mesmo padrão do mockup de referência. */
+.navrow{display:flex;gap:8px}
+.nav-end{width:52px;height:60px;flex-shrink:0;border:1px solid var(--border-2);border-radius:var(--radius-md);
+  background:var(--surface-3);color:var(--text-2);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background .12s ease,transform .12s ease}
+.nav-end:active{background:var(--card-border);transform:scale(.96)}
+.nav-mid{flex:1;height:60px;border:1px solid var(--border-2);border-radius:var(--radius-md);
+  background:var(--surface-3);color:var(--text);font-size:15px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+  transition:background .12s ease,transform .12s ease}
+.nav-mid:active{background:var(--card-border);transform:scale(.98)}
+/* Tom suave (igual ao .abtn.soft-accent dos cartões de Mídia) em vez do
+   amarelo cheio de antes -- o usuário achou os botões "muito coloridos",
+   então o destaque de "Próxima" passou a combinar com o resto. */
+.nav-mid--accent{border:1px solid #3A3220;background:var(--primary-soft);color:var(--primary-text-soft)}
+.nav-mid--accent:active{opacity:.85}
+/* Ícone de Play/Pause que troca sozinho com o estado real (ver playPauseIcon
+   no topo do arquivo e carregarVolume/carregarVideoVolume/carregarSoundMaster
+   no <script>) -- as duas versões já nascem no HTML, só a visibilidade troca. */
+.play-pause-icon .icon-pause{display:none}
+.play-pause-icon.is-playing .icon-play{display:none}
+.play-pause-icon.is-playing .icon-pause{display:flex}
+.dpad-icon{display:flex}
+/* Botões de ação (Play/Pause, Fechar, Parar) -- pares lado a lado numa
+   grade de 2 colunas, variantes de cor por função. */
+.abtn-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.abtn{height:54px;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+  transition:background .12s ease,opacity .12s ease,transform .12s ease}
+.abtn:active{transform:scale(.98)}
+.abtn.accent{background:var(--primary);color:var(--primary-text-on)}
+.abtn.accent:active{background:var(--primary-dark)}
+.abtn.soft-accent{border:1px solid #3A3220;background:var(--primary-soft);color:var(--primary-text-soft)}
+.abtn.soft-accent:active{opacity:.85}
+.abtn.soft-danger{border:1px solid var(--danger-border);background:var(--danger-bg);color:var(--danger)}
+.abtn.soft-danger:active{opacity:.85}
+.abtn.outline{border:1px solid var(--border-2);background:var(--surface-3);color:var(--text)}
+.abtn.outline:active{background:var(--card-border)}
+input{width:100%;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-2);
+  border-radius:var(--radius-sm);color:var(--text);font-size:15px;outline:none;transition:border-color .12s ease}
+input:focus{border-color:var(--primary)}
+input::placeholder{color:var(--text-dim)}
+.field-group{display:flex;flex-direction:column;gap:10px}
+.field-label-row{display:flex;justify-content:space-between;font-size:13px}
+.field-label-row label{color:var(--text-2);font-weight:600}
+.field-label-row .val{color:var(--text-muted);font-variant-numeric:tabular-nums}
+.search-box{position:relative;height:48px;border-radius:var(--radius-sm);background:var(--surface-2);
+  border:1px solid var(--border-2);display:flex;align-items:center;gap:10px;padding:0 14px;color:var(--text-muted)}
+.search-box svg{flex-shrink:0}
+.search-box input{flex:1;min-width:0;border:0;background:transparent;padding:0;height:auto}
+.results{display:flex;flex-direction:column;margin-top:10px}
+.result,.row-item{display:flex;align-items:center;gap:12px;padding:8px;border-radius:var(--radius-md)}
+.row-badge{width:40px;height:40px;border-radius:var(--radius-xs);flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:13px;font-weight:700;background:var(--surface-3);color:var(--text-2)}
+.result .name,.row-item .title{align-self:stretch;min-width:0;font-size:15px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+/* align-items:flex-start -- sem isso, filhos flex numa coluna (a tag/chip
+   de tipo, "Música"/"Escolher na hora"/"Mídia") esticam pra largura cheia
+   por padrão, virando uma barra ao invés de um chip ajustado ao texto; name/
+   title/sub pedem align-self:stretch de volta, só eles, pra continuar
+   truncando com reticências na largura certa. */
+.result-info,.row-info{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.result .albums,.row-item .sub{align-self:stretch;display:block;font-size:12px;font-weight:400;color:var(--text-muted);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.result button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;padding:8px 12px;
-  font-size:12px;cursor:pointer;flex-shrink:0}
-.volume-label{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.row-play{width:44px;height:44px;border-radius:50%;border:0;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;background:var(--primary-soft);color:var(--primary-text-soft);cursor:pointer}
+.row-play:active{opacity:.8}
+.result-empty{padding:18px 8px;text-align:center;font-size:13px;color:var(--text-muted)}
+.volume-label{font-size:13px;color:var(--text-2);font-weight:600;margin-bottom:10px}
 .volume-row{display:flex;align-items:center;gap:12px}
-.volume-icon{flex-shrink:0;display:flex;color:rgba(255,255,255,.7)}
-.volume-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;
-  background:rgba(255,255,255,.18);outline:none}
-.volume-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
-  border-radius:50%;background:#3498db;cursor:pointer;border:none}
-.volume-row input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#3498db;
-  cursor:pointer;border:none}
-.volume-val{font-size:13px;min-width:40px;text-align:right;flex-shrink:0;color:rgba(255,255,255,.7)}
-/* Controle dedicado de vídeo/áudio (independente do controle de slides acima) */
-.media-row{display:flex;align-items:center;gap:10px;padding:8px 2px}
-.media-row:not(:last-child){border-bottom:1px solid rgba(255,255,255,.08)}
-.media-row .media-label{flex:1;font-size:14px}
-.media-row button{flex:0 0 auto;width:44px;height:44px;border:none;border-radius:50%;
-  background:rgba(255,255,255,.09);color:#fff;font-size:18px;display:flex;align-items:center;
-  justify-content:center;cursor:pointer}
-.media-row button:active{background:rgba(255,255,255,.22);transform:scale(.96)}
-.media-row button.media-stop{background:rgba(231,76,60,.25)}
-/* SoundMaster: lista de pads — mesmo visual da lista da Liturgia
-   (.lit-list/.lit-item abaixo), só mais baixa (card menor) e com o item
-   tocando destacado. */
-#smPads{max-height:38vh}
-.lit-item.sm-pad-active{background:rgba(52,152,219,.18);border-radius:8px}
-.sm-talkover-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px;margin-bottom:6px}
-.sm-talkover-btn{background:rgba(255,255,255,.09);border:none;border-radius:8px;color:#fff;
-  padding:6px 12px;font-size:13px;cursor:pointer}
-.sm-talkover-btn.on{background:rgba(241,196,15,.85)}
-/* ── Layout de duas colunas: controle de um lado, liturgia do outro ── */
-.layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
-.col{flex:1 1 320px;min-width:280px}
-.lit-item{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;
-  align-items:center;gap:8px}
-.lit-item .name{flex:1;font-size:14px}
-.lit-item.lit-cat{font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.03em;
-  border-radius:8px;border-bottom:none;margin-top:8px;padding:8px 10px}
-.lit-item.lit-cat:first-child{margin-top:0}
-.lit-empty{padding:12px 10px;font-size:13px;color:rgba(255,255,255,.5)}
-.lit-list{max-height:60vh;overflow:auto}
-.lit-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-.lit-title{font-weight:700;font-size:14px}
-.lit-header button,.lit-item button{background:rgba(52,152,219,.85);border:none;border-radius:8px;color:#fff;
-  padding:8px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
-.token-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;
+.volume-icon{flex-shrink:0;display:flex;color:var(--text-muted)}
+.volume-val{font-size:13px;min-width:38px;text-align:right;flex-shrink:0;color:var(--text-muted);
+  font-variant-numeric:tabular-nums}
+.media-status{font-size:14px;font-weight:600;color:var(--text);margin-bottom:10px}
+/* Tempo decorrido/restante da faixa do SoundMaster -- só aparece quando a
+   duração da faixa é conhecida (ver carregarSoundMaster), igual ao resto do
+   card de volume por baixo: trilho+preenchimento em .rng-wrap, mas sem
+   <input> (é só mostrador, não dá pra arrastar/buscar na faixa por aqui). */
+.sm-progress-wrap{margin-bottom:14px}
+.sm-progress-rng{height:8px}
+.sm-time-row{display:flex;justify-content:space-between;margin-top:6px;font-size:12px;
+  color:var(--text-muted);font-variant-numeric:tabular-nums}
+/* SoundMaster: lista de pads — mesmo cartão de linha numerada da Liturgia
+   (.row-item abaixo), só mais baixa e com o pad tocando destacado. */
+#smPads{max-height:38vh;overflow:auto;display:flex;flex-direction:column;margin-bottom:4px}
+.row-item.sm-pad-active{background:var(--primary-soft)}
+.row-item.sm-pad-active .row-badge{background:var(--primary);color:var(--primary-text-on)}
+.row-item.sm-pad-active .row-play{background:var(--primary);color:var(--primary-text-on)}
+.sm-talkover-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sm-talkover-row .field-label-row{flex:1}
+.sm-talkover-btn{height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--border-2);
+  background:var(--surface-3);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;flex-shrink:0}
+.sm-talkover-btn.on{border-color:#3B5BB5;background:var(--info-bg);color:#A9C1FF}
+.divider{height:1px;background:var(--card-border)}
+/* Liturgia: seções viram cartões (ícone + nome + contagem), itens numerados
+   reaproveitam o mesmo .row-item/.row-badge/.row-play de cima. */
+.lit-section{background:var(--surface-2);border:1px solid var(--card-border);border-radius:var(--radius-md);overflow:hidden}
+.lit-section-head{display:flex;align-items:center;gap:12px;padding:12px 12px 10px}
+.lit-section-icon{width:32px;height:32px;border-radius:var(--radius-xs);display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.lit-section-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lit-section-text .name{font-size:14px;font-weight:700}
+.lit-section-text .meta{font-size:12px;color:var(--text-muted)}
+.lit-section-items{display:flex;flex-direction:column;padding:0 6px 6px}
+.lit-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;
+  font-size:11px;font-weight:700;background:var(--primary-soft);color:var(--primary-text-soft)}
+.lit-tag.muted{background:var(--surface-3);color:var(--text-muted)}
+.lit-tag.info{background:var(--info-bg);color:var(--info)}
+.lit-select-btn{height:40px;padding:0 14px;border-radius:var(--radius-xs);border:1px solid #3A3220;
+  background:transparent;color:var(--primary-text-soft);font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0}
+.lit-select-btn:active{background:var(--primary-soft)}
+.lit-empty{padding:12px 4px;font-size:13px;color:var(--text-muted)}
+.lit-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lit-header .title-group{display:flex;flex-direction:column;gap:4px}
+.lit-eyebrow{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
+.lit-title{margin:0;font-size:26px;line-height:1.1;font-weight:800;letter-spacing:-.02em}
+.lit-header button{height:44px;padding:0 16px;border:0;border-radius:var(--radius-xs);background:var(--primary);
+  color:var(--primary-text-on);font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;cursor:pointer}
+.lit-header button:active{background:var(--primary-dark)}
+.token-modal{position:fixed;inset:0;background:rgba(5,9,16,.8);display:flex;align-items:center;
   justify-content:center;padding:20px;z-index:10}
-.token-modal .box{background:#152238;border-radius:16px;padding:24px;max-width:360px;width:100%}
-.token-modal p{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:14px}
-.token-modal button{width:100%;margin-top:12px;padding:12px;background:linear-gradient(90deg,#3498db,#2980b9);
-  border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer}
+.token-modal .box{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+  padding:24px;max-width:360px;width:100%;box-shadow:var(--shadow)}
+.token-modal .box-icon{width:44px;height:44px;border-radius:var(--radius-xs);background:var(--primary-soft);
+  color:var(--primary);display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+.token-modal h2{font-size:16px}
+.token-modal p{font-size:13px;color:var(--text-muted);margin:8px 0 14px;line-height:1.45}
+.token-modal .field-label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px}
+.token-modal button{width:100%;margin-top:12px;padding:12px;background:var(--primary);
+  border:none;border-radius:var(--radius-sm);color:var(--primary-text-on);font-weight:700;cursor:pointer;
+  transition:background .12s ease}
+.token-modal button:active{background:var(--primary-dark)}
 .token-modal button:disabled{opacity:.6;cursor:default}
-.token-modal .msg{font-size:12px;color:#e74c3c;margin-top:10px;min-height:14px}
+.token-modal .msg{font-size:12px;color:var(--danger);margin-top:10px;min-height:14px}
 .hidden{display:none !important}
 </style>
 </head>
 <body>
-<h1>🎵 LouvorJA — Controle Remoto</h1>
-<div class="status"><span id="dot" class="dot"></span><span id="statusText">Conectando...</span></div>
+<div class="topbar">
+  <div class="topbar-icon">${icon('RADIO', 20)}</div>
+  <div class="topbar-titles">
+    <span class="topbar-title">LouvorJA</span>
+    <span class="topbar-sub">Controle remoto</span>
+  </div>
+  <div class="status" id="statusPill"><span id="dot" class="dot"></span><span id="statusText">Conectando...</span></div>
+</div>
 
-<div class="layout">
-  <div class="col col-control">
+<div class="main">
+  <!-- 3 abas (Controle/Mídia/Liturgia) -- organização sugerida pelo usuário
+       (mockup ilustrativo). A Pesquisa (antes aba própria) foi unificada
+       aqui dentro de Mídia, junto do controle de reprodução/coletânea e dos
+       volumes (ideia do mesmo mockup) -- Controle ficou só com a navegação
+       de linhas/slides, que é sobre a PROJEÇÃO atual, não sobre escolher o
+       que tocar. Visual continua o mesmo de antes (cards/cores atuais), só
+       a divisão de abas mudou. Cada aba é só um <div> escondido/mostrado
+       via CSS (.tab-panel.active) -- nenhum HTML nem id interno dos cards
+       mudou, só a forma como ficam agrupados/visíveis. Troca de aba é JS
+       puro no fim do <script>. -->
+  <div class="tab-panel active" data-panel="controle">
     <div class="card">
-      <div class="dpad">
-        <button data-key="ArrowLeft" title="Primeiro">⏮</button>
-        <button data-key="ArrowUp" title="Linha anterior">◀</button>
-        <button data-key="Space" title="Play/Pause">⏯</button>
-        <button data-key="ArrowDown" title="Próxima linha">▶</button>
-        <button data-key="ArrowRight" title="Último">⏭</button>
-        <button id="closeBtn" title="Fechar projeção">✕</button>
+      <div class="card-title">
+        <div class="card-title-icon">${icon('SLIDERS', 18)}</div>
+        <div class="card-title-text"><span class="t">Navegação</span><span class="s">Avança/volta na projeção atual</span></div>
+      </div>
+      <div class="navrow">
+        <button class="nav-end" data-key="ArrowLeft" title="Primeiro" aria-label="Primeiro">${icon('SKIP_BACK', 20)}</button>
+        <button class="nav-mid" data-key="ArrowUp" title="Linha anterior">${icon('CHEV_LEFT', 20)}<span>Anterior</span></button>
+        <button class="nav-mid nav-mid--accent" data-key="ArrowDown" title="Próxima linha"><span>Próxima</span>${icon('CHEV_RIGHT', 20)}</button>
+        <button class="nav-end" data-key="ArrowRight" title="Último" aria-label="Último">${icon('SKIP_FORWARD', 20)}</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="volume-label" id="volumeLabel">Volume</div>
-      <div class="volume-row">
-        <span class="volume-icon">${ICON_VOLUME}</span>
-        <input id="volume" type="range" min="0" max="100" value="100" />
-        <span class="volume-val" id="volumeVal">100%</span>
+      <div class="card-title">
+        <div class="card-title-icon">${icon('PLAY', 18)}</div>
+        <div class="card-title-text"><span class="t">Mídia</span><span class="s">Projeção atual (slide, vídeo ou link)</span></div>
+      </div>
+      <div class="abtn-row">
+        <button class="abtn soft-accent" data-key="Space" title="Play/Pause">
+          ${playPauseIcon('mediaPlayIcon', 18)}<span>Play/Pause</span>
+        </button>
+        <button id="closeBtn" class="abtn soft-danger" title="Fechar projeção">
+          ${icon('CLOSE', 18)}<span>Fechar</span>
+        </button>
+      </div>
+      <div class="field-group" style="margin-top:14px">
+        <div class="field-label-row"><label id="volumeLabel">Volume</label><span class="val" id="volumeVal">100%</span></div>
+        <div class="volume-row">
+          <span class="volume-icon">${ICON_VOLUME}</span>
+          <div class="rng-wrap">
+            <div class="rng-track"></div>
+            <div class="rng-fill"></div>
+            <input id="volume" class="rng" type="range" min="0" max="100" value="100" />
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Vídeo: "Áudio" (SoundMaster) foi pro card dedicado abaixo, com a
-         própria lista de pads — repetir os dois botões aqui virava controle
-         duplicado da mesma coisa. -->
     <div class="card">
-      <div class="lit-title" style="margin-bottom:8px">Vídeo</div>
-      <div class="media-row">
-        <span class="media-label">Reprodução</span>
-        <button data-media-target="video" data-media-action="toggle" title="Play/Pause do vídeo">⏯</button>
-        <button data-media-target="video" data-media-action="stop" class="media-stop" title="Fechar vídeo">✕</button>
+      <div class="card-title">
+        <div class="card-title-icon">${icon('SEARCH', 18)}</div>
+        <div class="card-title-text"><span class="t">Buscar na coletânea</span><span class="s">Procure por título da música</span></div>
       </div>
-      <div class="volume-label" style="margin-top:10px">Volume</div>
-      <div class="volume-row">
-        <span class="volume-icon">${ICON_VOLUME}</span>
-        <input id="videoVolume" type="range" min="0" max="100" value="100" />
-        <span class="volume-val" id="videoVolumeVal">100%</span>
+      <div class="search-box">
+        ${icon('SEARCH', 16)}
+        <input id="search" type="search" placeholder="Nome da música…" autocomplete="off" />
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="midia">
+    <!-- Vídeo + SoundMaster, juntos nessa aba. -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-icon" style="background:var(--info-bg);color:var(--info)">${icon('VIDEO', 18)}</div>
+        <div class="card-title-text"><span class="t">Vídeo</span><span class="s">Reprodução independente da projeção</span></div>
+      </div>
+      <div class="abtn-row">
+        <button class="abtn soft-accent" data-media-target="video" data-media-action="toggle" title="Play/Pause do vídeo">
+          ${playPauseIcon('videoPlayIcon', 18)}<span>Play/Pause</span>
+        </button>
+        <button class="abtn soft-danger" data-media-target="video" data-media-action="stop" title="Fechar vídeo">
+          ${icon('CLOSE', 18)}<span>Fechar</span>
+        </button>
+      </div>
+      <div class="field-group" style="margin-top:14px">
+        <div class="field-label-row"><label>Volume</label><span class="val" id="videoVolumeVal">100%</span></div>
+        <div class="volume-row">
+          <span class="volume-icon">${ICON_VOLUME}</span>
+          <div class="rng-wrap">
+            <div class="rng-track"></div>
+            <div class="rng-fill"></div>
+            <input id="videoVolume" class="rng" type="range" min="0" max="100" value="100" />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -178,58 +436,168 @@ input::placeholder{color:rgba(255,255,255,.35)}
          nunca a janela ativa do sistema (não precisa focar nada pra funcionar,
          então não interfere numa apresentação de PowerPoint em execução). -->
     <div class="card">
-      <div class="lit-title" style="margin-bottom:10px">SoundMaster</div>
-      <div class="lit-list" id="smPads"></div>
-      <div class="media-row">
-        <span class="media-label" id="smNowPlaying">Nada tocando</span>
-        <button id="smToggleBtn" title="Play/Pause">⏯</button>
-        <button id="smStopBtn" class="media-stop" title="Parar áudio">✕</button>
+      <div class="card-title">
+        <div class="card-title-icon" style="background:var(--primary-soft);color:var(--primary-text-soft)">${icon('HEADPHONES', 18)}</div>
+        <div class="card-title-text"><span class="t">SoundMaster</span><span class="s">Pads de áudio de fundo</span></div>
       </div>
-      <div class="volume-label" style="margin-top:10px">Volume</div>
-      <div class="volume-row">
-        <span class="volume-icon">${ICON_VOLUME}</span>
-        <input id="smVolume" type="range" min="0" max="100" value="100" />
-        <span class="volume-val" id="smVolumeVal">100%</span>
+      <div id="smPads"></div>
+      <div style="margin:10px 0 14px;padding:14px;border-radius:var(--radius-md);background:var(--surface-2);
+        border:1px solid var(--card-border)">
+        <div class="media-status" id="smNowPlaying">Nada tocando</div>
+        <div class="sm-progress-wrap hidden" id="smProgressWrap">
+          <div class="rng-wrap sm-progress-rng">
+            <div class="rng-track"></div>
+            <div class="rng-fill" id="smProgressFill"></div>
+          </div>
+          <div class="sm-time-row">
+            <span id="smTimeElapsed">0:00</span>
+            <span id="smTimeRemaining">-0:00</span>
+          </div>
+        </div>
+        <div class="abtn-row">
+          <button class="abtn soft-accent" id="smToggleBtn" title="Play/Pause">${playPauseIcon('smPlayIcon', 18)}<span>Play/Pause</span></button>
+          <button class="abtn outline" id="smStopBtn" title="Parar áudio">${icon('CLOSE', 16)}<span>Parar</span></button>
+        </div>
       </div>
+      <div class="field-group">
+        <div class="field-label-row"><label>Volume</label><span class="val" id="smVolumeVal">100%</span></div>
+        <div class="volume-row">
+          <span class="volume-icon">${ICON_VOLUME}</span>
+          <div class="rng-wrap">
+            <div class="rng-track"></div>
+            <div class="rng-fill"></div>
+            <input id="smVolume" class="rng" type="range" min="0" max="100" value="100" />
+          </div>
+        </div>
+      </div>
+      <div class="divider" style="margin:16px 0"></div>
       <div class="sm-talkover-row">
-        <span class="volume-label" style="margin:0">Atenuar (talkover)</span>
-        <button id="smTalkoverBtn" class="sm-talkover-btn" title="Ligar/desligar atenuador">🎤 Atenuar</button>
+        <div class="field-label-row" style="flex-direction:column;gap:2px">
+          <label>Atenuar (talkover)</label>
+          <span class="val" style="font-size:12px">Baixa a música enquanto alguém fala</span>
+        </div>
+        <button id="smTalkoverBtn" class="sm-talkover-btn" title="Ligar/desligar atenuador">${icon('MIC', 14)}<span>Atenuar</span></button>
       </div>
-      <div class="volume-row">
+      <div class="volume-row" style="margin-top:12px">
         <span class="volume-icon">${ICON_VOLUME}</span>
-        <input id="smDucking" type="range" min="0" max="100" value="15" />
+        <div class="rng-wrap">
+          <div class="rng-track"></div>
+          <div class="rng-fill"></div>
+          <input id="smDucking" class="rng" type="range" min="0" max="100" value="15" />
+        </div>
         <span class="volume-val" id="smDuckingVal">15%</span>
       </div>
     </div>
-
-    <div class="card">
-      <input id="search" type="text" placeholder="Buscar música..." autocomplete="off" />
-      <div class="results" id="results"></div>
-    </div>
   </div>
 
-  <div class="col col-liturgia">
+  <div class="tab-panel" data-panel="liturgia">
     <div class="card">
       <div class="lit-header">
-        <span class="lit-title">Liturgia</span>
-        <button id="openLiturgiaBtn" title="Abrir a janela da Liturgia no LouvorJA">Abrir no LouvorJA</button>
+        <div class="title-group">
+          <span class="lit-eyebrow">Culto de hoje</span>
+          <h2 class="lit-title">Liturgia</h2>
+        </div>
+        <button id="openLiturgiaBtn" title="Abrir a janela da Liturgia no LouvorJA">${icon('PLAYLIST_MUSIC', 18)}<span>Abrir</span></button>
       </div>
-      <div class="lit-list" id="liturgiaList"></div>
     </div>
+    <div id="liturgiaList" style="display:flex;flex-direction:column;gap:14px"></div>
   </div>
+</div>
+
+<div class="tabbar">
+  <button class="tab-btn active" data-tab="controle">
+    <span class="dpad-icon">${icon('SLIDERS', 20)}</span><span>Controle</span>
+  </button>
+  <button class="tab-btn" data-tab="midia">
+    <span class="dpad-icon">${icon('PLAY', 20)}</span><span>Mídia</span>
+  </button>
+  <button class="tab-btn" data-tab="liturgia">
+    <span class="dpad-icon">${icon('LIST', 20)}</span><span>Liturgia</span>
+  </button>
 </div>
 
 <div class="token-modal hidden" id="tokenModal">
   <div class="box">
+    <div class="box-icon">${icon('LINK', 22)}</div>
     <h2>Token de acesso</h2>
     <p>Informe o token exibido no LouvorJA (módulo Controle Remoto) para conectar.</p>
-    <input id="tokenInput" type="text" placeholder="Token" autocomplete="off" />
+    <label class="field-label" for="tokenInput">Token</label>
+    <input id="tokenInput" type="text" placeholder="Ex.: ABC1D" autocomplete="off" />
     <button id="tokenSave">Conectar</button>
     <div class="msg" id="tokenMsg"></div>
   </div>
 </div>
 
 <script>
+// ── Abas (Controle/Mídia/Liturgia/Pesquisar) ───────────────────────────────
+// Troca só CSS (.tab-panel.active / .tab-btn.active) -- nenhum dado recarrega
+// ao trocar de aba, os polls (volume, soundmaster, liturgia) continuam
+// rodando em segundo plano pelas mesmas setInterval de sempre, então o
+// conteúdo já está pronto quando o operador volta pra uma aba.
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === tab));
+  });
+});
+
+// Ícones usados em HTML montado aqui no cliente (listas de SoundMaster/busca/
+// liturgia) -- duplicados do icon()/ICON_PATHS do processo main (ver topo de
+// remote_pages.js) porque esse helper só existe lá, ao montar a página; aqui
+// no <script>, que roda no navegador, não tem acesso a ele.
+const ICON_PLAY_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+const ICON_PAUSE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+// Mesmo path do ICON_PATHS.HANDS_PRAY no processo main (ver topo do arquivo)
+// -- usado como marcador dos itens da liturgia cujo nome é uma oração (ver
+// renderLiturgiaRow).
+const ICON_HANDS_PRAY_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M11.43 9.67C11.47 9.78 11.5 9.88 11.5 10V15.22C11.5 15.72 11.31 16.2 10.97 16.57L8.18 19.62L4.78 16.22L6 15L8.8 2.86C8.92 2.36 9.37 2 9.89 2C10.5 2 11 2.5 11 3.11V8.07C10.84 8.03 10.67 8 10.5 8C9.4 8 8.5 8.9 8.5 10V13C8.5 13.28 8.72 13.5 9 13.5S9.5 13.28 9.5 13V10C9.5 9.45 9.95 9 10.5 9C10.69 9 10.85 9.07 11 9.16C11.12 9.23 11.21 9.32 11.3 9.42C11.33 9.46 11.36 9.5 11.38 9.55C11.4 9.59 11.42 9.63 11.43 9.67M2 19L6 22L7.17 20.73L3.72 17.28L2 19M18 15L15.2 2.86C15.08 2.36 14.63 2 14.11 2C13.5 2 13 2.5 13 3.11V8.07C13.16 8.03 13.33 8 13.5 8C14.6 8 15.5 8.9 15.5 10V13C15.5 13.28 15.28 13.5 15 13.5S14.5 13.28 14.5 13V10C14.5 9.45 14.05 9 13.5 9C13.31 9 13.15 9.07 13 9.16C12.88 9.23 12.79 9.32 12.71 9.42C12.68 9.46 12.64 9.5 12.62 9.55C12.6 9.59 12.58 9.63 12.57 9.67C12.53 9.78 12.5 9.88 12.5 10V15.22C12.5 15.72 12.69 16.2 13.03 16.57L15.82 19.62L19.22 16.22L18 15M20.28 17.28L16.83 20.73L18 22L22 19L20.28 17.28Z"/></svg>';
+
+// Ícones de categoria da liturgia (ver CATEGORY_ICON_RULES/categoriaIconSvg
+// abaixo) -- paths do MDI (Apache-2.0), mesmo conjunto usado pelo editor de
+// Liturgia do LouvorJA (src/modules/liturgia/interface/Index.vue,
+// CATEGORY_ICON_RULES) pra essas duas telas combinarem.
+const ICON_CAT = {
+  TAG: '<path d="M21.41 11.58L12.41 2.58A2 2 0 0 0 11 2H4A2 2 0 0 0 2 4V11A2 2 0 0 0 2.59 12.42L11.59 21.42A2 2 0 0 0 13 22A2 2 0 0 0 14.41 21.41L21.41 14.41A2 2 0 0 0 22 13A2 2 0 0 0 21.41 11.58M13 20L4 11V4H11L20 13M6.5 5A1.5 1.5 0 1 1 5 6.5A1.5 1.5 0 0 1 6.5 5Z"/>',
+  MUSIC: '<path d="M12 3V13.55C11.41 13.21 10.73 13 10 13C7.79 13 6 14.79 6 17S7.79 21 10 21 14 19.21 14 17V7H18V3H12Z"/>',
+  BOOK: '<path d="M19 1L14 6V17L19 12.5V1M21 5V18.5C19.9 18.15 18.7 18 17.5 18C15.8 18 13.35 18.65 12 19.5V6C10.55 4.9 8.45 4.5 6.5 4.5C4.55 4.5 2.45 4.9 1 6V20.65C1 20.9 1.25 21.15 1.5 21.15C1.6 21.15 1.65 21.1 1.75 21.1C3.1 20.45 5.05 20 6.5 20C8.45 20 10.55 20.4 12 21.5C13.35 20.65 15.8 20 17.5 20C19.15 20 20.85 20.3 22.25 21.05C22.35 21.1 22.4 21.1 22.5 21.1C22.75 21.1 23 20.85 23 20.6V6C22.4 5.55 21.75 5.25 21 5M10 18.41C8.75 18.09 7.5 18 6.5 18C5.44 18 4.18 18.19 3 18.5V7.13C3.91 6.73 5.14 6.5 6.5 6.5C7.86 6.5 9.09 6.73 10 7.13V18.41Z"/>',
+  HAND_COIN: '<path d="M16 12C18.76 12 21 9.76 21 7S18.76 2 16 2 11 4.24 11 7 13.24 12 16 12M21.45 17.6C21.06 17.2 20.57 17 20 17H13L10.92 16.27L11.25 15.33L13 16H15.8C16.15 16 16.43 15.86 16.66 15.63S17 15.12 17 14.81C17 14.27 16.74 13.9 16.22 13.69L8.95 11H7V20L14 22L22.03 19C22.04 18.47 21.84 18 21.45 17.6M5 11H.984V22H5V11Z"/>',
+  CUP: '<path d="M18.32,8H5.67L5.23,4H18.77M3,2L5,20.23C5.13,21.23 5.97,22 7,22H17C18,22 18.87,21.23 19,20.23L21,2H3Z"/>',
+  BULLHORN: '<path d="M12,8H4A2,2 0 0,0 2,10V14A2,2 0 0,0 4,16H5V20A1,1 0 0,0 6,21H8A1,1 0 0,0 9,20V16H12L17,20V4L12,8M21.5,12C21.5,13.71 20.54,15.26 19,16V8C20.53,8.75 21.5,10.3 21.5,12Z"/>',
+  ACCOUNT_VOICE: '<path d="M9,5A4,4 0 0,1 13,9A4,4 0 0,1 9,13A4,4 0 0,1 5,9A4,4 0 0,1 9,5M9,15C11.67,15 17,16.34 17,19V21H1V19C1,16.34 6.33,15 9,15M16.76,5.36C18.78,7.56 18.78,10.61 16.76,12.63L15.08,10.94C15.92,9.76 15.92,8.23 15.08,7.05L16.76,5.36M20.07,2C24,6.05 23.97,12.11 20.07,16L18.44,14.37C21.21,11.19 21.21,6.65 18.44,3.63L20.07,2Z"/>',
+  WATER: '<path d="M12,20A6,6 0 0,1 6,14C6,10 12,3.25 12,3.25C12,3.25 18,10 18,14A6,6 0 0,1 12,20Z"/>',
+  DOOR_OPEN: '<path d="M12,3C10.89,3 10,3.89 10,5H3V19H2V21H22V19H21V5C21,3.89 20.11,3 19,3H12M12,5H19V19H12V5M5,11H7V13H5V11Z"/>',
+  HAND_WAVE: '<path d="M23 17C23 20.31 20.31 23 17 23V21.5C19.5 21.5 21.5 19.5 21.5 17H23M1 7C1 3.69 3.69 1 7 1V2.5C4.5 2.5 2.5 4.5 2.5 7H1M8 4.32L3.41 8.92C.19 12.14 .19 17.37 3.41 20.59S11.86 23.81 15.08 20.59L22.15 13.5C22.64 13.03 22.64 12.24 22.15 11.75C21.66 11.26 20.87 11.26 20.38 11.75L15.96 16.17L15.25 15.46L21.79 8.92C22.28 8.43 22.28 7.64 21.79 7.15S20.5 6.66 20 7.15L14.19 13L13.5 12.27L20.37 5.38C20.86 4.89 20.86 4.1 20.37 3.61S19.09 3.12 18.6 3.61L11.71 10.5L11 9.8L16.5 4.32C17 3.83 17 3.04 16.5 2.55S15.22 2.06 14.73 2.55L7.11 10.17C8.33 11.74 8.22 14 6.78 15.45L6.07 14.74C7.24 13.57 7.24 11.67 6.07 10.5L5.72 10.15L9.79 6.08C10.28 5.59 10.28 4.8 9.79 4.31C9.29 3.83 8.5 3.83 8 4.32Z"/>',
+  HUMAN_CHILD: '<path d="M12,2A3,3 0 0,1 15,5A3,3 0 0,1 12,8A3,3 0 0,1 9,5A3,3 0 0,1 12,2M11,22H8V16H6V9H18V16H16V22H13V18H11V22Z"/>',
+};
+function catIconSvg(key) {
+  return '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' + ICON_CAT[key] + '</svg>';
+}
+// Mesmas regras/ordem do CATEGORY_ICON_RULES em
+// src/modules/liturgia/interface/Index.vue -- a primeira que bater no nome
+// da categoria vence; sem nenhuma batida, cai no ícone genérico de tag
+// (igual ao padrão do tipo "categoria" por lá).
+const CATEGORY_ICON_RULES = [
+  // louvor/adoração antes de oração: "adoração" contém "oração" como
+  // substring (ador-AÇÃO), então na ordem errada "Louvor e Adoração" caía
+  // sempre na regra de oração antes de chegar na de louvor.
+  [/louvor|ador[aá][cç][aã]o|c[aâ]ntico|m[uú]sica/i, 'MUSIC'],
+  [/ora[cç][aã]o|intercess/i, 'HANDS_PRAY'],
+  [/palavra|preg(a[cç][aã]o|ador)|serm[aã]o|mensagem|estudo/i, 'BOOK'],
+  [/oferta|d[ií]zimo|contribui/i, 'HAND_COIN'],
+  [/comunh[aã]o|ceia/i, 'CUP'],
+  [/aviso|an[uú]ncio|informe/i, 'BULLHORN'],
+  [/testemunho/i, 'ACCOUNT_VOICE'],
+  [/batismo/i, 'WATER'],
+  [/abertura|boas[- ]vindas|recep[cç][aã]o/i, 'DOOR_OPEN'],
+  [/encerramento|b[eê]n[cç][aã]o|despedida/i, 'HAND_WAVE'],
+  [/infantil|crian[cç]a/i, 'HUMAN_CHILD'],
+];
+function categoriaIconSvg(name) {
+  const hit = CATEGORY_ICON_RULES.find(([re]) => re.test(name || ''));
+  return hit ? (hit[1] === 'HANDS_PRAY' ? ICON_HANDS_PRAY_SVG : catIconSvg(hit[1])) : catIconSvg('TAG');
+}
+
 function obterToken() { return localStorage.getItem('louvorja_remote_token') || ''; }
 function salvarToken(t) { localStorage.setItem('louvorja_remote_token', t); }
 
