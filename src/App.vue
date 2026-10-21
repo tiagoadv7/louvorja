@@ -434,15 +434,22 @@ export default {
           // projetando por cima, o vídeo continua tendo seu próprio volume).
           // Sem target: comportamento antigo (volume de quem estiver "ativo"),
           // usado pelo card genérico de Volume (música/slide ou YouTube).
+          // is_paused: estado de play/pause de quem o card do remoto representa —
+          // sem isso, os botões Play/Pause do remoto sempre mostravam só o ícone
+          // de "play", nunca trocavam pra "pause" mesmo com algo tocando.
           if (params?.target === 'video') {
             payload.module = 'video_player';
             payload.volume = this.$appdata.get('modules.video_player.config.volume', 100);
+            payload.is_paused = !this.$appdata.get('modules.video_player.config.isPlaying', false);
           } else {
             const activeModule = this.$appdata.get('popup_module') || 'media';
             payload.module = activeModule;
             payload.volume = activeModule === 'video_player' ? this.$appdata.get('modules.video_player.config.volume', 100)
                             : activeModule === 'web_link'     ? this.$appdata.get('modules.web_link.config.volume', 100)
                             : this.$appdata.get('modules.media.config.volume', 100);
+            payload.is_paused = activeModule === 'video_player' ? !this.$appdata.get('modules.video_player.config.isPlaying', false)
+                               : activeModule === 'web_link'     ? !this.$appdata.get('modules.web_link.config.isPlaying', false)
+                               : !!this.$appdata.get('modules.media.config.is_paused', false);
           }
           payload.ok = true;
         } else if (type === 'set-volume') {
@@ -468,8 +475,27 @@ export default {
         // esse controle é só IPC interno entre a janela do celular e a janela
         // já aberta do LouvorJA, nunca toca em foco/janela do sistema).
         } else if (type === 'soundmaster-state') {
-          payload.pads = this.$soundMaster.getPads();
-          payload.nowPlaying = this.$soundMaster.nowPlaying();
+          // Reconstrói como objetos simples (mesmo padrão do get-liturgia
+          // acima) -- $appdata.get() devolve um Proxy reativo do Vue, que
+          // ipcRenderer.send() não consegue clonar pra atravessar o
+          // contextBridge. Isso falhava em silêncio (a resposta nunca
+          // chegava ao processo main, que só via o timeout de 8s estourar) e
+          // o card de SoundMaster do controle remoto nunca atualizava,
+          // mesmo com algo tocando de verdade.
+          const pads = this.$soundMaster.getPads();
+          payload.pads = (pads || []).map((p) => ({ id: p.id, name: p.name, hasFile: !!p.hasFile }));
+          const np = this.$soundMaster.nowPlaying();
+          payload.nowPlaying = {
+            name: np.name || '',
+            playing: !!np.playing,
+            current_time: np.current_time || 0,
+            duration: np.duration || 0,
+            progress: np.progress || 0,
+            volume: np.volume ?? 100,
+            active_pad_id: np.active_pad_id ?? null,
+            is_talkover: !!np.is_talkover,
+            ducking_level: np.ducking_level ?? 15,
+          };
           payload.ok = true;
         } else if (type === 'soundmaster-control') {
           const action = params?.action;

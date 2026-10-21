@@ -320,7 +320,9 @@ async function handleRequest(req, res) {
     // (volume de quem estiver "ativo" na projeção no momento).
     const target = url.searchParams.get('target') || undefined;
     const r = await requestRenderer('get-volume', { target });
-    return sendJson(res, 200, r.ok ? { status: 'ok', volume: r.volume ?? 100, module: r.module } : { status: 'error', code: r.code || 'ERROR' });
+    return sendJson(res, 200, r.ok
+      ? { status: 'ok', volume: r.volume ?? 100, module: r.module, is_paused: !!r.is_paused }
+      : { status: 'error', code: r.code || 'ERROR' });
   }
 
   if (p === '/api/set-volume') {
