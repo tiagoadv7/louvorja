@@ -53,7 +53,6 @@
 
       <!-- ── Transmitir: servidor local (API com token + página de transmissão) ── -->
       <v-card-title class="px-0 text-subtitle-1 d-flex align-center ga-2">
-        <v-icon size="18">mdi-broadcast</v-icon>
         <span>{{ t('transmit.title') }}</span>
         <v-switch
           :model-value="serverStatus.running"
@@ -130,7 +129,7 @@
           </div>
 
           <div v-if="qrDataUrl" class="d-flex flex-column align-center justify-center">
-            <img :src="qrDataUrl" width="140" height="140" alt="QR" />
+            <img :src="qrDataUrl" width="140" height="140" alt="QR" class="transmit-qr" />
             <span class="text-caption text-medium-emphasis mt-1">{{ t('transmit.control_page') }}</span>
           </div>
         </v-card-text>
@@ -385,3 +384,12 @@ onMounted(() => {
   refreshServerStatus();
 });
 </script>
+
+<style scoped>
+/* Cantos arredondados suaves no QR code (antes era um quadrado reto) --
+   o PNG gerado por qrcodeGenerate já tem a margem de respiro (quiet zone)
+   em volta, então arredondar só a borda externa não afeta a leitura. */
+.transmit-qr {
+  border-radius: 12px;
+}
+</style>
