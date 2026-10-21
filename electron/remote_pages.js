@@ -615,6 +615,7 @@ async function chamarApi(route, params, cb) {
 
 function setStatus(cls, text) {
   document.getElementById('dot').className = 'dot ' + cls;
+  document.getElementById('statusPill').className = 'status ' + cls;
   document.getElementById('statusText').textContent = text;
 }
 
@@ -644,9 +645,16 @@ function testarApi(cb) {
   });
 }
 
-document.querySelectorAll('.dpad button[data-key]').forEach((btn) => {
+// Seletor é só o atributo (sem exigir ".dpad" como ancestral): o botão
+// Play/Pause do card Mídia é um .dpad-btn avulso (barra cheia, fora de
+// qualquer grade .dpad) -- com o seletor antigo ele renderizava normal mas
+// não respondia a clique nenhum, mesmo bug do controle de vídeo acima.
+document.querySelectorAll('button[data-key]').forEach((btn) => {
   btn.addEventListener('click', () => {
     chamarApi('keyboard', { key: btn.dataset.key }, (ok) => { if (!ok) testarApi(); });
+    // Feedback imediato do ícone Play/Pause (não espera o próximo poll de
+    // carregarVolume, até 5s depois).
+    if (btn.dataset.key === 'Space') setTimeout(carregarVolume, 200);
   });
 });
 
@@ -659,18 +667,45 @@ document.getElementById('closeBtn').addEventListener('click', () => {
 
 // Controle de vídeo/áudio: independente da música/slide (media-control não
 // olha pra "módulo ativo", ver App.vue) — funciona mesmo com vídeo e áudio
-// tocando ao mesmo tempo.
-document.querySelectorAll('.media-row button[data-media-target]').forEach((btn) => {
+// tocando ao mesmo tempo. Seletor é só o atributo (sem exigir ".media-row"
+// como ancestral): o card Vídeo passou a usar ".dpad"/".dpad-btn" pro visual
+// em grade (ver HTML acima), e esse seletor antigo nunca foi atualizado --
+// os botões continuavam renderizando normalmente, só não respondiam a clique
+// nenhum, silenciosamente.
+document.querySelectorAll('button[data-media-target]').forEach((btn) => {
   btn.addEventListener('click', () => {
     chamarApi('media-control', { target: btn.dataset.mediaTarget, action: btn.dataset.mediaAction },
       (ok) => { if (!ok) testarApi(); });
+    // Feedback imediato (não espera o próximo poll de carregarVideoVolume,
+    // até 5s depois) -- igual ao padrão já usado pelo SoundMaster abaixo.
+    if (btn.dataset.mediaAction === 'toggle') setTimeout(carregarVideoVolume, 200);
   });
 });
+
+// Ajusta a largura da div .rng-fill (ver .rng-wrap no <style>) pra
+// acompanhar o valor atual do slider -- sem isso o preenchimento amarelo
+// fica sempre parado em 0%.
+function fillSlider(el) {
+  const wrap = el.closest('.rng-wrap');
+  const fill = wrap && wrap.querySelector('.rng-fill');
+  if (fill) fill.style.width = el.value + '%';
+}
+
+// mm:ss a partir de segundos -- usado no tempo decorrido/restante do
+// SoundMaster (ver carregarSoundMaster). Nunca negativo (duration ainda não
+// carregada, ou arredondamento de ponto flutuante perto do fim da faixa).
+function formatTime(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds || 0));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+}
 
 // ── Volume ──────────────────────────────────────────────────────────────
 const volumeInput = document.getElementById('volume');
 const volumeVal    = document.getElementById('volumeVal');
 const volumeLabel  = document.getElementById('volumeLabel');
+const mediaPlayIcon = document.getElementById('mediaPlayIcon');
 const MODULE_LABEL = { media: 'Volume — Música', video_player: 'Volume — Vídeo', web_link: 'Volume — YouTube' };
 let volumeDebounce  = null;
 let volumeDragging  = false;
@@ -682,6 +717,8 @@ function carregarVolume() {
     volumeInput.value  = data.volume;
     volumeVal.textContent = data.volume + '%';
     volumeLabel.textContent = MODULE_LABEL[data.module] || 'Volume';
+    mediaPlayIcon.classList.toggle('is-playing', !data.is_paused);
+    fillSlider(volumeInput);
   });
 }
 
@@ -689,6 +726,7 @@ volumeInput.addEventListener('pointerdown', () => { volumeDragging = true; });
 volumeInput.addEventListener('input', (e) => {
   const v = e.target.value;
   volumeVal.textContent = v + '%';
+  fillSlider(volumeInput);
   clearTimeout(volumeDebounce);
   volumeDebounce = setTimeout(() => chamarApi('set-volume', { value: v }, () => {}), 120);
 });
@@ -702,6 +740,7 @@ setInterval(carregarVolume, 5000);
 // mesmo padrão do volume do SoundMaster abaixo) ───────────────────────────
 const videoVolumeInput = document.getElementById('videoVolume');
 const videoVolumeVal    = document.getElementById('videoVolumeVal');
+const videoPlayIcon     = document.getElementById('videoPlayIcon');
 let videoVolumeDebounce = null;
 let videoVolumeDragging = false;
 
@@ -711,6 +750,8 @@ function carregarVideoVolume() {
     if (!ok) return;
     videoVolumeInput.value = data.volume;
     videoVolumeVal.textContent = data.volume + '%';
+    videoPlayIcon.classList.toggle('is-playing', !data.is_paused);
+    fillSlider(videoVolumeInput);
   });
 }
 
@@ -718,6 +759,7 @@ videoVolumeInput.addEventListener('pointerdown', () => { videoVolumeDragging = t
 videoVolumeInput.addEventListener('input', (e) => {
   const v = e.target.value;
   videoVolumeVal.textContent = v + '%';
+  fillSlider(videoVolumeInput);
   clearTimeout(videoVolumeDebounce);
   videoVolumeDebounce = setTimeout(() => chamarApi('set-volume', { target: 'video', value: v }, () => {}), 120);
 });
@@ -734,6 +776,11 @@ const smDucking      = document.getElementById('smDucking');
 const smDuckingVal   = document.getElementById('smDuckingVal');
 const smTalkoverBtn  = document.getElementById('smTalkoverBtn');
 const smNowPlaying   = document.getElementById('smNowPlaying');
+const smPlayIcon     = document.getElementById('smPlayIcon');
+const smProgressWrap = document.getElementById('smProgressWrap');
+const smProgressFill = document.getElementById('smProgressFill');
+const smTimeElapsed  = document.getElementById('smTimeElapsed');
+const smTimeRemaining = document.getElementById('smTimeRemaining');
 let smVolumeDragging  = false;
 let smDuckingDragging = false;
 let smVolumeDebounce   = null;
@@ -744,21 +791,25 @@ function smControl(action, extra) {
   chamarApi('soundmaster-control', { action, ...extra }, (ok) => { if (!ok) testarApi(); });
 }
 
-// Lista igual à da Liturgia (.lit-item/.lit-list) — só os pads com áudio de
-// verdade aparecem (mesmo critério de lá: nada de mostrar 10 slots vazios
-// numa lista pensada pra itens reais), com o que estiver tocando destacado.
+// Mesma linha numerada (.row-item/.row-badge/.row-play) usada na Liturgia e
+// na busca — só os pads com áudio de verdade aparecem (nada de mostrar 10
+// slots vazios numa lista pensada pra itens reais), com o que estiver
+// tocando destacado.
 function renderSmPads(pads) {
   const withFile = pads.filter((p) => p.hasFile);
   if (!withFile.length) {
     smPadsEl.innerHTML = '<div class="lit-empty">Nenhum pad com áudio configurado.</div>';
     return;
   }
-  smPadsEl.innerHTML = withFile.map((p) => {
+  smPadsEl.innerHTML = withFile.map((p, i) => {
     const active = p.id === smActivePadId;
-    return '<div class="lit-item' + (active ? ' sm-pad-active' : '') + '">' +
-      '<span class="name">' + escapeHtml(p.name || ('Pad ' + p.id)) + '</span>' +
-      '<button data-pad-id="' + p.id + '">' + (active ? 'Parar' : 'Tocar') + '</button>' +
-      '</div>';
+    const num = String(i + 1).padStart(2, '0');
+    return '<div class="row-item' + (active ? ' sm-pad-active' : '') + '">' +
+      '<div class="row-badge">' + num + '</div>' +
+      '<div class="row-info"><span class="title">' + escapeHtml(p.name || ('Pad ' + p.id)) + '</span></div>' +
+      '<button class="row-play" data-pad-id="' + p.id + '" aria-label="' + (active ? 'Parar' : 'Tocar') + ' ' + escapeHtml(p.name || '') + '">' +
+      (active ? ICON_PAUSE_SVG : ICON_PLAY_SVG) +
+      '</button></div>';
   }).join('');
 }
 
@@ -773,17 +824,35 @@ function carregarSoundMaster() {
     renderSmPads(data.pads || []);
     smVolume.value = np.volume ?? 100;
     smVolumeVal.textContent = Math.round(np.volume ?? 100) + '%';
+    fillSlider(smVolume);
     smDucking.value = np.ducking_level ?? 15;
     smDuckingVal.textContent = Math.round(np.ducking_level ?? 15) + '%';
+    fillSlider(smDucking);
     smTalkoverBtn.classList.toggle('on', !!np.is_talkover);
     smNowPlaying.textContent = np.playing && np.name ? np.name : 'Nada tocando';
+    smPlayIcon.classList.toggle('is-playing', !!np.playing);
+    // Tempo decorrido/restante: só aparece com duração conhecida (nada
+    // tocando, ou faixa sem metadata de duração ainda carregada, fica
+    // escondido em vez de mostrar "0:00 / -0:00" sem sentido nenhum).
+    if (np.duration > 0) {
+      const pct = Math.min(100, Math.max(0, (np.current_time / np.duration) * 100));
+      smProgressFill.style.width = pct + '%';
+      smTimeElapsed.textContent = formatTime(np.current_time);
+      smTimeRemaining.textContent = '-' + formatTime(np.duration - np.current_time);
+      smProgressWrap.classList.remove('hidden');
+    } else {
+      smProgressWrap.classList.add('hidden');
+    }
   });
 }
 
 smPadsEl.addEventListener('click', (e) => {
-  const id = e.target?.dataset?.padId;
-  if (id === undefined) return;
-  smControl('play_pad', { padId: id });
+  // closest() (não e.target direto): o botão agora tem um ícone dentro
+  // (ver renderSmPads) -- clicar no próprio ícone faria e.target ser o
+  // <svg>, que não tem o data-pad-id (só o <button> pai tem).
+  const btn = e.target.closest('[data-pad-id]');
+  if (!btn) return;
+  smControl('play_pad', { padId: btn.dataset.padId });
   setTimeout(carregarSoundMaster, 250);
 });
 
@@ -805,6 +874,7 @@ smTalkoverBtn.addEventListener('click', () => {
 smVolume.addEventListener('pointerdown', () => { smVolumeDragging = true; });
 smVolume.addEventListener('input', (e) => {
   smVolumeVal.textContent = e.target.value + '%';
+  fillSlider(smVolume);
   clearTimeout(smVolumeDebounce);
   smVolumeDebounce = setTimeout(() => smControl('volume', { value: e.target.value }), 120);
 });
@@ -813,6 +883,7 @@ smVolume.addEventListener('change', () => { smVolumeDragging = false; });
 smDucking.addEventListener('pointerdown', () => { smDuckingDragging = true; });
 smDucking.addEventListener('input', (e) => {
   smDuckingVal.textContent = e.target.value + '%';
+  fillSlider(smDucking);
   clearTimeout(smDuckingDebounce);
   smDuckingDebounce = setTimeout(() => smControl('ducking_level', { value: e.target.value }), 120);
 });
@@ -831,21 +902,33 @@ document.getElementById('search').addEventListener('input', (e) => {
     chamarApi('search-songs', { q }, (ok, data) => {
       if (!ok) { results.innerHTML = ''; return; }
       results.innerHTML = (data.results || []).map((item) =>
-        '<div class="result"><span class="name">' + escapeHtml(item.name || '') +
+        '<div class="result"><div class="row-badge">' + catIconSvg('MUSIC') + '</div>' +
+        '<div class="result-info"><span class="name">' + escapeHtml(item.name || '') + '</span>' +
         (item.albums && item.albums.length
           ? '<span class="albums">' + escapeHtml(item.albums.join(' • ')) + '</span>'
           : '') +
-        '</span><button data-id="' + item.id + '">Abrir</button></div>'
-      ).join('') || '<div class="result"><span class="name">Nenhum resultado</span></div>';
+        '</div><button class="row-play" data-id="' + item.id + '" aria-label="Abrir ' + escapeHtml(item.name || '') + '">' + ICON_PLAY_SVG + '</button></div>'
+      ).join('') || '<div class="result-empty">Nenhuma música encontrada</div>';
     });
   }, 400);
 });
 
 document.getElementById('results').addEventListener('click', (e) => {
-  const id = e.target?.dataset?.id;
-  if (!id) return;
-  e.target.textContent = '...';
-  chamarApi('open-song', { id, tag: 1 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Erro'; });
+  // closest() (não e.target direto): o botão agora é um círculo com ícone
+  // dentro (ver o map() de resultados acima) -- clicar no ícone faria
+  // e.target ser o <svg>, que não tem o data-id (só o <button> pai tem).
+  // textContent (não innerHTML) pra mostrar "..."/"Aberto"/"Erro" -- sem
+  // ícone client-side pronto pra isso (o icon() que monta os SVGs só existe
+  // no processo main, ao montar a página, não aqui no <script>).
+  const btn = e.target.closest('[data-id]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const original = btn.innerHTML;
+  btn.textContent = '...';
+  chamarApi('open-song', { id, tag: 1 }, (ok) => {
+    btn.textContent = ok ? 'Aberto' : 'Erro';
+    setTimeout(() => { btn.innerHTML = original; }, 1200);
+  });
 });
 
 // ── Liturgia (só leitura + abrir música, ao lado do controle) ──────────────
@@ -858,58 +941,114 @@ document.getElementById('openLiturgiaBtn').addEventListener('click', (e) => {
   });
 });
 
+// Linha de um item da liturgia (música escolhida/a escolher, ou mídia
+// anexada) -- numeração é sequencial em TODA a liturgia (não reinicia por
+// seção), igual ao mockup de referência. Já tem música definida → botão
+// circular abre direto. "Escolha na hora" (sem id_music) → botão pílula
+// "Selecionar" leva até a busca (agora na aba Mídia) já preenchida com o
+// nome do item (não dá pra abrir sem saber qual música exatamente). Mídia
+// anexada (vídeo/áudio/link) → botão circular abre via open-liturgia-item;
+// o controle de play/pause/fechar depois é feito pelos cartões fixos de
+// Vídeo/SoundMaster, não item a item.
+function renderLiturgiaRow(item, num) {
+  const n = String(num).padStart(2, '0');
+  const name = escapeHtml(item.name || '');
+  if (item.type === 'musica' && item.id_music) {
+    return '<div class="row-item"><div class="row-badge">' + n + '</div>' +
+      '<div class="row-info"><span class="title">' + name + '</span><span class="lit-tag">Música</span></div>' +
+      '<button class="row-play" data-id="' + item.id_music + '" aria-label="Abrir ' + name + '">' + ICON_PLAY_SVG + '</button></div>';
+  }
+  if (item.type === 'musica') {
+    return '<div class="row-item"><div class="row-badge">' + n + '</div>' +
+      '<div class="row-info"><span class="title">' + name + '</span><span class="lit-tag muted">Escolher na hora</span></div>' +
+      '<button class="lit-select-btn" data-select="' + name + '">Selecionar</button></div>';
+  }
+  if (item.has_media) {
+    return '<div class="row-item"><div class="row-badge">' + n + '</div>' +
+      '<div class="row-info"><span class="title">' + name + '</span><span class="lit-tag info">Mídia</span></div>' +
+      '<button class="row-play" data-open-item="' + item.id + '" aria-label="Abrir ' + name + '">' + ICON_PLAY_SVG + '</button></div>';
+  }
+  // Anotação livre (sem música/mídia anexada) cujo nome é uma oração (ex.:
+  // "Oração inicial", "Oração final") -- mostra o ícone de mãos em oração no
+  // lugar do número, só pra identificar visualmente o momento na lista.
+  const isPrayer = /ora[cç][aã]o/i.test(item.name || '');
+  return '<div class="row-item"><div class="row-badge">' + (isPrayer ? ICON_HANDS_PRAY_SVG : n) + '</div>' +
+    '<div class="row-info"><span class="title">' + name + '</span></div></div>';
+}
+
 function carregarLiturgia() {
   chamarApi('liturgia', {}, (ok, data) => {
     const el = document.getElementById('liturgiaList');
     if (!ok) return; // mantém o que já estava exibido em caso de falha pontual
     const items = data.items || [];
-    if (!items.length) { el.innerHTML = '<div class="lit-empty">Nenhum item na liturgia.</div>'; return; }
-    el.innerHTML = items.map((item) => {
+    if (!items.length) { el.innerHTML = '<div class="card"><div class="lit-empty">Nenhum item na liturgia.</div></div>'; return; }
+
+    // Agrupa o array plano (categoria, item, item, categoria, item...) em
+    // seções -- cada "categoria" abre uma seção nova, que acumula os itens
+    // seguintes até a próxima categoria (ou o fim da lista).
+    let seq = 0;
+    const sections = [];
+    let current = null;
+    items.forEach((item) => {
       if (item.type === 'categoria') {
-        return '<div class="lit-item lit-cat" style="background:' + escapeHtml(item.color || '#1a237e') + '">' +
-          escapeHtml(item.name || '') + '</div>';
+        current = { name: item.name || '', color: item.color || '', rows: [] };
+        sections.push(current);
+        return;
       }
-      // Já tem música definida → abre direto. "Escolha na hora" (sem id_music)
-      // → também mostra o botão, mas ele só leva o operador até a busca já
-      // preenchida com o nome do item (não dá pra abrir sem saber qual música
-      // exatamente o nome do item da liturgia corresponde).
-      // has_media (midia/arquivo/link com arquivo anexado) → botão "Abrir" que
-      // toca o vídeo/áudio/link no computador (ver open-liturgia-item); o
-      // controle de play/pause/fechar depois é feito pelos botões fixos de
-      // Vídeo/Áudio no card acima, não item a item.
-      const button = item.type === 'musica' && item.id_music
-        ? '<button data-id="' + item.id_music + '">Abrir</button>'
-        : item.type === 'musica'
-          ? '<button data-select="' + escapeHtml(item.name || '') + '">Selecionar</button>'
-          : item.has_media
-            ? '<button data-open-item="' + item.id + '">Abrir</button>'
-            : '';
-      return '<div class="lit-item">' +
-        '<span class="name">' + escapeHtml(item.name || '') + '</span>' +
-        button +
-        '</div>';
+      if (!current) { current = { name: '', color: '', rows: [] }; sections.push(current); }
+      seq++;
+      current.rows.push(renderLiturgiaRow(item, seq));
+    });
+
+    el.innerHTML = sections.map((sec) => {
+      const count = sec.rows.length;
+      const meta = count === 0 ? 'Sem itens · momento livre' : (count === 1 ? '1 item' : count + ' itens');
+      const head = sec.name
+        ? '<div class="lit-section-head">' +
+          '<div class="lit-section-icon" style="background:' + escapeHtml(sec.color || '#1A2234') + ';color:#fff">' + categoriaIconSvg(sec.name) + '</div>' +
+          '<div class="lit-section-text"><span class="name">' + escapeHtml(sec.name) + '</span><span class="meta">' + meta + '</span></div>' +
+          '</div>'
+        : '';
+      const body = count > 0 ? '<div class="lit-section-items">' + sec.rows.join('') + '</div>' : '';
+      return '<section class="lit-section">' + head + body + '</section>';
     }).join('');
   });
 }
 
 document.getElementById('liturgiaList').addEventListener('click', (e) => {
-  const id = e.target?.dataset?.id;
-  if (id) {
-    e.target.textContent = '...';
-    chamarApi('open-song', { id, tag: 1 }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Abrir'; });
+  // closest() em cada caso (não e.target direto): os botões "Abrir" agora
+  // são círculos com ícone dentro (ver carregarLiturgia) -- clicar no
+  // ícone faria e.target ser o <svg>, que não tem o data-* (só o <button>
+  // pai tem).
+  const openBtn = e.target.closest('[data-id]');
+  if (openBtn) {
+    const original = openBtn.innerHTML;
+    openBtn.textContent = '...';
+    chamarApi('open-song', { id: openBtn.dataset.id, tag: 1 }, (ok) => {
+      openBtn.textContent = ok ? 'Aberto' : 'Erro';
+      setTimeout(() => { openBtn.innerHTML = original; }, 1200);
+    });
     return;
   }
-  const itemId = e.target?.dataset?.openItem;
-  if (itemId !== undefined) {
-    e.target.textContent = '...';
-    chamarApi('open-liturgia-item', { id: itemId }, (ok) => { e.target.textContent = ok ? 'Aberto' : 'Abrir'; });
+  const mediaBtn = e.target.closest('[data-open-item]');
+  if (mediaBtn) {
+    const original = mediaBtn.innerHTML;
+    mediaBtn.textContent = '...';
+    chamarApi('open-liturgia-item', { id: mediaBtn.dataset.openItem }, (ok) => {
+      mediaBtn.textContent = ok ? 'Aberto' : 'Erro';
+      setTimeout(() => { mediaBtn.innerHTML = original; }, 1200);
+    });
     return;
   }
-  const nome = e.target?.dataset?.select;
-  if (nome === undefined) return;
+  const selectBtn = e.target.closest('[data-select]');
+  if (!selectBtn) return;
   const search = document.getElementById('search');
-  search.value = nome;
+  search.value = selectBtn.dataset.select;
   search.dispatchEvent(new Event('input'));
+  // Busca mora na aba "Controle" (junto do resto do controle da projeção,
+  // ver tab-btn/tab-panel) -- troca de aba antes de rolar até o campo,
+  // senão ele continua escondido (display:none).
+  document.querySelector('.tab-btn[data-tab="controle"]')?.click();
   search.scrollIntoView({ behavior: 'smooth', block: 'center' });
   search.focus();
 });
