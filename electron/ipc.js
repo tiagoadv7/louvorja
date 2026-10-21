@@ -258,29 +258,108 @@ function setupIpc(mainWindow) {
   });
 
   // ── Identificação de monitores ────────────────────────────────────────────
-  ipcMain.handle('screen:identify', () => {
+
+  // Tamanho FÍSICO real (polegadas na diagonal) de cada monitor, via WMI —
+  // o Electron não expõe isso em nenhuma propriedade de Display (só
+  // resolução/scaleFactor, que não dizem nada sobre o tamanho físico: uma TV
+  // de 70" e um monitor de 24" podem ter a mesma resolução 1920x1080). Sem
+  // essa informação o cartão de identificação (abaixo) ficava minúsculo
+  // numa tela de igreja grande, proporcional à tela, mas pequeno demais pra
+  // ler à distância.
+  //
+  // root\wmi#WmiMonitorID dá o nome amigável do monitor (mesma string que
+  // Electron expõe em display.label, os dois vêm do mesmo EDID) e
+  // root\wmi#WmiMonitorBasicDisplayParams dá o tamanho físico em CENTÍMETROS
+  // (MaxHorizontalImageSize/MaxVerticalImageSize) — junta os dois por
+  // InstanceName e casa com os monitores do Electron pelo nome. Só Windows;
+  // em qualquer falha (sem admin, classe não populada — comum em TVs/
+  // projetores com EDID incompleto, monitor sem Plug-and-Play, etc.) volta
+  // lista vazia e o cartão cai no tamanho físico fixo de sempre, sem quebrar
+  // nada.
+  async function getMonitorPhysicalSizes() {
+    if (process.platform !== 'win32') return [];
+    const script = [
+      '$ids = Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorID -ErrorAction SilentlyContinue',
+      '$params = Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction SilentlyContinue',
+      '$result = @()',
+      'foreach ($id in $ids) {',
+      "  $name = ($id.UserFriendlyName | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ }) -join ''",
+      '  $p = $params | Where-Object { $_.InstanceName -eq $id.InstanceName } | Select-Object -First 1',
+      '  if ($p -and $p.MaxHorizontalImageSize -gt 0 -and $p.MaxVerticalImageSize -gt 0) {',
+      '    $result += [PSCustomObject]@{ name = $name; widthCm = $p.MaxHorizontalImageSize; heightCm = $p.MaxVerticalImageSize }',
+      '  }',
+      '}',
+      '$result | ConvertTo-Json -Compress',
+    ].join('; ');
+
+    const raw = await new Promise((resolve) => {
+      require('child_process').execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+        { windowsHide: true, timeout: 3000 },
+        (err, stdout) => resolve(err ? '' : stdout)
+      );
+    });
+
+    if (!raw || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      return list
+        .filter((m) => m && m.name && m.widthCm > 0 && m.heightCm > 0)
+        .map((m) => {
+          const widthIn = m.widthCm / 2.54;
+          const heightIn = m.heightCm / 2.54;
+          return { name: String(m.name).trim(), diagonalInches: Math.sqrt(widthIn * widthIn + heightIn * heightIn) };
+        });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  ipcMain.handle('screen:identify', async () => {
     const { BrowserWindow: BW } = require('electron');
     const allDisplays = screen.getAllDisplays();
     const primary = screen.getPrimaryDisplay();
     const primaryScale = primary.scaleFactor || 1;
     const isLinux = process.platform === 'linux';
+    const physicalSizes = await getMonitorPhysicalSizes();
 
     // Tamanho base do CARTÃO (não da janela) em pixels físicos (referência:
     // monitor primário) — fixo, não cresce com a resolução do monitor de
     // destino, pra o cartão parecer sempre igual ao que aparece no monitor
-    // principal.
+    // principal... EXCETO quando o monitor de destino é fisicamente muito
+    // maior (telas de igreja, TV/projetor de 70"+): resolução sozinha não diz
+    // nada sobre tamanho físico (uma TV de 70" e um monitor de 24" podem ter
+    // a mesma resolução 1920x1080), então nesse caso o cartão precisa crescer
+    // de verdade pra continuar legível à distância — ver getMonitorPhysicalSizes.
     const BASE_W_PHYS = 220;
     const BASE_H_PHYS = 140;
+    const LARGE_SCREEN_THRESHOLD_IN = 70;
+    const LARGE_SCREEN_REFERENCE_IN = 32; // tamanho "normal" onde BASE_W/H_PHYS já ficam certos
+    const LARGE_SCREEN_MAX_MULTIPLIER = 3; // trava de bom-senso pra não virar um cartão absurdo em video walls
 
     let nonPrimaryIdx = 0;
     const wins = allDisplays.map((display) => {
       const { x, y, width, height } = display.bounds;
       const scale = display.scaleFactor || 1;
 
+      // Casa esse monitor com o tamanho físico achado via WMI (mesmo nome
+      // amigável de EDID que display.label também expõe) — sem correspondência
+      // (TV/projetor sem EDID completo, outra plataforma, falha do WMI etc.),
+      // sizeMultiplier fica 1 e o cartão usa o tamanho físico fixo de sempre.
+      const matchedSize = display.label
+        ? physicalSizes.find((m) => m.name.toLowerCase() === display.label.trim().toLowerCase())
+        : null;
+      const sizeMultiplier = (matchedSize && matchedSize.diagonalInches >= LARGE_SCREEN_THRESHOLD_IN)
+        ? Math.min(matchedSize.diagonalInches / LARGE_SCREEN_REFERENCE_IN, LARGE_SCREEN_MAX_MULTIPLIER)
+        : 1;
+
       // Converte pixels físicos (medidos na escala do monitor primário) para
-      // DIP do monitor atual, mantendo o mesmo tamanho físico em qualquer tela.
-      let cardW = Math.round(BASE_W_PHYS * primaryScale / scale);
-      let cardH = Math.round(BASE_H_PHYS * primaryScale / scale);
+      // DIP do monitor atual, mantendo o mesmo tamanho físico em qualquer tela
+      // (ou o tamanho já ampliado por sizeMultiplier, numa tela grande).
+      let cardW = Math.round(BASE_W_PHYS * sizeMultiplier * primaryScale / scale);
+      let cardH = Math.round(BASE_H_PHYS * sizeMultiplier * primaryScale / scale);
 
       // Trava de segurança: o cartão nunca deve passar de metade do monitor
       // de destino (só entra em ação em monitores pequenos/incomuns).
@@ -304,13 +383,14 @@ function setupIpc(mainWindow) {
       const deviceName = display.label || '';
 
       // Fontes/borda/cantos no mesmo tamanho FÍSICO fixo do cartão do monitor
-      // principal — como cardW/cardH acima, precisam do mesmo fator
-      // primaryScale/scale (não só o "fontScale" de segurança do overflow),
-      // senão em monitores com scaleFactor bem diferente do principal (ex.
-      // TV/4K a 300% no Windows) o texto/borda continuavam no tamanho DIP
-      // "cheio" enquanto o cartão em volta encolhia pra caber no tamanho
-      // físico certo — cortando o texto pra fora do cartão.
-      const visualScale = (primaryScale / scale) * fontScale;
+      // principal (ou ampliado por sizeMultiplier, numa tela grande) — como
+      // cardW/cardH acima, precisam do mesmo fator primaryScale/scale (não só
+      // o "fontScale" de segurança do overflow), senão em monitores com
+      // scaleFactor bem diferente do principal (ex. TV/4K a 300% no Windows)
+      // o texto/borda continuavam no tamanho DIP "cheio" enquanto o cartão em
+      // volta encolhia pra caber no tamanho físico certo — cortando o texto
+      // pra fora do cartão.
+      const visualScale = (primaryScale / scale) * fontScale * sizeMultiplier;
       const fsNum   = Math.round(52  * visualScale);
       const fsLabel = Math.round(13  * visualScale);
       const fsRes   = Math.round(11  * visualScale);
