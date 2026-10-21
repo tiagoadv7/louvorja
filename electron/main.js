@@ -429,6 +429,27 @@ function findSavedDisplay(allDisplays, savedId, savedBounds) {
   return target || null;
 }
 
+// Espera um pouco o Windows terminar de enumerar os monitores antes de
+// decidir se restaura a janela de saída/retorno no monitor salvo -- sem
+// isso, se o monitor estendido for conectado/ligado alguns instantes DEPOIS
+// do boot do app (comum: liga o PC, abre o LouvorJA, só depois liga o
+// monitor/projetor), o app via só o primário nesse instante exato, não
+// reconhecia o monitor salvo, e a restauração automática do boot não
+// recebia tempo nenhum pra "esperar" o monitor aparecer. Tenta de novo por
+// até ~1.6s (4 tentativas, 400ms) antes de desistir -- só usado no boot
+// automático (ver ipcMain.once('app:loaded', ...) abaixo); NÃO mexe no
+// fallback de resolveOutputDisplay usado por aberturas manuais (clicar
+// "Projetar"), que deve continuar imediato.
+async function waitForRecognizedDisplay(savedId, savedBounds, { retries = 4, intervalMs = 400 } = {}) {
+  if (!savedId && !savedBounds) return null; // nada salvo pra reconhecer -- não adianta esperar
+  for (let i = 0; i < retries; i++) {
+    const found = findSavedDisplay(screen.getAllDisplays(), savedId, savedBounds);
+    if (found) return found;
+    if (i < retries - 1) await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
+}
+
 // Entre os monitores não-primários, prefere o maior (em pixels) — motivo:
 // quando o monitor salvo não é encontrado (ver findSavedDisplay), o fallback
 // antigo pegava só "o primeiro externo" na ordem em que o Windows os lista,
@@ -1051,7 +1072,7 @@ function registerIpcHandlers() {
   });
 
   // Vue sinaliza que está pronto: fade-in da janela principal + fecha loading
-  ipcMain.once('app:loaded', () => {
+  ipcMain.once('app:loaded', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
 
     // Abriu o app clicando duas vezes num .slja (ver extractSljaPath/
@@ -1076,16 +1097,23 @@ function registerIpcHandlers() {
     // monitor (o de saída desligado/desconectado) não deve fazer a janela de
     // saída (sem moldura, sempre no topo) cair de fallback e cobrir a tela do
     // operador sozinha, sem ele ter pedido isso nessa sessão — nesse caso o
-    // app abre só com a janela principal, sem projetar nada.
-    const bootDisplays = screen.getAllDisplays();
+    // app abre só com a janela principal, sem projetar nada. A checagem usa
+    // waitForRecognizedDisplay (até ~1.6s de retry) em vez de uma leitura
+    // única de screen.getAllDisplays(): monitor/projetor conectado alguns
+    // instantes depois do boot do app (ex.: liga o PC, abre o LouvorJA, só
+    // depois liga o monitor estendido) não tinha terminado de ser enumerado
+    // pelo Windows no instante exato desse evento, e uma checagem única
+    // sempre concluía "não reconhecido" mesmo quando o monitor certo estava
+    // prestes a aparecer.
     if (Store.get('output_window_was_open')) {
       const lastModule = Store.get('output_window_last_module');
-      const recognized = !!findSavedDisplay(
-        bootDisplays,
-        Store.get('output_display_id'),
-        Store.get('output_display_bounds')
-      );
-      if (lastModule && recognized) {
+      const recognized = lastModule
+        ? !!(await waitForRecognizedDisplay(
+            Store.get('output_display_id'),
+            Store.get('output_display_bounds')
+          ))
+        : false;
+      if (lastModule && recognized && mainWindow && !mainWindow.isDestroyed()) {
         createOutputWindow(lastModule);
         mainWindow.webContents.send('restore-output-state', lastModule);
       }
@@ -1101,14 +1129,15 @@ function registerIpcHandlers() {
     // saída acima — createReturnWindow é SEMPRE fullscreen, então sem essa
     // guarda ela cobriria a tela do operador por completo (sem moldura, sem
     // como fechar por fora) só por causa do boot, com um arranjo de monitores
-    // diferente do memorizado.
+    // diferente do memorizado. Mesma espera via waitForRecognizedDisplay do
+    // bloco da saída acima, pelo mesmo motivo (monitor pode aparecer alguns
+    // instantes depois do boot).
     if (Store.get('return_window_was_open')) {
-      const recognized = !!findSavedDisplay(
-        bootDisplays,
+      const recognized = !!(await waitForRecognizedDisplay(
         Store.get('return_display_id'),
         Store.get('return_display_bounds')
-      );
-      if (recognized) createReturnWindow();
+      ));
+      if (recognized && mainWindow && !mainWindow.isDestroyed()) createReturnWindow();
     }
 
     let opacity = 0;
