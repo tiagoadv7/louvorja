@@ -161,6 +161,37 @@ async function fadeOutAndClose(win) {
   if (!win.isDestroyed()) win.destroy();
 }
 
+// Fade-in nativo (setOpacity da janela, não transição CSS no conteúdo) pra
+// abertura da projeção principal — espelha fadeOutAndClose acima (mesma
+// duração, FADE_DURATION_MS) e o mesmo padrão de fade-in já usado na janela
+// principal (ver opacity/step em ipcMain.once('app:loaded', ...) mais
+// abaixo). Sem isso, outputWindow.show() fazia a projeção aparecer de golpe
+// na tela toda em vez de suave, bem diferente do fechar (que já tinha
+// fadeOutAndClose). Usa opacidade nativa em vez de depender de uma
+// transição CSS no conteúdo: não entra em disputa com o timing de paint do
+// Chromium (ready-to-show/show() já corre antes de qualquer transição CSS
+// no conteúdo terminar de rodar). No Linux (setOpacity só funciona em X11,
+// não Wayland) a chamada simplesmente não tem efeito -- mostra direto, sem
+// regressão, só sem a suavidade extra.
+function fadeInWindow(win, duration = FADE_DURATION_MS) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed()) { resolve(); return; }
+    const stepMs = 16;
+    const step = stepMs / duration;
+    let opacity = 0;
+    win.setOpacity(0);
+    win.show();
+    const tick = () => {
+      if (win.isDestroyed()) { resolve(); return; }
+      opacity = Math.min(1, opacity + step);
+      win.setOpacity(opacity);
+      if (opacity < 1) setTimeout(tick, stepMs);
+      else resolve();
+    };
+    tick();
+  });
+}
+
 function tryGC() {
   try { if (global.gc) global.gc(); } catch { /* */ }
 }
@@ -518,7 +549,7 @@ function createOutputWindow(moduleId, displayId) {
     if (isExternal) outputWindow.setFullScreen(true);
     outputWindow.setResizable(false);
     outputWindow.setMovable(false);
-    outputWindow.show();
+    fadeInWindow(outputWindow);
     // Marca "deve reabrir sozinho da próxima vez" (ver restauração em
     // ipcMain.once('app:loaded')) só agora, que a janela de saída de fato
     // abriu — ver comentário em rememberPopupModuleForRestore sobre por que
