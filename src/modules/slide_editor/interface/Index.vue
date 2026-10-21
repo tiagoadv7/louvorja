@@ -485,7 +485,23 @@ export default {
       // "opened_standalone") — sem isso, minimizar depois disto ainda
       // redirecionaria pra Coletâneas Personalizadas por engano.
       this.$appdata.set(`modules.${this.module_id}.opened_standalone`, false);
-      this.$appdata.set(`modules.${this.module_id}.pending_song_id`, "");
+      // $nextTick (não limpa na hora): quem chama esse handoff (ex.
+      // custom_collections/Index.vue#apresentar) seta "pending_song_id" e só
+      // DEPOIS "show" (via $modules.open) no mesmo tick sincrono -- os dois
+      // watchers (este e o "show" abaixo) disparam juntos no mesmo flush do
+      // Vue, e o "show" também lê "pendingSongId" pra saber se é uma
+      // abertura "do zero" ou um handoff de verdade (ver comentário lá).
+      // Limpando pending_song_id JÁ AQUI, síncrono, esse watcher corria
+      // antes do "show" (a mudança de pending_song_id acontece primeiro no
+      // código de quem chama) e deixava o valor zerado bem na hora em que o
+      // "show" ia checar -- ele então achava que era abertura "do zero" e
+      // fechava a apresentação que tinha acabado de abrir ($popup.close()),
+      // sumindo da projeção principal E do retorno (popup_module zerado de
+      // volta). Adiar a limpeza pro próximo tick garante que o "show" ainda
+      // vê o pending_song_id preenchido quando checar.
+      this.$nextTick(() => {
+        this.$appdata.set(`modules.${this.module_id}.pending_song_id`, "");
+      });
       this.loadSongById(id);
     },
     // Mesma ideia do watch acima, pra um .slja recebido de fora (duplo clique
@@ -493,7 +509,10 @@ export default {
     pendingSljaPath(path) {
       if (!path) return;
       this.$appdata.set(`modules.${this.module_id}.opened_standalone`, false);
-      this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, "");
+      // Mesmo motivo do $nextTick em pendingSongId acima.
+      this.$nextTick(() => {
+        this.$appdata.set(`modules.${this.module_id}.pending_slja_path`, "");
+      });
       this.loadSljaFromPath(path);
     },
     footerCommand(cmd) {
