@@ -1,5 +1,7 @@
 import $appdata from "@/helpers/AppData";
 import $window from "@/helpers/Window";
+import $electron from "@/helpers/Electron";
+import $alert from "@/helpers/Alert";
 
 let popup = null;
 
@@ -7,6 +9,32 @@ export default {
   async open(params) {
     if (typeof params != "object") {
       params = { module: params };
+    }
+
+    // Confirma antes de abrir a projeção do ZERO (não quando já tem algo
+    // projetando e só está trocando de módulo/conteúdo -- ver isOutputOpen()
+    // abaixo) se não existir nenhuma segunda tela conectada. Sem isso, a
+    // projeção abria sem aviso nenhum em cima da própria tela do operador
+    // (a janela de saída cobre a tela toda). A dialog "Tela de Projeção"
+    // (MonitorArrangementDialog.vue#lock) já nem deixa marcar a principal
+    // como saída nesse caso -- este aviso aqui é o reforço pra quando a
+    // projeção abre de outro jeito (clicar numa música etc.), sem passar por
+    // aquela escolha explícita.
+    if ($electron.isElectron() && !(await $electron.isOutputOpen())) {
+      const screens = await $electron.getScreens();
+      const hasExternal = screens.some((s) => !s.primary);
+      if (!hasExternal) {
+        const confirmed = await new Promise((resolve) => {
+          $alert.yesno(
+            {
+              text: "Nenhuma segunda tela foi encontrada — a projeção vai abrir na mesma tela do computador. Deseja projetar assim mesmo?",
+              translate: false,
+            },
+            (btn) => resolve(btn === "yes")
+          );
+        });
+        if (!confirmed) return;
+      }
     }
 
     // Define o módulo antes de abrir para que a URL já carregue o módulo correto
