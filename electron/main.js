@@ -192,6 +192,34 @@ function fadeInWindow(win, duration = FADE_DURATION_MS) {
   });
 }
 
+// Fade-out nativo pra fechar a janela de loading -- ela não tem preload (ver
+// createLoadingWindow), então não dá pra usar o canal IPC de
+// fadeOutAndClose (que manda 'output-closing' pro conteúdo animar sozinho).
+// Opacidade da JANELA em vez disso, mesma técnica de fadeInWindow acima.
+// Sem isso, a loading sumia de golpe (destroy() direto) bem no meio do
+// fade-in da janela principal, um corte seco no meio de uma transição que
+// devia ser só suave.
+function fadeOutWindow(win, duration = FADE_DURATION_MS) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed()) { resolve(); return; }
+    const stepMs = 16;
+    const step = stepMs / duration;
+    let opacity = 1;
+    const tick = () => {
+      if (win.isDestroyed()) { resolve(); return; }
+      opacity = Math.max(0, opacity - step);
+      win.setOpacity(opacity);
+      if (opacity > 0) {
+        setTimeout(tick, stepMs);
+      } else {
+        if (!win.isDestroyed()) win.destroy();
+        resolve();
+      }
+    };
+    tick();
+  });
+}
+
 function tryGC() {
   try { if (global.gc) global.gc(); } catch { /* */ }
 }
@@ -1147,7 +1175,7 @@ function registerIpcHandlers() {
       if (opacity < 1) {
         setTimeout(step, 16);
       } else if (loadingWindow && !loadingWindow.isDestroyed()) {
-        loadingWindow.destroy();
+        fadeOutWindow(loadingWindow);
       }
     };
     step();
