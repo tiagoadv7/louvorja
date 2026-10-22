@@ -2,8 +2,8 @@
   <v-dialog v-model="dialogModel" max-width="720" scrollable>
     <v-card>
       <v-card-title class="d-flex align-center ga-2 flex-wrap">
-        <v-icon>mdi-monitor-dashboard</v-icon>
-        <span>Arranjo de Monitores</span>
+        <v-icon color="primary">mdi-monitor-dashboard</v-icon>
+        <span class="text-primary">Tela de Projeção</span>
         <v-spacer />
         <v-btn
           v-if="hasCustomArrangement"
@@ -12,14 +12,13 @@
           prepend-icon="mdi-restore"
           @click="resetLayout"
         >
-          Redefinir arranjo
+          Redefinir
         </v-btn>
         <v-btn
           size="small"
           variant="tonal"
           color="primary"
           prepend-icon="mdi-monitor-eye"
-          :loading="identifying"
           :disabled="screens.length === 0"
           @click="identify"
         >
@@ -45,7 +44,11 @@
             v-for="tile in tiles"
             :key="tile.id"
             class="marr-tile"
-            :class="{ 'marr-tile--primary': tile.isPrimary, 'marr-tile--dragging': draggingId === tile.id }"
+            :class="{
+              'marr-tile--primary': tile.isPrimary,
+              'marr-tile--dragging': draggingId === tile.id,
+              'marr-tile--active-output': selectedId === tile.id,
+            }"
             :style="{
               width: `${tile.width}px`,
               height: `${tile.height + 22}px`,
@@ -61,6 +64,10 @@
               <span class="marr-tile__badge" :class="{ 'marr-tile__badge--primary': tile.isPrimary }">
                 {{ tile.isPrimary ? 'Principal' : 'Estendido' }}
               </span>
+              <div class="marr-tile__out-row">
+                <span v-if="tile.id === selectedId" class="marr-tile__out marr-tile__out--output">Saída</span>
+                <span v-if="tile.id === returnSelectedId" class="marr-tile__out marr-tile__out--return">Retorno</span>
+              </div>
             </div>
             <div class="marr-tile__stand" />
             <div class="marr-tile__base" />
@@ -70,9 +77,86 @@
           </div>
         </div>
 
-        <p class="marr-hint text-caption text-medium-emphasis text-center mt-3 mb-0">
-          Arraste os monitores para reorganizar a posição física.
+        <!-- Clicar (sem arrastar) num monitor aqui já seleciona/ativa ele
+             como saída da projeção (ver onPointerUp) -- a grade "Monitor de
+             saída" que existia aqui embaixo virou redundante (mesmos cards,
+             mesma ação) e foi removida; só "Monitor de retorno" continua
+             como seção separada abaixo, por ser uma atribuição independente. -->
+        <p class="marr-hint text-caption text-medium-emphasis text-center mt-3 mb-4">
+          Clique num monitor para projetar nele · arraste para reorganizar a posição física.
         </p>
+
+        <v-alert
+          v-if="outputNotFoundWarning"
+          type="warning"
+          density="compact"
+          variant="tonal"
+          class="mb-4"
+        >
+          Monitor de saída salvo não encontrado. Clique num monitor acima para selecionar de novo.
+        </v-alert>
+
+        <!-- ── Monitor de retorno (palco) ─────────────────────────── -->
+        <v-divider class="mb-4" />
+        <div class="text-subtitle-2 text-center mb-2">Monitor de retorno</div>
+        <div class="d-flex justify-center mb-3">
+          <v-btn
+            size="small"
+            variant="tonal"
+            :color="returnOpen ? 'info' : undefined"
+            :prepend-icon="returnOpen ? 'mdi-monitor-eye' : 'mdi-monitor-off'"
+            @click="toggleReturn"
+          >
+            {{ returnOpen ? 'Desativar' : 'Ativar' }}
+          </v-btn>
+        </div>
+
+        <v-alert
+          v-if="returnNotFoundWarning"
+          type="warning"
+          density="compact"
+          variant="tonal"
+          class="mb-3"
+        >
+          Monitor de retorno salvo não encontrado. Selecione o monitor novamente.
+        </v-alert>
+
+        <!-- Lista sempre visível — sem v-if="returnOpen", igual ao menu antigo -->
+        <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-3">
+          <div
+            v-for="s in screens"
+            :key="'ret-' + s.id"
+            class="monitor-tile"
+            :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-return': returnSelectedId === s.id }"
+            :title="s.deviceName || undefined"
+            @click="lockReturn(s.id)"
+          >
+            <div class="monitor-tile__screen">
+              <v-icon v-if="s.primary" size="12" class="monitor-tile__star">mdi-star</v-icon>
+              <span class="monitor-tile__num">{{ indexById[s.id] ?? '' }}</span>
+              <span class="monitor-tile__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
+              <span class="monitor-tile__badge" :class="{ 'monitor-tile__badge--primary': s.primary }">
+                {{ s.primary ? 'Principal' : 'Estendido' }}
+              </span>
+              <span v-if="s.id === selectedId" class="monitor-tile__out">Saída</span>
+            </div>
+            <div class="monitor-tile__stand" />
+            <div class="monitor-tile__base" />
+            <div v-if="s.deviceName" class="monitor-tile__device" :title="s.deviceName">{{ s.deviceName }}</div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-center mt-5">
+          <v-btn
+            size="small"
+            variant="text"
+            color="error"
+            prepend-icon="mdi-restore-alert"
+            @click="resetAll"
+          >
+            Redefinir tudo
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -94,7 +178,6 @@ export default {
   emits: ["update:modelValue"],
   data: () => ({
     loading: false,
-    identifying: false,
     screens: [],
     arrangement: [],       // [{ id, x, y }] — override só de posição, nunca de tamanho
     stageW: 0,
@@ -105,6 +188,20 @@ export default {
     dragOrigin: { x: 0, y: 0 }, // posição virtual (mundo) de onde o drag começou
     _resizeObserver: null,
     _displaysChangedHandler: null,
+
+    // ── Monitor de saída/retorno -- estado que antes vivia em
+    // MonitorSelector.vue (ver comentário no template acima). ──────────────
+    selectedId: null,
+    outputOpen: false,
+    returnOpen: false,
+    returnSelectedId: null,
+    outputNotFoundWarning: false,
+    returnNotFoundWarning: false,
+    _outputOpenedHandler: null,
+    _outputClosedHandler: null,
+    _returnOpenedHandler: null,
+    _returnClosedHandler: null,
+    _displayNotFoundHandler: null,
   }),
   computed: {
     dialogModel: {
@@ -176,23 +273,67 @@ export default {
         };
       });
     },
+    // Mesma numeração dos cards do arranjo acima (0 = principal, 1/2/3... =
+    // estendidos, na ordem em que vêm de getScreens) -- reaproveitada nos
+    // cards de saída/retorno abaixo pra não ter dois esquemas de numeração
+    // diferentes pro mesmo monitor dentro do mesmo diálogo.
+    indexById() {
+      const map = {};
+      for (const t of this.tiles) map[t.id] = t.index;
+      return map;
+    },
   },
   watch: {
     modelValue(open) {
       if (open) this.refresh();
     },
   },
-  mounted() {
+  async mounted() {
     this._resizeObserver = new ResizeObserver(() => this.measureStage());
     if (this.$refs.stageRef) this._resizeObserver.observe(this.$refs.stageRef);
 
     this._displaysChangedHandler = this.$electron.on?.("displays-changed", () => {
       if (this.modelValue) this.refreshScreens();
     });
+
+    // Estado de saída/retorno (ver comentário no data() acima) -- carregado
+    // já no mount (não só quando o diálogo abre) pelo mesmo motivo de
+    // MonitorSelector.vue original: os badges "Saída"/"Retorno" nos cards
+    // abaixo precisam disso assim que o usuário abrir o diálogo pela
+    // primeira vez, sem esperar um refresh extra.
+    const saved = await this.$electron.storeGet('output_display_id');
+    if (saved) this.selectedId = saved;
+    this.outputOpen = await this.$electron.isOutputOpen();
+
+    this.returnOpen = await this.$electron.isReturnScreenOpen();
+    const savedReturn = await this.$electron.storeGet('return_display_id');
+    if (savedReturn) this.returnSelectedId = savedReturn;
+
+    this._outputOpenedHandler = this.$electron.on('output-window-opened', () => {
+      this.outputOpen = true;
+    });
+    this._outputClosedHandler = this.$electron.on('output-window-closed', () => {
+      this.outputOpen = false;
+    });
+    this._returnOpenedHandler = this.$electron.on('return-window-opened', () => {
+      this.returnOpen = true;
+    });
+    this._returnClosedHandler = this.$electron.on('return-window-closed', () => {
+      this.returnOpen = false;
+    });
+    this._displayNotFoundHandler = this.$electron.on('output-display-not-found', ({ kind }) => {
+      if (kind === 'return') this.returnNotFoundWarning = true;
+      else this.outputNotFoundWarning = true;
+    });
   },
   beforeUnmount() {
     this._resizeObserver?.disconnect();
     if (this._displaysChangedHandler) this.$electron.off?.("displays-changed", this._displaysChangedHandler);
+    if (this._outputOpenedHandler) this.$electron.off('output-window-opened', this._outputOpenedHandler);
+    if (this._outputClosedHandler) this.$electron.off('output-window-closed', this._outputClosedHandler);
+    if (this._returnOpenedHandler) this.$electron.off('return-window-opened', this._returnOpenedHandler);
+    if (this._returnClosedHandler) this.$electron.off('return-window-closed', this._returnClosedHandler);
+    if (this._displayNotFoundHandler) this.$electron.off('output-display-not-found', this._displayNotFoundHandler);
   },
   methods: {
     async refresh() {
@@ -208,6 +349,14 @@ export default {
         // Descarta posições salvas de monitores que não estão mais conectados.
         const ids = new Set(this.screens.map((s) => s.id));
         this.arrangement = this.arrangement.filter((a) => ids.has(a.id));
+        if (!this.selectedId && this.screens.length) {
+          const ext = this.screens.find((s) => !s.primary);
+          this.selectedId = (ext ?? this.screens[0]).id;
+        }
+        if (!this.returnSelectedId && this.screens.length) {
+          const ext = this.screens.find((s) => !s.primary);
+          this.returnSelectedId = (ext ?? this.screens[0]).id;
+        }
       } finally {
         this.loading = false;
       }
@@ -221,17 +370,46 @@ export default {
     },
 
     async identify() {
-      this.identifying = true;
-      try {
-        await this.$electron.identifyScreens();
-      } finally {
-        this.identifying = false;
-      }
+      await this.$electron.identifyScreens();
     },
 
+    // Só a posição dos cards no arranjo -- o botão "Redefinir" do topo é
+    // pensado pra ser inofensivo/sem confirmação (só reorganiza o layout
+    // visual). O reset completo (saída/retorno/salvos) é o resetAll() lá
+    // embaixo, com aviso antes, por ser mais impactante.
     async resetLayout() {
       this.arrangement = [];
       await this.$electron.storeSet("monitor_arrangement", []);
+    },
+
+    // "Redefinir tudo" -- além do arranjo, também limpa o monitor de saída/
+    // retorno escolhidos (desmarca e tira do electron-store de vez, via
+    // storeRemove, não só storeSet(null)). Sem isso, uma escolha salva pra
+    // um monitor que não existe mais (id trocado, projetor substituído etc.)
+    // ficava presa pra sempre, sem um jeito de "começar do zero" além de
+    // editar o arquivo de config na mão. Mais impactante que o "Redefinir"
+    // de cima (fecha a projeção/retorno ativos), por isso pede confirmação.
+    async resetAll() {
+      this.$alert.yesno(
+        { text: 'Isso vai fechar a projeção e o retorno ativos, e esquecer os monitores de saída/retorno escolhidos. Continuar?', translate: false },
+        async (btn) => {
+          if (btn !== 'yes') return;
+
+          this.arrangement = [];
+          await this.$electron.storeSet("monitor_arrangement", []);
+
+          if (this.outputOpen) await this.$electron.closeOutput();
+          if (this.returnOpen) await this.$electron.closeReturnScreen();
+          this.outputOpen = false;
+          this.returnOpen = false;
+          this.selectedId = null;
+          this.returnSelectedId = null;
+          this.outputNotFoundWarning = false;
+          this.returnNotFoundWarning = false;
+          await this.$electron.storeRemove("output_display_id");
+          await this.$electron.storeRemove("return_display_id");
+        }
+      );
     },
 
     onPointerDown(event, id) {
@@ -253,21 +431,122 @@ export default {
     async onPointerUp() {
       if (this.draggingId == null) return;
       const id = this.draggingId;
+      const offset = this.dragOffset; // captura antes de resetar (ver abaixo)
+      this.draggingId = null;
+      this.dragOffset = { x: 0, y: 0 };
+
+      // Ponteiro soltou quase sem se mover (abaixo do limiar) -- trata como
+      // CLIQUE, não arrasto: seleciona/ativa esse monitor como saída (ver
+      // lock() abaixo), em vez de regravar a mesma posição de antes. É isso
+      // que substitui a antiga grade "Monitor de saída" separada.
+      if (Math.hypot(offset.x, offset.y) < 4) {
+        await this.lock(id);
+        return;
+      }
+
       const scale = this.scale || 1;
-      const newX = Math.round(this.dragOrigin.x + this.dragOffset.x / scale);
-      const newY = Math.round(this.dragOrigin.y + this.dragOffset.y / scale);
+      const newX = Math.round(this.dragOrigin.x + offset.x / scale);
+      const newY = Math.round(this.dragOrigin.y + offset.y / scale);
 
       const next = this.arrangement.filter((a) => a.id !== id);
       next.push({ id, x: newX, y: newY });
       this.arrangement = next;
       await this.$electron.storeSet("monitor_arrangement", next);
-
-      this.draggingId = null;
-      this.dragOffset = { x: 0, y: 0 };
     },
     onPointerCancel() {
       this.draggingId = null;
       this.dragOffset = { x: 0, y: 0 };
+    },
+
+    // ── Monitor de saída/retorno -- métodos que antes viviam em
+    // MonitorSelector.vue (ver comentário no template/data acima). ─────────
+
+    // Clicar num card de monitor não só memoriza a escolha — já ativa a
+    // projeção nele na hora (o operador não deveria precisar de um segundo
+    // clique em outro lugar pra ver o resultado). Se já estiver projetando
+    // em OUTRO monitor, fecha e reabre no novo (createOutputWindow ignora um
+    // displayId novo enquanto já está aberta — ver electron/main.js).
+    async lock(id) {
+      // Nunca projeta na tela principal (a do operador) -- clicar nela
+      // força a escolha pro monitor estendido, já que a projeção é sempre
+      // pensada pra uma segunda tela/projetor, nunca por cima da tela que o
+      // próprio operador está olhando. Se não tiver NENHUMA outra tela pra
+      // forçar, o clique não faz nada aqui (não deixa marcar a principal
+      // neste diálogo) -- o aviso "projetar assim mesmo?" pra esse caso
+      // aparece na hora de abrir uma projeção de verdade (ver Popup.js#open),
+      // não aqui, que é só escolha/preferência.
+      const target = this.screens.find((s) => s.id === id);
+      if (target?.primary) {
+        const ext = this.screens.find((s) => !s.primary);
+        if (!ext) return;
+        id = ext.id;
+      }
+
+      // Clicar de novo no MESMO monitor já ativo como saída desativa a
+      // projeção -- mesmo toggle que lockReturn() já faz pro retorno (ver
+      // comentário lá). Antes esse clique repetido não fazia nada.
+      if (this.outputOpen && this.selectedId === id) {
+        await this.$electron.closeOutput();
+        this.outputOpen = false;
+        return;
+      }
+
+      this.selectedId = id;
+      this.outputNotFoundWarning = false;
+      await this.$electron.storeSet('output_display_id', id);
+
+      if (this.outputOpen) await this.$electron.closeOutput();
+
+      // Mesma resolução de módulo do botão de abrir saída (ver
+      // SystemBar.vue#openOutput) — sem um popup_module já definido, usa o
+      // módulo ativo no momento (media minimizado conta como ativo).
+      let moduleId = this.$appdata.get('popup_module');
+      if (!moduleId) {
+        const modules = this.$appdata.get('modules') || {};
+        if (modules?.media?.minimized) {
+          moduleId = 'media';
+        } else {
+          for (const [mid, mod] of Object.entries(modules)) {
+            if (mod && mod.show) { moduleId = mid; break; }
+          }
+        }
+        if (moduleId) this.$appdata.set('popup_module', moduleId);
+      }
+      await this.$electron.openOutput(moduleId, id);
+      this.outputOpen = true;
+      this.$appdata.set('popup', { closed: false, _electron: true });
+    },
+
+    async toggleReturn() {
+      if (this.returnOpen) {
+        await this.$electron.closeReturnScreen();
+        this.returnOpen = false;
+      } else {
+        await this.$electron.openReturnScreen(this.returnSelectedId || null);
+        this.returnOpen = true;
+      }
+    },
+
+    // Mesma ideia do lock() acima, pro retorno: clicar num card ativa o
+    // monitor de palco na hora, não só memoriza a escolha pra uma próxima
+    // vez que o usuário apertar "Ativar retorno" manualmente. Clicar de novo
+    // no MESMO card já ativo agora desativa (toggle) -- antes esse clique
+    // repetido não fazia nada (só regravava a mesma escolha), então não tinha
+    // como desligar o retorno clicando no card, só pelo botão "Retorno ativo".
+    async lockReturn(id) {
+      if (this.returnOpen && this.returnSelectedId === id) {
+        await this.$electron.closeReturnScreen();
+        this.returnOpen = false;
+        return;
+      }
+
+      this.returnSelectedId = id;
+      this.returnNotFoundWarning = false;
+      await this.$electron.storeSet('return_display_id', id);
+
+      if (this.returnOpen) await this.$electron.closeReturnScreen();
+      await this.$electron.openReturnScreen(id);
+      this.returnOpen = true;
     },
   },
 };
@@ -373,6 +652,54 @@ export default {
   background: rgba(255, 255, 255, 0.22);
   opacity: 1;
 }
+/* Anel azul pra indicar "é esse o monitor de saída agora" -- clicar (sem
+   arrastar) num tile aqui ativa ele como saída (ver onPointerUp). Regra
+   depois de --primary de propósito: quando o mesmo monitor é primário E
+   saída, o anel azul soma ao gradiente do primário em vez de substituí-lo
+   (só troca border-color/box-shadow, nunca background). */
+.marr-tile--active-output .marr-tile__screen {
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.45), 0 0 20px rgba(33, 150, 243, 0.3);
+}
+.marr-tile--active-output .marr-tile__stand {
+  background: rgba(33, 150, 243, 0.85);
+}
+.marr-tile--active-output .marr-tile__base {
+  background: #2196F3;
+}
+/* Badges "Saída"/"Retorno" sobre um tile do arranjo -- marca ali, no PRÓPRIO
+   tile (que agora também serve pra selecionar a saída, ver lock() no
+   script), quais papéis esse monitor tem agora; mesma ideia do selo
+   "Principal" já mostrado em cima, só pra saída/retorno. Os dois podem
+   aparecer juntos (mesmo monitor sendo saída E retorno ao mesmo tempo, comum
+   em setup de monitor único) -- por isso um wrapper em linha, não um badge
+   só absoluto como antes. */
+.marr-tile__out-row {
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+.marr-tile__out {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  border-radius: 3px;
+  padding: 2px 6px;
+  line-height: 1.4;
+  color: #fff;
+  white-space: nowrap;
+}
+.marr-tile__out--output {
+  background: rgba(33, 150, 243, 0.85);
+}
+.marr-tile__out--return {
+  background: rgba(33, 150, 243, 0.85);
+}
 .marr-tile__stand {
   width: 20px;
   height: 8px;
@@ -401,5 +728,119 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Cartão em forma de monitor (tela + pé + base) pros cards de saída/retorno
+   abaixo do arranjo -- mesmo visual que já existia em MonitorSelector.vue
+   (ver comentário no template sobre a junção num diálogo só). */
+.monitor-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 0;
+}
+.monitor-tile__screen {
+  position: relative;
+  width: 112px;
+  height: 72px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 2px solid rgba(128, 128, 128, 0.3);
+  background: rgba(128, 128, 128, 0.12);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.monitor-tile:hover .monitor-tile__screen {
+  filter: brightness(1.12);
+}
+.monitor-tile--active-return .monitor-tile__screen {
+  border-color: #2196F3;
+  box-shadow: 0 0 0 1px rgba(33, 150, 243, 0.4);
+}
+.monitor-tile--primary .monitor-tile__screen {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, #00497d 100%);
+  color: #fff;
+}
+.monitor-tile__stand {
+  width: 14px;
+  height: 7px;
+  background: rgba(128, 128, 128, 0.3);
+}
+.monitor-tile--primary .monitor-tile__stand {
+  background: rgba(var(--v-theme-primary), 0.8);
+}
+.monitor-tile--active-return .monitor-tile__stand {
+  background: rgba(33, 150, 243, 0.85);
+}
+.monitor-tile__base {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.3);
+}
+.monitor-tile--primary .monitor-tile__base {
+  background: rgb(var(--v-theme-primary));
+}
+.monitor-tile--active-return .monitor-tile__base {
+  background: #2196F3;
+}
+.monitor-tile__star {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: #fde047;
+}
+.monitor-tile__num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.monitor-tile__res {
+  font-size: 9px;
+  opacity: 0.6;
+  letter-spacing: 0.3px;
+}
+.monitor-tile__badge {
+  margin-top: 1px;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.monitor-tile__badge--primary {
+  opacity: 1;
+}
+.monitor-tile__out {
+  position: absolute;
+  bottom: -3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background: rgba(33, 150, 243, 0.85);
+  border-radius: 3px;
+  padding: 2px 6px;
+  line-height: 1.4;
+  color: #fff;
+}
+.monitor-tile__device {
+  margin-top: 4px;
+  max-width: 112px;
+  font-size: 9px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 </style>
