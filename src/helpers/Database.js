@@ -22,6 +22,13 @@ export default {
   },
 
   async get(file) {
+    // Bíblia em espanhol é só local (importada do disco, ver
+    // scripts/import-bible-es.js): não vai à API, pra não gerar erro de
+    // "arquivo não encontrado" a cada versículo/troca de capítulo.
+    if (/^(es_bible_(book|version)|bible_10\d\d_)/.test(file)) {
+      return $electron.isElectron() ? (await $electron.dbLocalGet(file)) || null : null;
+    }
+
     try {
       const offlineEnabled = $storage.get("db_local_enabled", false) === true;
 

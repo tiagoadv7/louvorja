@@ -77,6 +77,40 @@
         >
           {{ bible.scriptural_reference }}
         </span>
+        <span
+          v-if="bible && bible.text_2"
+          :class="
+            'text-' +
+            (horizontalAlign == 'start'
+              ? 'left'
+              : horizontalAlign == 'end'
+                ? 'right'
+                : 'center')
+          "
+          :style="{
+            zIndex: 1,
+            marginTop: '0.8em',
+            color: fontColor,
+            fontSize: `${fontSizePc(fontSize)}px`,
+            fontFamily: userdata.font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.text_2 }}
+        </span>
+        <span
+          v-if="bible && bible.scriptural_reference_2"
+          :class="
+            'text-' + (horizontalAlign == 'start' ? 'left' : 'right')
+          "
+          :style="{
+            zIndex: 1,
+            color: referenceFontColor,
+            fontSize: `${fontSizePc(referenceFontSize)}px`,
+            fontFamily: userdata.reference_font || 'Arial, sans-serif',
+          }"
+        >
+          {{ bible.scriptural_reference_2 }}
+        </span>
       </div>
     </transition>
   </div>
@@ -147,7 +181,9 @@ export default {
       return this.$appdata.get("modules.bible.data");
     },
     layerKey() {
-      return (this.bible?.text || "") + "||" + (this.bible?.scriptural_reference || "");
+      return [this.bible?.text, this.bible?.scriptural_reference, this.bible?.text_2, this.bible?.scriptural_reference_2]
+        .map((v) => v || "")
+        .join("||");
     },
   },
   methods: {

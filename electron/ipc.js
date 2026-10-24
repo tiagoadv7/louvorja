@@ -573,6 +573,11 @@ function setupIpc(mainWindow) {
   // Pasta de JSONs: sempre gravável (ou pasta customizada pelo usuário)
   const getDbDir = () => Store.get('db_local_folder') || path.join(getWritableBase(), 'db');
 
+  // Arquivos da Bíblia em espanhol (IDs de versão a partir de 1001, ver
+  // scripts/import-bible-es.js) -- só existem em disco, nunca no SQLite nem na API.
+  const isSpanishBibleFile = (filename) =>
+    filename === 'es_bible_book' || filename === 'es_bible_version' || /^bible_10\d\d_/.test(filename);
+
   // Busca e cacheia o JSON de uma música quando ele ainda não existe em disco.
   // Usado pela verificação de arquivos (files:scan-*): sem isso, uma música cujo
   // music_<id>.json nunca foi salvo localmente (comum com o Modo Offline ativo,
@@ -655,6 +660,18 @@ function setupIpc(mainWindow) {
     if (!sqliteReader.isOpen() && _sqliteAutoOpenPromise) {
       await _sqliteAutoOpenPromise;
       _sqliteAutoOpenPromise = null; // já resolvida — próximas chamadas checam isOpen() direto
+    }
+
+    // 0. Bíblia em espanhol (importada por scripts/import-bible-es.js) vive só
+    // em JSON -- antes do SQLite, que devolveria vazio pra IDs que não existem
+    // nele.
+    if (isSpanishBibleFile(filename)) {
+      try {
+        const fp = path.join(getDbDir(), `${filename}.json`);
+        if (fs.existsSync(fp)) return JSON.parse(fs.readFileSync(fp, 'utf8'));
+      } catch (e) {
+        console.error('[IPC] db:local-get JSON error:', e.message);
+      }
     }
 
     // 1. Leitura direta do SQLite — fonte primária quando config/database.db está aberto

@@ -60,6 +60,14 @@
         item-value="value"
         item-title="title"
       />
+      <div class="my-2" />
+      <l-select
+        :label="t('second_version')"
+        v-model="bible.id_bible_version_2"
+        :items="versions_list_2"
+        item-value="value"
+        item-title="title"
+      />
 
       <!-- Os campos abaixo serão exibidos apenas no mobile / reolução pequena -->
       <div v-if="compact">
@@ -333,6 +341,7 @@ export default {
     height: 0,
     bible: {
       id_bible_version: null,
+      id_bible_version_2: null,
       id_bible_book: null,
       version: null,
       book: null,
@@ -341,6 +350,7 @@ export default {
     },
     select_bible: {
       id_bible_version: null,
+      id_bible_version_2: null,
       id_bible_book: null,
       version: null,
       book: null,
@@ -348,10 +358,14 @@ export default {
       verses: [],
       scriptural_reference: null,
       text: null,
+      scriptural_reference_2: null,
+      text_2: null,
     },
     versions: [],
     books: [],
     verses: [],
+    verses_2: {},
+    last_bible_file_2: null,
     last_verse: 1,
     last_bible_file: null,
     // Evita repetir o alerta de "dados offline faltando" a cada troca de
@@ -385,6 +399,10 @@ export default {
 
     show() {
       return this.module.show;
+    },
+
+    current_locale() {
+      return this.$i18n.locale?.value || this.$i18n.locale;
     },
 
     bible_verses: {
@@ -432,6 +450,27 @@ export default {
         value: version.id_bible_version,
       }));
     },
+    // 2ª versão mostra só o idioma oposto ao da 1ª (pt ↔ es) -- ver
+    // language em scripts/import-bible-es.js; as do banco principal não têm
+    // esse campo, então contam como português.
+    versions_list_2() {
+      const primary_is_es = this.version?.language === "es";
+      return [
+        { title: this.t("none"), value: null },
+        ...this.versions
+          .filter((v) => v.id_bible_version != this.bible.id_bible_version)
+          .filter((v) => (v.language === "es") !== primary_is_es)
+          .map((v) => ({
+            title: v.abbreviation + " - " + v.name,
+            value: v.id_bible_version,
+          })),
+      ];
+    },
+    version_2() {
+      return this.versions.find(
+        (b) => b.id_bible_version == this.bible.id_bible_version_2,
+      );
+    },
     compact: function () {
       return this.$vuetify.display.width <= 750;
     },
@@ -469,6 +508,32 @@ export default {
     select_bible() {
       this.send("scriptural_reference", this.select_bible.scriptural_reference);
       this.send("text", this.select_bible.text);
+      this.send("scriptural_reference_2", this.select_bible.scriptural_reference_2);
+      this.send("text_2", this.select_bible.text_2);
+    },
+    async current_locale() {
+      this.versions = [];
+      this.books = [];
+      this.verses = {};
+      this.verses_2 = {};
+      this.last_bible_file = null;
+      this.last_bible_file_2 = null;
+      this.clean();
+      this.bible = {
+        id_bible_version: null,
+        id_bible_version_2: null,
+        id_bible_book: null,
+        version: null,
+        book: null,
+        chapter: null,
+        verses: [],
+      };
+      await this.loadData();
+    },
+    async "bible.id_bible_version_2"() {
+      this.last_bible_file_2 = null;
+      await this.loadData();
+      this.refreshSelectedVerses();
     },
   },
   methods: {
@@ -513,11 +578,24 @@ export default {
       }
 
       if (this.versions.length <= 0) {
-        this.versions = (await this.$database.get(
+        // Bíblias em espanhol entram junto das do idioma atual (ver
+        // scripts/import-bible-es.js) -- sem depender do idioma da interface.
+        const locale_versions = (await this.$database.get(
           `${this.$i18n.locale?.value || this.$i18n.locale}_bible_version`,
         )) || [];
+        const spanish_versions = (await this.$database.get("es_bible_version")) || [];
+        const seen = new Set();
+        this.versions = [...locale_versions, ...spanish_versions].filter((v) => {
+          if (seen.has(v.id_bible_version)) return false;
+          seen.add(v.id_bible_version);
+          return true;
+        });
         if (!this.bible.id_bible_version && this.versions.length) {
-          await this.selVersion(this.versions[0].id_bible_version);
+          const preferred =
+            this.current_locale === "es"
+              ? this.versions.find((v) => v.abbreviation === "RVR1960" && v.language === "es")
+              : null;
+          await this.selVersion((preferred ?? this.versions[0]).id_bible_version);
         }
       }
 
@@ -546,6 +624,17 @@ export default {
         this.loading_verses = false;
       }
 
+      if (this.bible.id_bible_version_2) {
+        const bible_file_2 = `bible_${this.bible.id_bible_version_2}_${this.bible.id_bible_book}_${this.bible.chapter}`;
+        if (bible_file_2 != this.last_bible_file_2) {
+          this.verses_2 = (await this.$database.get(bible_file_2)) || {};
+          this.last_bible_file_2 = bible_file_2;
+        }
+      } else {
+        this.verses_2 = {};
+        this.last_bible_file_2 = null;
+      }
+
       if (
         this.select_bible.id_bible_book == this.bible.id_bible_book &&
         this.select_bible.chapter == this.bible.chapter &&
@@ -567,9 +656,31 @@ export default {
         this.bible.id_bible_version = id_bible_version;
       }
       this.bible.version = this.version?.abbreviation;
+      if (
+        this.bible.id_bible_version_2 &&
+        !this.versions_list_2.some((v) => v.value == this.bible.id_bible_version_2)
+      ) {
+        this.bible.id_bible_version_2 = null;
+      }
+      const selected = [...(this.select_bible?.verses || [])];
+      const same_passage =
+        this.select_bible.id_bible_book == this.bible.id_bible_book &&
+        this.select_bible.chapter == this.bible.chapter;
       this.bible.verses = [];
       this.last_verse = 1;
       await this.loadData();
+
+      // Mesma passagem já selecionada: troca a versão mantendo os versículos
+      // marcados e atualiza o texto projetado (igual à 2ª versão faz).
+      if (selected.length && same_passage) {
+        this.bible.verses = selected;
+        this.select_bible = Object.assign({}, this.select_bible, {
+          id_bible_version: this.bible.id_bible_version,
+          version: this.bible.version,
+          verses: selected,
+        });
+        this.refreshSelectedVerses();
+      }
     },
     async selBook(id_bible_book) {
       if (id_bible_book) {
@@ -645,10 +756,7 @@ export default {
       this.last_verse = num;
       this.bible.verses.sort((a, b) => a - b);
       this.select_bible = Object.assign({}, this.bible);
-      this.select_bible.scriptural_reference = this.scripturalReference(
-        this.select_bible,
-      );
-      this.select_bible.text = this.getSelectedVerses(this.select_bible.verses);
+      this.refreshSelectedVerses();
 
       const element = document.getElementById(`listVerse_${this.last_verse}`);
       if (element) {
@@ -789,7 +897,32 @@ export default {
       ).trim();
     },
 
-    getSelectedVerses(keys) {
+    // Recalcula texto/referência da seleção (1ª e, se houver, 2ª versão).
+    // Chamado ao escolher versículo e ao trocar a 2ª versão com algo já
+    // selecionado.
+    refreshSelectedVerses() {
+      if (!this.select_bible.verses || this.select_bible.verses.length === 0) return;
+      const second_is_valid =
+        this.bible.id_bible_version_2 &&
+        this.bible.id_bible_version_2 != this.bible.id_bible_version;
+
+      this.select_bible = Object.assign({}, this.select_bible, {
+        id_bible_version_2: second_is_valid ? this.bible.id_bible_version_2 : null,
+        scriptural_reference: this.scripturalReference(this.select_bible),
+        text: this.getSelectedVerses(this.select_bible.verses, this.verses),
+        scriptural_reference_2: second_is_valid
+          ? this.scripturalReference({
+              ...this.select_bible,
+              version: this.version_2?.abbreviation,
+            })
+          : null,
+        text_2: second_is_valid
+          ? this.getSelectedVerses(this.select_bible.verses, this.verses_2)
+          : null,
+      });
+    },
+
+    getSelectedVerses(keys, source = this.verses) {
       keys.sort((a, b) => a - b); // Ordena os versículos para garantir a sequência correta
       let result = "";
       let previousKey = null;
@@ -800,7 +933,7 @@ export default {
         } else if (result) {
           result += " "; // Adiciona um espaço entre versos consecutivos
         }
-        result += this.verses[key];
+        result += source[key] ?? "";
         previousKey = key;
       });
 
@@ -817,6 +950,8 @@ export default {
         verses: [],
         scriptural_reference: null,
         text: null,
+        scriptural_reference_2: null,
+        text_2: null,
       };
     },
 
@@ -833,6 +968,8 @@ export default {
         verses: [],
         scriptural_reference: null,
         text: null,
+        scriptural_reference_2: null,
+        text_2: null,
       };
     },
   },
