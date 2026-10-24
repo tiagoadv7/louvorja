@@ -57,8 +57,17 @@ export default {
     // Fechar o painel do operador esconde o conteúdo na janela de saída
     // (fica só a janela transparente), sem afetar o painel do próprio
     // operador nem o estado "minimizado".
+    // Default "true" pro "show" (não "false"/null implícito): a janela de
+    // saída/retorno nasce com appdata VAZIO (store próprio, só preenchido aos
+    // poucos pelo dump inicial via IPC, ver output-ready em SystemBar.vue) --
+    // se o operador iniciar o cronômetro ANTES desse dump chegar, show/
+    // minimized ainda não existem aqui (get() cairia no default), e "false ||
+    // false" escondia a tela inteira (v-if="isActive") até algo mais tarde
+    // forçar uma releitura. Assumir "ativo" por padrão (até vir um valor
+    // explícito) é mais seguro aqui: na pior hipótese mostra um instante a
+    // mais do que devia, em vez de ficar em branco bem no começo do culto.
     isActive() {
-      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
+      return !!this.$appdata.get(`modules.${this.module_id}.show`, true) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     userdata() {
       return new Proxy(
@@ -205,10 +214,19 @@ export default {
     },
   },
   watch: {
+    // Resincroniza countdownNow SEMPRE que isRunning muda, mesmo ao parar —
+    // mesmo fix de StopwatchScreen.vue (aba Avulso, modo Regressivo): sem
+    // isso, quando o cronômetro para sozinho ao zerar ("Desligar ao zerar
+    // tempo"), o último valor congelado podia ser de ANTES de cruzar o zero
+    // (o check do operador roda a cada 500ms, o timer local daqui a cada
+    // 250ms — ambos podem "empatar" com o restante ainda em +Xms), travando
+    // o mostrador da projeção/retorno acima de zero pra sempre (ex.:
+    // "00:00:30" parado), mesmo com o painel do operador já mostrando
+    // 00:00:00 de verdade.
     isRunning() {
+      this.countdownNow = new Date();
       clearInterval(this.countdownTimer);
       if (this.isRunning) {
-        this.countdownNow = new Date();
         this.countdownTimer = setInterval(() => {
           this.countdownNow = new Date();
         }, 250);

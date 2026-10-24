@@ -160,8 +160,13 @@ export default {
     // continuar mostrando o cronômetro parado. Minimizar não afeta (minimized
     // continua true). No painel do próprio operador, embutido no Index.vue,
     // isso nunca é false enquanto o diálogo estiver visível.
+    // Mesmo motivo do Screen.vue (aba Culto, ver comentário lá): default
+    // "true" pro "show" -- sem isso, iniciar o cronômetro antes do dump
+    // inicial de appdata chegar na janela de saída/retorno (store própria,
+    // nasce vazia) deixava "show"/"minimized" ambos indefinidos, escondendo
+    // a tela inteira (v-if="isActive") logo no início.
     isActive() {
-      return !!this.$appdata.get(`modules.${this.module_id}.show`) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
+      return !!this.$appdata.get(`modules.${this.module_id}.show`, true) || !!this.$appdata.get(`modules.${this.module_id}.minimized`);
     },
     // Aba "Avulso" do módulo mesclado (ver cronometro_culto/interface/Index.vue)
     // — namespace próprio (modules.cronometro_culto.sw_*), sem colisão com os
