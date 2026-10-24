@@ -6,6 +6,21 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* Todas as animações desta página ficam PAUSADAS (congeladas antes
+       mesmo da contagem do delay começar) até o <body> ganhar a classe
+       "visible" -- ver o <script> no fim do arquivo, que só adiciona essa
+       classe quando o processo main avisa (via loading-preload.js) que a
+       janela apareceu DE VERDADE na tela. Sem isso, as animações corriam
+       desde o carregamento da página (a janela nasce com show:false,
+       escondida) -- num boot mais lento, a entrada inteira (cascata de
+       letras, barra crescendo, anel girando) podia já ter acabado escondida
+       antes do usuário ver a janela, sobrando só o resultado parado. */
+    body:not(.visible) *,
+    body:not(.visible) *::before,
+    body:not(.visible) *::after {
+      animation-play-state: paused !important;
+    }
+
     html, body {
       width: 100%;
       height: 100%;
@@ -80,15 +95,15 @@
        carregamento real do app. */
     .logo-wrap {
       position: relative;
-      width: 72px;
-      height: 72px;
+      width: 92px;
+      height: 92px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .logo-glow {
       position: absolute;
-      inset: -22px;
+      inset: -26px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(248, 200, 0, .4) 0%, rgba(0, 151, 215, .2) 45%, transparent 70%);
       opacity: 0;
@@ -101,13 +116,15 @@
 
     .logo-ring {
       position: absolute;
-      inset: -14px;
-      border-radius: 50%;
-      border: 2px solid transparent;
-      border-top-color: rgba(248, 200, 0, .6);
-      border-right-color: rgba(0, 151, 215, .4);
+      inset: -13px;
       opacity: 0;
       animation: ringFadeIn .4s ease-out .35s forwards, ringSpin 2.4s linear infinite;
+    }
+    .logo-ring svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
     }
     @keyframes ringFadeIn { to { opacity: 1; } }
     @keyframes ringSpin { to { transform: rotate(360deg); } }
@@ -115,8 +132,8 @@
     .logo {
       position: relative;
       z-index: 1;
-      width: 72px;
-      height: 72px;
+      width: 58px;
+      height: 58px;
       object-fit: contain;
       filter: drop-shadow(0 2px 18px rgba(74, 127, 193, .55));
       opacity: 0;
@@ -137,8 +154,20 @@
       font-size: 27px;
       font-weight: 800;
       letter-spacing: .5px;
+      /* Brilho pulsante contínuo, depois que a cascata de letras termina de
+         entrar (delay cobre a entrada toda) -- sem isso o texto "morria"
+         parado assim que aparecia, enquanto o resto da tela (blobs, anel,
+         barra de progresso, pontinhos) continuava se movendo pra sempre.
+         Agora o texto também fica animado durante todo o carregamento, não
+         só no instante em que aparece. */
+      animation: textGlow 2.4s ease-in-out 1.3s infinite;
     }
-    .app-name span {
+    @keyframes textGlow {
+      0%, 100% { filter: drop-shadow(0 0 0 rgba(248, 200, 0, 0)); }
+      50% { filter: drop-shadow(0 0 9px rgba(248, 200, 0, .65)); }
+    }
+    .app-name > span,
+    .ja > span {
       display: inline-block;
       color: #eef2f8;
       opacity: 0;
@@ -149,18 +178,40 @@
     .app-name span.accent { color: #F8C800; }
     @keyframes letterIn { to { opacity: 1; transform: translateY(0); } }
 
+    .ja {
+      position: relative;
+      display: inline-block;
+    }
     .app-name-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -8px;
       height: 3px;
-      margin-top: 5px;
       border-radius: 2px;
       background: #F8C800;
       box-shadow: 0 0 8px rgba(248, 200, 0, .5);
       opacity: 0;
+      overflow: hidden;
       transform: scaleX(0);
       transform-origin: left;
       animation: barIn .5s cubic-bezier(.22, 1, .36, 1) .78s forwards;
     }
     @keyframes barIn { to { opacity: 1; transform: scaleX(1); } }
+    /* Brilho correndo em loop pela barrinha -- mesma ideia do .progress-fill
+       mais abaixo, só que aqui por cima da cor sólida (não substitui o
+       dourado, só passa um reflexo claro de vez em quando). */
+    .app-name-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -60%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .8), transparent);
+      animation: barShine 2.4s ease-in-out 1.3s infinite;
+    }
+    @keyframes barShine { 0% { left: -60%; } 100% { left: 100%; } }
 
     /* Barra de progresso indeterminada -- pílula central, não mais colada
        na borda do card (ficava parecendo uma barra de navegador genérica). */
@@ -220,15 +271,19 @@
     <div class="content">
       <div class="logo-wrap">
         <div class="logo-glow"></div>
-        <div class="logo-ring"></div>
+        <div class="logo-ring">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#F8C800" stroke-width="2" stroke-linecap="round" stroke-dasharray="95 194" />
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#0097D7" stroke-width="2" stroke-linecap="round" stroke-dasharray="95 194" transform="rotate(180 50 50)" />
+          </svg>
+        </div>
         <img class="logo" src="ico/favicon.svg" alt="LouvorJA" draggable="false" />
       </div>
 
       <div class="app-name-wrap">
         <div class="app-name" aria-label="LouvorJA">
-          <span style="--i:0">L</span><span style="--i:1">o</span><span style="--i:2">u</span><span style="--i:3">v</span><span style="--i:4">o</span><span style="--i:5">r</span><span class="accent" style="--i:6">J</span><span class="accent" style="--i:7">A</span>
+          <span style="--i:0">L</span><span style="--i:1">o</span><span style="--i:2">u</span><span style="--i:3">v</span><span style="--i:4">o</span><span style="--i:5">r</span><span class="ja"><span class="accent" style="--i:6">J</span><span class="accent" style="--i:7">A</span><span class="app-name-bar"></span></span>
         </div>
-        <div class="app-name-bar"></div>
       </div>
 
       <div class="progress"><div class="progress-fill"></div></div>
@@ -247,6 +302,21 @@
     var params = new URLSearchParams(window.location.search);
     if (params.get('mode') === 'open-file') {
       document.getElementById('loadingText').textContent = 'abrindo arquivo';
+    }
+
+    // Libera as animações (ver ".visible" no <style>) só quando a janela
+    // aparece de verdade na tela (sinal do processo main via
+    // electron/loading-preload.js) -- sem isso elas rodavam escondidas desde
+    // o carregamento da página. Fora do Electron (abrir este arquivo direto
+    // num navegador, pra testar/ajustar o visual) não existe
+    // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
+    // nenhum.
+    if (window.loadingBridge && window.loadingBridge.onShown) {
+      window.loadingBridge.onShown(function () {
+        document.body.classList.add('visible');
+      });
+    } else {
+      document.body.classList.add('visible');
     }
   </script>
 </body>

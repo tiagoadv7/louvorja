@@ -249,6 +249,7 @@ function createLoadingWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'loading-preload.js'),
     },
     show: false,
   });
@@ -266,7 +267,15 @@ function createLoadingWindow() {
   loadingWindow.loadFile(loadingPath, { query: { mode: pendingSljaPath ? 'open-file' : 'app' } });
 
   loadingWindow.once('ready-to-show', () => {
-    if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.show();
+    if (loadingWindow && !loadingWindow.isDestroyed()) {
+      loadingWindow.show();
+      // Avisa o HTML que a janela apareceu DE VERDADE pro usuário -- as
+      // animações CSS lá ficam pausadas (ver loading.html) até receberem
+      // esse sinal, em vez de começarem a contar desde o carregamento da
+      // página (que roda escondida, com show:false, e pode levar um tempo
+      // variável até aqui num boot mais lento). Ver electron/loading-preload.js.
+      loadingWindow.webContents.send('loading-window-shown');
+    }
 
     // Registra handlers IPC ANTES de createMainWindow para eliminar a janela de
     // corrida onde o renderer envia app:loaded antes do handler estar registrado.

@@ -7,13 +7,18 @@
     color="primary"
     style="-webkit-app-region: drag; user-select: none;"
   >
-    <img :src="logoUrl" height="16" width="16" class="me-2" style="vertical-align: middle; object-fit: contain;" />
+    <img :src="logoUrl" height="16" width="16" class="me-2 sysbar-logo-in" style="vertical-align: middle; object-fit: contain;" />
     <!-- Mesmo wordmark do logo oficial "LOUVORJA" (branco + "JA" dourado +
          barrinha dourada embaixo) -- texto fixo (não $t('app.name'), que é
          "Louvor JA" com espaço, usado em título de janela/about/etc.): isso
-         aqui é a marca, não texto traduzível. -->
+         aqui é a marca, não texto traduzível. Anima uma vez só ao montar
+         (que é quando a janela principal aparece, logo depois do splash de
+         loading fechar) -- mesmo espírito motion design do loading, só numa
+         escala bem menor pra caber nessa barra de 16-24px. -->
     <span class="sysbar-wordmark">
-      <span class="sysbar-wordmark-text"><span>LOUVOR</span><span class="accent">JA</span></span>
+      <span class="sysbar-wordmark-text">
+        <span class="sysbar-word-in">LOUVOR</span><span class="accent sysbar-word-in sysbar-word-in--ja">JA</span>
+      </span>
       <span class="sysbar-wordmark-bar"></span>
     </span>
 
@@ -319,7 +324,31 @@ export default {
   margin-top: 2px;
   border-radius: 1px;
   background: #F8C800;
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: sysbarBarIn .4s cubic-bezier(.22, 1, .36, 1) .45s forwards;
 }
+
+/* Entrada animada da marca ao iniciar o app (janela principal aparecendo
+   logo após o loading fechar) -- mesmo estilo motion design do splash, só
+   compacto pra essa barra pequena. Toca uma vez só (sem infinite). */
+.sysbar-logo-in {
+  opacity: 0;
+  transform: scale(.6);
+  animation: sysbarLogoIn .35s cubic-bezier(.34, 1.56, .64, 1) forwards;
+}
+@keyframes sysbarLogoIn { to { opacity: 1; transform: scale(1); } }
+
+.sysbar-word-in {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: sysbarWordIn .35s cubic-bezier(.22, 1, .36, 1) .12s forwards;
+}
+.sysbar-word-in--ja { animation-delay: .22s; }
+@keyframes sysbarWordIn { to { opacity: 1; transform: translateY(0); } }
+@keyframes sysbarBarIn { to { opacity: 1; transform: scaleX(1); } }
 
 /* Cor laranja fixa (não "primary") + sombra pra sempre destacar do app-bar,
    mesmo nos temas em que "primary" já É um tom de laranja (ver vuetify.js:
