@@ -5,6 +5,10 @@
     "modules": {
         "invalid": {
             "title": "#Erro#"
+        },
+        "bible": {
+            "second_version": "2ª versão (opcional)",
+            "none": "Nenhuma"
         }
     },
     "module_group": {
@@ -62,6 +66,25 @@
                 "neblina": "Neblina",
                 "liquido": "Gradiente Líquido"
             }
+        },
+        "monitor_arrangement": {
+            "title": "Tela de Projeção",
+            "reset": "Redefinir",
+            "reset_all": "Redefinir tudo",
+            "reset_all_confirm": "Isso vai fechar a projeção e o retorno ativos, e esquecer os monitores de saída/retorno escolhidos. Continuar?",
+            "identify": "Identificar Monitores",
+            "primary": "Principal",
+            "extended": "Estendido",
+            "output": "Saída",
+            "return": "Retorno",
+            "no_screens": "Nenhum monitor encontrado.",
+            "hint": "Clique num monitor para projetar nele · arraste para reorganizar a posição física.",
+            "output_not_found": "Monitor de saída salvo não encontrado. Clique num monitor acima para selecionar de novo.",
+            "return_title": "Monitor de retorno",
+            "return_on": "Ativar",
+            "return_off": "Desativar",
+            "return_not_found": "Monitor de retorno salvo não encontrado. Selecione o monitor novamente.",
+            "no_second_screen": "Nenhuma segunda tela foi encontrada — a projeção vai abrir na mesma tela do computador. Deseja projetar assim mesmo?"
         }
     },
     "alert": {

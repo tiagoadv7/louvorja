@@ -3,7 +3,7 @@
     <v-card>
       <v-card-title class="d-flex align-center ga-2 flex-wrap">
         <v-icon color="primary">mdi-monitor-dashboard</v-icon>
-        <span class="text-primary">Tela de Projeção</span>
+        <span class="text-primary">{{ $t('components.monitor_arrangement.title') }}</span>
         <v-spacer />
         <v-btn
           v-if="hasCustomArrangement"
@@ -12,7 +12,7 @@
           prepend-icon="mdi-restore"
           @click="resetLayout"
         >
-          Redefinir
+          {{ $t('components.monitor_arrangement.reset') }}
         </v-btn>
         <v-btn
           size="small"
@@ -22,7 +22,7 @@
           :disabled="screens.length === 0"
           @click="identify"
         >
-          Identificar Monitores
+          {{ $t('components.monitor_arrangement.identify') }}
         </v-btn>
         <v-btn icon="mdi-close" variant="text" size="small" @click="dialogModel = false" />
       </v-card-title>
@@ -37,7 +37,7 @@
           @pointercancel="onPointerCancel"
         >
           <div v-if="!loading && screens.length === 0" class="marr-empty">
-            Nenhum monitor encontrado.
+            {{ $t('components.monitor_arrangement.no_screens') }}
           </div>
 
           <div
@@ -62,11 +62,11 @@
               <span class="marr-tile__index">{{ tile.index }}</span>
               <span class="marr-tile__res">{{ tile.resolutionLabel }}</span>
               <span class="marr-tile__badge" :class="{ 'marr-tile__badge--primary': tile.isPrimary }">
-                {{ tile.isPrimary ? 'Principal' : 'Estendido' }}
+                {{ tile.isPrimary ? $t('components.monitor_arrangement.primary') : $t('components.monitor_arrangement.extended') }}
               </span>
               <div class="marr-tile__out-row">
-                <span v-if="tile.id === selectedId" class="marr-tile__out marr-tile__out--output">Saída</span>
-                <span v-if="tile.id === returnSelectedId" class="marr-tile__out marr-tile__out--return">Retorno</span>
+                <span v-if="tile.id === selectedId" class="marr-tile__out marr-tile__out--output">{{ $t('components.monitor_arrangement.output') }}</span>
+                <span v-if="tile.id === returnSelectedId" class="marr-tile__out marr-tile__out--return">{{ $t('components.monitor_arrangement.return') }}</span>
               </div>
             </div>
             <div class="marr-tile__stand" />
@@ -83,7 +83,7 @@
              mesma ação) e foi removida; só "Monitor de retorno" continua
              como seção separada abaixo, por ser uma atribuição independente. -->
         <p class="marr-hint text-caption text-medium-emphasis text-center mt-3 mb-4">
-          Clique num monitor para projetar nele · arraste para reorganizar a posição física.
+          {{ $t('components.monitor_arrangement.hint') }}
         </p>
 
         <v-alert
@@ -93,12 +93,12 @@
           variant="tonal"
           class="mb-4"
         >
-          Monitor de saída salvo não encontrado. Clique num monitor acima para selecionar de novo.
+          {{ $t('components.monitor_arrangement.output_not_found') }}
         </v-alert>
 
         <!-- ── Monitor de retorno (palco) ─────────────────────────── -->
         <v-divider class="mb-4" />
-        <div class="text-subtitle-2 text-center mb-2">Monitor de retorno</div>
+        <div class="text-subtitle-2 text-center mb-2">{{ $t('components.monitor_arrangement.return_title') }}</div>
         <div class="d-flex justify-center mb-3">
           <v-btn
             size="small"
@@ -107,7 +107,7 @@
             :prepend-icon="returnOpen ? 'mdi-monitor-eye' : 'mdi-monitor-off'"
             @click="toggleReturn"
           >
-            {{ returnOpen ? 'Desativar' : 'Ativar' }}
+            {{ returnOpen ? $t('components.monitor_arrangement.return_off') : $t('components.monitor_arrangement.return_on') }}
           </v-btn>
         </div>
 
@@ -118,13 +118,15 @@
           variant="tonal"
           class="mb-3"
         >
-          Monitor de retorno salvo não encontrado. Selecione o monitor novamente.
+          {{ $t('components.monitor_arrangement.return_not_found') }}
         </v-alert>
 
-        <!-- Lista sempre visível — sem v-if="returnOpen", igual ao menu antigo -->
+        <!-- Lista sempre visível — sem v-if="returnOpen", igual ao menu antigo.
+             sortedScreens (não "screens" puro): ordem esquerda-pra-direita
+             igual ao arranjo lá em cima, ver comentário no computed. -->
         <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-3">
           <div
-            v-for="s in screens"
+            v-for="s in sortedScreens"
             :key="'ret-' + s.id"
             class="monitor-tile"
             :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-return': returnSelectedId === s.id }"
@@ -136,14 +138,17 @@
               <span class="monitor-tile__num">{{ indexById[s.id] ?? '' }}</span>
               <span class="monitor-tile__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
               <span class="monitor-tile__badge" :class="{ 'monitor-tile__badge--primary': s.primary }">
-                {{ s.primary ? 'Principal' : 'Estendido' }}
+                {{ s.primary ? $t('components.monitor_arrangement.primary') : $t('components.monitor_arrangement.extended') }}
               </span>
-              <span v-if="s.id === selectedId" class="monitor-tile__out">Saída</span>
+              <span v-if="s.id === selectedId" class="monitor-tile__out">{{ $t('components.monitor_arrangement.output') }}</span>
             </div>
             <div class="monitor-tile__stand" />
             <div class="monitor-tile__base" />
             <div v-if="s.deviceName" class="monitor-tile__device" :title="s.deviceName">{{ s.deviceName }}</div>
           </div>
+        </div>
+        <div v-else-if="!loading" class="text-center text-caption text-medium-emphasis mb-3">
+          Nenhum monitor encontrado.
         </div>
 
         <div class="d-flex justify-center mt-5">
@@ -154,7 +159,7 @@
             prepend-icon="mdi-restore-alert"
             @click="resetAll"
           >
-            Redefinir tudo
+            {{ $t('components.monitor_arrangement.reset_all') }}
           </v-btn>
         </div>
       </v-card-text>
@@ -235,6 +240,16 @@ export default {
           deviceName: s.deviceName || '',
         };
       });
+    },
+    // Mesma ordem esquerda-pra-direita do arranjo acima (posição X já
+    // considerando o override salvo em "arrangement", ver virtualDisplays)
+    // -- sem isso, a grade "Monitor de retorno" abaixo listava os monitores
+    // na ordem "normal" que o Windows relata (ignorando o arranjo), que não
+    // bate com a posição física real que o usuário configurou arrastando.
+    sortedScreens() {
+      const xById = {};
+      for (const v of this.virtualDisplays) xById[v.id] = v.x;
+      return [...this.screens].sort((a, b) => (xById[a.id] ?? 0) - (xById[b.id] ?? 0));
     },
     // Escala que encaixa o bounding-box no canvas, com a margem de FIT_FACTOR.
     scale() {
@@ -391,7 +406,7 @@ export default {
     // de cima (fecha a projeção/retorno ativos), por isso pede confirmação.
     async resetAll() {
       this.$alert.yesno(
-        { text: 'Isso vai fechar a projeção e o retorno ativos, e esquecer os monitores de saída/retorno escolhidos. Continuar?', translate: false },
+        { text: this.$t('components.monitor_arrangement.reset_all_confirm'), translate: false },
         async (btn) => {
           if (btn !== 'yes') return;
 
@@ -448,7 +463,15 @@ export default {
       const newX = Math.round(this.dragOrigin.x + offset.x / scale);
       const newY = Math.round(this.dragOrigin.y + offset.y / scale);
 
-      const next = this.arrangement.filter((a) => a.id !== id);
+      // Objetos simples (não os itens originais de this.arrangement, que são
+      // reativos -- Vue envolve array/objeto em Proxy ao virar data()) --
+      // sem isso, ipcRenderer.invoke (storeSet) não consegue clonar o Proxy
+      // pra atravessar o contextBridge e falha com "An object could not be
+      // cloned". Mesmo padrão já usado em outros pontos do app (ver
+      // App.vue#soundmaster-state) que mandam estado pra fora do processo.
+      const next = this.arrangement
+        .filter((a) => a.id !== id)
+        .map((a) => ({ id: a.id, x: a.x, y: a.y }));
       next.push({ id, x: newX, y: newY });
       this.arrangement = next;
       await this.$electron.storeSet("monitor_arrangement", next);

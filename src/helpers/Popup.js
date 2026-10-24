@@ -27,8 +27,7 @@ export default {
         const confirmed = await new Promise((resolve) => {
           $alert.yesno(
             {
-              text: "Nenhuma segunda tela foi encontrada — a projeção vai abrir na mesma tela do computador. Deseja projetar assim mesmo?",
-              translate: false,
+              text: "components.monitor_arrangement.no_second_screen",
             },
             (btn) => resolve(btn === "yes")
           );
