@@ -4,6 +4,7 @@
   "description": "Lista as músicas do Hinário Adventistal, versão de 1996",
   "category": "musics",
   "icon": "mdi-music-clef-treble",
+  "manageable": true,
   "language": "pt",
   "dependencies": [
     "media",

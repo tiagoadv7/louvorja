@@ -5,6 +5,10 @@
     "modules": {
         "invalid": {
             "title": "#Error#"
+        },
+        "bible": {
+            "second_version": "2.ª versión (opcional)",
+            "none": "Ninguna"
         }
     },
     "module_group": {
@@ -33,20 +37,63 @@
         "customization": {
             "restore": "Restaurar",
             "restore_configs": "Restaurar Configuración",
+            "clear_image": "Eliminar imagen",
             "restore_dialog": "¿Quieres restaurar la configuración?",
+            "save_preset": "Guardar como preset",
+            "delete_preset_dialog": "¿Eliminar este preset?",
             "fit": {
                 "none": "Ninguno",
                 "fill": "Expandir",
                 "contain": "Ajustar",
                 "cover": "Rellenar"
+            },
+            "animated_bg": {
+                "none": "Ninguno",
+                "three": "Partículas 3D",
+                "gsap": "Gradiente en Movimiento",
+                "anime": "Manchas Flotantes",
+                "motion": "Brillo Pulsante",
+                "ondas": "Aurora",
+                "grade": "Cuadrícula Synthwave",
+                "neve": "Nieve",
+                "estrelas": "Estrellas",
+                "bokeh": "Bokeh",
+                "raios": "Rayos de Luz",
+                "brasas": "Brasas",
+                "fumaca": "Humo",
+                "nuvens": "Nubes",
+                "vaga-lumes": "Luciérnagas",
+                "neblina": "Neblina",
+                "liquido": "Gradiente Líquido"
             }
+        },
+        "monitor_arrangement": {
+            "title": "Pantalla de proyección",
+            "reset": "Restablecer",
+            "reset_all": "Restablecer todo",
+            "reset_all_confirm": "Esto cerrará la proyección y el retorno activos, y olvidará los monitores de salida/retorno elegidos. ¿Continuar?",
+            "identify": "Identificar monitores",
+            "primary": "Principal",
+            "extended": "Extendido",
+            "output": "Salida",
+            "return": "Retorno",
+            "no_screens": "No se encontró ningún monitor.",
+            "hint": "Haz clic en un monitor para proyectar en él · arrastra para reorganizar la posición física.",
+            "output_not_found": "No se encontró el monitor de salida guardado. Haz clic en un monitor de arriba para volver a seleccionarlo.",
+            "return_title": "Monitor de retorno",
+            "return_on": "Activar",
+            "return_off": "Desactivar",
+            "return_not_found": "No se encontró el monitor de retorno guardado. Selecciona el monitor de nuevo.",
+            "no_second_screen": "No se encontró una segunda pantalla: la proyección se abrirá en la misma pantalla del equipo. ¿Proyectar de todos modos?"
         }
     },
     "alert": {
         "close": "Cerrar",
         "yes": "Sí",
         "no": "No",
-        "wait": "Aguardar..."
+        "wait": "Aguardar...",
+        "cancel": "Cancelar",
+        "confirm": "Confirmar"
     },
     "popup": {
         "close": "Cerrar Ventana"

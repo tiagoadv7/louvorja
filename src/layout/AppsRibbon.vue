@@ -1,4 +1,8 @@
 <template>
+  <!-- Sem arredondado aqui no container -- com overflow-hidden pra bater o
+       canto, as setas de rolagem do v-tabs/v-slide-group (show-arrows)
+       ficavam cortadas de forma estranha bem na ponta. Arredondado só nos
+       elementos internos (abas e tiles dos módulos, ver rounded="lg" abaixo). -->
   <v-card flat :rounded="0">
     <v-sheet color="red">
       <v-tabs v-model="tab" :bg-color="$theme.primary()" :border="0">
@@ -8,8 +12,10 @@
           :value="group_key"
           v-show="countModules(group.modules) != 0"
           show-arrows
+          rounded="lg"
           class="px-8"
         >
+          <v-icon v-if="group.icon" size="18" start>{{ group.icon }}</v-icon>
           {{ $t(group.title) }}
         </v-tab>
       </v-tabs>
@@ -28,11 +34,12 @@
           >
             <v-card
               flat
-              :rounded="0"
+              rounded="lg"
               v-if="
-                module.language
+                (module.language
                   ? module.language == language
-                  : !module.development || (is_dev && module.development)
+                  : !module.development || (is_dev && module.development))
+                && !(module.manifest?.onlineOnlyLanguages?.includes(language) && !is_online)
               "
               :color="
                 module.invalid ? 'error' : module.development ? 'warning' : ''
@@ -47,7 +54,7 @@
                   class="text-center font-weight-light text-title-small"
                   style="text-wrap: initial"
                 >
-                  <small>{{ module.title ? $t(module.title) : "" }}</small>
+                  <small>{{ moduleTitle(module) }}</small>
                 </v-card-title>
               </v-card-text>
             </v-card>
@@ -94,8 +101,21 @@ export default {
         }
       },
     },
+    // Ver comentário equivalente em layout/Menu.vue.
+    is_online() {
+      return !this.$appdata.get("offline_mode");
+    },
   },
   methods: {
+    moduleTitle(module) {
+      if (!module.title) return module.manifest?.name || '';
+      const translated = this.$t(module.title);
+      if (translated !== module.title) return translated;
+      if (module.manifest?.name) return module.manifest.name;
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+      const translations = module.manifest?.translations?.[locale] || module.manifest?.translations?.['pt'];
+      return translations?.title || translated;
+    },
     sortModules(modules) {
       //Ordena pelo idioma selecionado
       return this.$modules.sort(modules, this.$t);

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>LouvorJA</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* Todas as animações desta página ficam PAUSADAS (congeladas antes
+       mesmo da contagem do delay começar) até o <body> ganhar a classe
+       "visible" -- ver o <script> no fim do arquivo, que só adiciona essa
+       classe quando o processo main avisa (via loading-preload.js) que a
+       janela apareceu DE VERDADE na tela. Sem isso, as animações corriam
+       desde o carregamento da página (a janela nasce com show:false,
+       escondida) -- num boot mais lento, a entrada inteira (cascata de
+       letras, barra crescendo, anel girando) podia já ter acabado escondida
+       antes do usuário ver a janela, sobrando só o resultado parado. */
+    body:not(.visible) *,
+    body:not(.visible) *::before,
+    body:not(.visible) *::after {
+      animation-play-state: paused !important;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #0d1929 0%, #142338 55%, #0b1520 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      -webkit-app-region: drag;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Blobs de fundo, bem borrados e lentos -- textura "viva" atrás do
+       conteúdo, igual ao fundo animado de um motion design, sem roubar o
+       foco do logo/texto (opacidade baixa, atrás de tudo via z-index). */
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(46px);
+      opacity: 0;
+      will-change: transform, opacity;
+      animation: blobIn 1.2s ease-out forwards;
+    }
+    .blob-gold {
+      width: 220px; height: 220px;
+      background: #F8C800;
+      top: -70px; left: -50px;
+      animation: blobIn 1.2s ease-out forwards, drift1 9s ease-in-out 1.2s infinite;
+    }
+    .blob-blue {
+      width: 260px; height: 260px;
+      background: #0097D7;
+      bottom: -90px; right: -70px;
+      animation: blobIn 1.2s ease-out .15s forwards, drift2 11s ease-in-out 1.35s infinite;
+    }
+    .blob-deep {
+      width: 180px; height: 180px;
+      background: #0054D8;
+      bottom: 10px; left: 42%;
+      animation: blobIn 1.2s ease-out .3s forwards, drift3 13s ease-in-out 1.5s infinite;
+    }
+    @keyframes blobIn { from { opacity: 0; } to { opacity: .3; } }
+    @keyframes drift1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(28px, 18px) scale(1.15); } }
+    @keyframes drift2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-22px, -16px) scale(1.1); } }
+    @keyframes drift3 { 0%, 100% { transform: translate(-50%, 0) scale(1); } 50% { transform: translate(-50%, -16px) scale(1.2); } }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Logo com brilho pulsante + anel girando atrás -- toque clássico de
+       loading "premium" (ex. apps de motion design), sem pesar: só CSS,
+       nada de canvas/JS num processo que já está disputando CPU com o
+       carregamento real do app. */
+    .logo-wrap {
+      position: relative;
+      width: 92px;
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-glow {
+      position: absolute;
+      inset: -26px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(248, 200, 0, .4) 0%, rgba(0, 151, 215, .2) 45%, transparent 70%);
+      opacity: 0;
+      animation:
+        glowIn .6s cubic-bezier(.34, 1.56, .64, 1) .15s forwards,
+        glowPulse 2.6s ease-in-out .75s infinite;
+    }
+    @keyframes glowIn { from { opacity: 0; transform: scale(.6); } to { opacity: .5; transform: scale(1); } }
+    @keyframes glowPulse { 0%, 100% { opacity: .35; transform: scale(1); } 50% { opacity: .55; transform: scale(1.08); } }
+
+    .logo-ring {
+      position: absolute;
+      inset: -13px;
+      opacity: 0;
+      animation: ringFadeIn .4s ease-out .35s forwards, ringSpin 2.4s linear infinite;
+    }
+    .logo-ring svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    @keyframes ringFadeIn { to { opacity: 1; } }
+    @keyframes ringSpin { to { transform: rotate(360deg); } }
+
+    .logo {
+      position: relative;
+      z-index: 1;
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 18px rgba(74, 127, 193, .55));
+      opacity: 0;
+      animation: logoIn .6s cubic-bezier(.34, 1.56, .64, 1) .1s forwards;
+    }
+    @keyframes logoIn { from { opacity: 0; transform: scale(.55) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+    /* Wordmark (igual ao logo "LOUVORJA" oficial): "Louvor" branco + "JA"
+       dourado + barrinha dourada embaixo -- nome ainda em cascata letra a
+       letra (--i em cada <span>, ver HTML), só a cor/sublinhado que mudam. */
+    .app-name-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .app-name {
+      display: flex;
+      font-size: 27px;
+      font-weight: 800;
+      letter-spacing: .5px;
+      /* Brilho pulsante contínuo, depois que a cascata de letras termina de
+         entrar (delay cobre a entrada toda) -- sem isso o texto "morria"
+         parado assim que aparecia, enquanto o resto da tela (blobs, anel,
+         barra de progresso, pontinhos) continuava se movendo pra sempre.
+         Agora o texto também fica animado durante todo o carregamento, não
+         só no instante em que aparece. */
+      animation: textGlow 2.4s ease-in-out 1.3s infinite;
+    }
+    @keyframes textGlow {
+      0%, 100% { filter: drop-shadow(0 0 0 rgba(248, 200, 0, 0)); }
+      50% { filter: drop-shadow(0 0 9px rgba(248, 200, 0, .65)); }
+    }
+    .app-name > span,
+    .ja > span {
+      display: inline-block;
+      color: #eef2f8;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: letterIn .45s cubic-bezier(.22, 1, .36, 1) forwards;
+      animation-delay: calc(.38s + var(--i) * 0.045s);
+    }
+    .app-name span.accent { color: #F8C800; }
+    @keyframes letterIn { to { opacity: 1; transform: translateY(0); } }
+
+    .ja {
+      position: relative;
+      display: inline-block;
+    }
+    .app-name-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -8px;
+      height: 3px;
+      border-radius: 2px;
+      background: #F8C800;
+      box-shadow: 0 0 8px rgba(248, 200, 0, .5);
+      opacity: 0;
+      overflow: hidden;
+      transform: scaleX(0);
+      transform-origin: left;
+      animation: barIn .5s cubic-bezier(.22, 1, .36, 1) .78s forwards;
+    }
+    @keyframes barIn { to { opacity: 1; transform: scaleX(1); } }
+    /* Brilho correndo em loop pela barrinha -- mesma ideia do .progress-fill
+       mais abaixo, só que aqui por cima da cor sólida (não substitui o
+       dourado, só passa um reflexo claro de vez em quando). */
+    .app-name-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -60%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .8), transparent);
+      animation: barShine 2.4s ease-in-out 1.3s infinite;
+    }
+    @keyframes barShine { 0% { left: -60%; } 100% { left: 100%; } }
+
+    /* Barra de progresso indeterminada -- pílula central, não mais colada
+       na borda do card (ficava parecendo uma barra de navegador genérica). */
+    .progress {
+      position: relative;
+      width: 150px;
+      height: 3px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, .08);
+      overflow: hidden;
+      opacity: 0;
+      animation: fadeUp .5s ease-out .62s forwards;
+    }
+    .progress-fill {
+      position: absolute;
+      top: 0;
+      left: -45%;
+      width: 45%;
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, transparent, #F8C800, #0097D7, transparent);
+      box-shadow: 0 0 8px rgba(0, 151, 215, .6);
+      animation: sweep 1.6s cubic-bezier(.45, 0, .55, 1) .62s infinite;
+    }
+    @keyframes sweep { 0% { left: -45%; } 100% { left: 100%; } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .loading-row {
+      display: flex;
+      align-items: baseline;
+      gap: 2px;
+      opacity: 0;
+      animation: fadeUp .5s ease-out .78s forwards;
+    }
+    .loading-text {
+      font-size: 11px;
+      color: rgba(255, 255, 255, .32);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .dots span {
+      font-size: 13px;
+      color: rgba(255, 255, 255, .4);
+      animation: dotPulse 1.4s ease-in-out infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes dotPulse { 0%, 80%, 100% { opacity: .15; } 40% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="blob blob-gold"></div>
+    <div class="blob blob-blue"></div>
+    <div class="blob blob-deep"></div>
+
+    <div class="content">
+      <div class="logo-wrap">
+        <div class="logo-glow"></div>
+        <div class="logo-ring">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#F8C800" stroke-width="2" stroke-linecap="round" stroke-dasharray="95 194" />
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#0097D7" stroke-width="2" stroke-linecap="round" stroke-dasharray="95 194" transform="rotate(180 50 50)" />
+          </svg>
+        </div>
+        <img class="logo" src="ico/favicon.svg" alt="LouvorJA" draggable="false" />
+      </div>
+
+      <div class="app-name-wrap">
+        <div class="app-name" aria-label="LouvorJA">
+          <span style="--i:0">L</span><span style="--i:1">o</span><span style="--i:2">u</span><span style="--i:3">v</span><span style="--i:4">o</span><span style="--i:5">r</span><span class="ja"><span class="accent" style="--i:6">J</span><span class="accent" style="--i:7">A</span><span class="app-name-bar"></span></span>
+        </div>
+      </div>
+
+      <div class="progress"><div class="progress-fill"></div></div>
+
+      <div class="loading-row">
+        <span class="loading-text" id="loadingText">carregando</span>
+        <span class="dots"><span>.</span><span>.</span><span>.</span></span>
+      </div>
+    </div>
+  </main>
+  <script>
+    // Igual ao LouvorJA Delphi original: abrir um .slja (duplo clique/"Abrir
+    // com") mostra "Abrindo arquivo" aqui em vez do "Carregando" genérico —
+    // ver electron/main.js#createLoadingWindow, que já sabe disso antes
+    // mesmo de mostrar esta janela (process.argv, sem esperar a principal).
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'open-file') {
+      document.getElementById('loadingText').textContent = 'abrindo arquivo';
+    }
+
+    // Libera as animações (ver ".visible" no <style>) só quando a janela
+    // aparece de verdade na tela (sinal do processo main via
+    // electron/loading-preload.js) -- sem isso elas rodavam escondidas desde
+    // o carregamento da página. Fora do Electron (abrir este arquivo direto
+    // num navegador, pra testar/ajustar o visual) não existe
+    // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
+    // nenhum.
+    if (window.loadingBridge && window.loadingBridge.onShown) {
+      window.loadingBridge.onShown(function () {
+        document.body.classList.add('visible');
+      });
+    } else {
+      document.body.classList.add('visible');
+    }
+  </script>
+</body>
+</html>

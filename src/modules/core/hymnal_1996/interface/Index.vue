@@ -53,10 +53,15 @@
           <td class="text-right">
             {{ item.track }}
           </td>
-          <td>
-            {{ item.name }}
+          <!-- Nome + Duração mesclados numa única célula clicável -- mesmo
+               padrão do Álbum/Coletâneas (ver core/album/interface/
+               Index.vue#.am-music-name): clicar executa direto. -->
+          <td colspan="2" class="pa-0">
+            <a class="hy-music-name" @click="playDefault(item)">
+              <span class="hy-music-name-text">{{ item.name }}</span>
+              <span class="hy-music-duration">{{ $datetime.shortTime(item.duration) }}</span>
+            </a>
           </td>
-          <td class="text-right">{{ $datetime.shortTime(item.duration) }}</td>
           <td>
             <div class="d-flex justify-end">
               <l-music-menu-table
@@ -154,7 +159,19 @@ export default {
     /* METHODS OBRIGATÓRIOS - INÍCIO */
     /* NÃO MODIFICAR */
     t(text) {
-      return this.$t(`modules.${this.module_id}.${text}`);
+      const key = `modules.${this.module_id}.${text}`;
+      const result = this.$t(key);
+      if (result === key) {
+        if (text === 'title') return manifest.name || result;
+        const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+        const storedManifest = this.$appdata.get(`modules.${this.module_id}.manifest`);
+        const translations = storedManifest?.translations?.[locale] || storedManifest?.translations?.['pt'];
+        if (translations) {
+          const val = text.split('.').reduce((obj, k) => obj?.[k], translations);
+          if (typeof val === 'string') return val;
+        }
+      }
+      return result;
     },
     /* METHODS OBRIGATÓRIOS - FIM */
 
@@ -168,6 +185,41 @@ export default {
       //Se fechar a janela, não manter o histórico de pesquisa.
       this.search = "";
     },
+    // Clicar no nome executa direto -- igual Álbum/Liturgia/Coletâneas (ver
+    // core/album/interface/Index.vue#playDefault).
+    playDefault(item) {
+      this.$media.open({ id_music: item.id_music, mode: "audio" });
+    },
   },
 };
 </script>
+
+<style scoped>
+/* Nome+Duração clicáveis -- mesmo padrão do Álbum (ver core/album/interface/
+   Index.vue#.am-music-name), mas tema padrão (sem fundo colorido fixo). */
+.hy-music-name {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.hy-music-name:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
+}
+.hy-music-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hy-music-duration {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+</style>
