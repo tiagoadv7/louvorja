@@ -508,3 +508,12 @@ FunctionEnd
 
   DetailPrint "  » Arquivos do Louvor JA removidos."
 !macroend
+
+; ── Desinstalador: mesma identidade visual do instalador (tarja lateral e
+; texto de boas-vindas). Usado pelo electron-builder via customUnWelcomePage.
+!macro customUnWelcomePage
+  !define /redef MUI_UNWELCOMEFINISHPAGE_BITMAP "${BUILD_RESOURCES_DIR}\installer-sidebar.bmp"
+  !define MUI_UNWELCOMEPAGE_TITLE "Desinstalar o Louvor JA"
+  !define MUI_UNWELCOMEPAGE_TEXT "Este assistente vai remover o Louvor JA do seu computador."
+  !insertmacro MUI_UNPAGE_WELCOME
+!macroend
