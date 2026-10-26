@@ -20,7 +20,10 @@
             <div class="text-caption text-medium-emphasis">Verificação de integridade da coletânea</div>
           </div>
         </div>
-        <v-btn v-if="step !== 'downloading'" icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
+        <div v-if="step === 'downloading'" class="d-flex align-center">
+          <v-btn icon="mdi-window-minimize" variant="text" size="small" density="comfortable" title="Continuar em segundo plano" @click="minimizeDownload" />
+        </div>
+        <v-btn v-else icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
       </div>
       <v-divider />
 
@@ -300,6 +303,26 @@
 
     </v-card>
   </v-dialog>
+
+  <!-- Indicador discreto do download em segundo plano: sem scrim, só o próprio
+       botão captura clique, e some sozinho alguns segundos após concluir. -->
+  <transition name="fcd-pill">
+    <button
+      v-if="showPill"
+      type="button"
+      class="fcd-pill"
+      :title="dlDoneInBackground ? 'Download concluído' : 'Baixando arquivos em segundo plano'"
+      @click="restore"
+    >
+      <v-progress-circular
+        :size="16"
+        :width="2"
+        :model-value="dlDoneInBackground ? 100 : dlPercent"
+        :color="dlDoneInBackground ? 'success' : 'primary'"
+      />
+      <span>{{ dlDoneInBackground ? 'Concluído' : `${dlPercent}%` }}</span>
+    </button>
+  </transition>
 </template>
 
 <script>
@@ -342,9 +365,13 @@ export default {
     dlFileSize: '',
     dlSpeed:    '',
     _dlHandler: null,
+    dlMinimized:        false, // download segue, diálogo escondido (ver minimizeDownload)
+    dlDoneInBackground: false, // terminou com o diálogo minimizado; indicador some sozinho
+    _pillTimer:         null,
   }),
 
   computed: {
+    showPill()         { return (this.dlMinimized && this.step === 'downloading') || this.dlDoneInBackground; },
     selectedCount()    { return this.selectedDests.size; },
     allSelected()      { return this.fileList.length > 0 && this.selectedDests.size === this.fileList.length; },
     albumsOK()         { return this.albumList.filter(a => a.missing === 0).length; },
@@ -366,6 +393,10 @@ export default {
     // force=true → sempre mostra o diálogo com spinner (usado pelo menu "Sincronizar arquivos").
     // force=false (padrão) → em produção mostra scanning imediatamente e fecha se não houver faltando.
     async open(force = false) {
+      if (this.step === 'downloading') {
+        this.restore();
+        return;
+      }
       if (import.meta.env.DEV || force) {
         this._autoOpen = false;
         this._scanId++;  // cancela eventual _scanSilent() ainda em andamento
@@ -405,7 +436,7 @@ export default {
         this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
           if (this._scanId === myId) this.scanAlbum = { current, total, name: albumName };
         });
-        result = await this.$electron.scanAlbumsFiles();
+        result = await this.$electron.scanAlbumsFiles(this.$i18n.locale?.value || this.$i18n.locale);
       } catch (_) {
         return;
       } finally {
@@ -459,7 +490,7 @@ export default {
         this._scanProgressHandler = this.$electron.on('files:scan-progress', ({ current, total, albumName }) => {
           if (this._scanId === myId) this.scanAlbum = { current, total, name: albumName };
         });
-        result = await this.$electron.scanAlbumsFiles();
+        result = await this.$electron.scanAlbumsFiles(this.$i18n.locale?.value || this.$i18n.locale);
       } catch (_) {
         if (!import.meta.env.DEV) { this.show = false; return; }
       } finally {
@@ -632,6 +663,29 @@ export default {
           this._dlHandler = null;
         }
       }
+
+      if (this.dlMinimized) {
+        this.dlMinimized = false;
+        if (this.step === 'done') {
+          this.dlDoneInBackground = true;
+          clearTimeout(this._pillTimer);
+          this._pillTimer = setTimeout(() => { this.dlDoneInBackground = false; }, 5000);
+        } else {
+          this.show = true;
+        }
+      }
+    },
+
+    minimizeDownload() {
+      this.dlMinimized = true;
+      this.show = false;
+    },
+
+    restore() {
+      clearTimeout(this._pillTimer);
+      this.dlDoneInBackground = false;
+      this.dlMinimized = false;
+      this.show = true;
     },
 
     async rescan() {
@@ -641,10 +695,48 @@ export default {
       await this.scan();
     },
   },
+
+  beforeUnmount() {
+    clearTimeout(this._pillTimer);
+  },
 };
 </script>
 
 <style scoped>
+.fcd-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: rgba(var(--v-theme-surface), 0.9);
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+.fcd-pill:hover {
+  opacity: 1;
+}
+.fcd-pill-enter-active,
+.fcd-pill-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fcd-pill-enter-from,
+.fcd-pill-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 /* Separa visualmente os dois botões (grade/lista) do grupo — por padrão o
    v-btn-toggle deixa tudo colado, formando um só bloco sem nenhum respiro
    entre os ícones. O v-btn-group do Vuetify vem com "overflow-x: auto" por

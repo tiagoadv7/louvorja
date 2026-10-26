@@ -25,7 +25,7 @@ export default {
     // Bíblia em espanhol é só local (importada do disco, ver
     // scripts/import-bible-es.js): não vai à API, pra não gerar erro de
     // "arquivo não encontrado" a cada versículo/troca de capítulo.
-    if (/^(es_bible_(book|version)|bible_10\d\d_)/.test(file)) {
+    if (/^(es_(bible_(book|version)|musics|categories|hymnal)|bible_10\d\d_|album_9\d{3,4}$|music_9\d{5,6}$)/.test(file)) {
       return $electron.isElectron() ? (await $electron.dbLocalGet(file)) || null : null;
     }
 

@@ -8,7 +8,7 @@
           <v-icon size="22">mdi-bullhorn-outline</v-icon>
         </v-avatar>
         <div class="flex-grow-1 min-w-0">
-          <div class="text-subtitle-1 font-weight-bold">Novidades desta versão</div>
+          <div class="text-subtitle-1 font-weight-bold">{{ $t('components.release_notes.title') }}</div>
           <div class="text-caption text-medium-emphasis">v{{ version }}</div>
         </div>
         <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" @click="close" />
@@ -18,7 +18,7 @@
       <!-- ── Carregando ── -->
       <v-card-text v-if="loading" class="d-flex flex-column align-center py-12 ga-5">
         <v-progress-circular indeterminate color="primary" size="52" width="4" />
-        <div class="text-body-2 text-medium-emphasis">Carregando novidades...</div>
+        <div class="text-body-2 text-medium-emphasis">{{ $t('components.release_notes.loading') }}</div>
       </v-card-text>
 
       <!-- ── Sem conexão / release não encontrada ── -->
@@ -27,7 +27,7 @@
           <v-icon size="32">mdi-cloud-off-outline</v-icon>
         </v-avatar>
         <div class="text-body-2 text-medium-emphasis text-center">
-          Não foi possível carregar as novidades desta versão agora.
+          {{ $t('components.release_notes.error') }}
         </div>
       </v-card-text>
 
@@ -44,7 +44,7 @@
           v-model="dontShowAgain"
           density="compact"
           hide-details
-          label="Não mostrar novamente"
+          :label="$t('components.release_notes.dont_show')"
           class="rn-checkbox"
         />
         <v-spacer />
@@ -57,9 +57,9 @@
           rel="noopener noreferrer"
           prepend-icon="mdi-open-in-new"
         >
-          Ver no GitHub
+          {{ $t('components.release_notes.see_github') }}
         </v-btn>
-        <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
+        <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">{{ $t('components.release_notes.close') }}</v-btn>
       </v-card-actions>
 
     </v-card>
@@ -119,7 +119,7 @@ export default {
     // renderizado (GitHub /markdown); só reformata marcadores de lista quando
     // ainda é texto cru (fallback de rede/API).
     formatChangelog(text) {
-      if (!text) return '<span class="text-medium-emphasis">Sem notas para esta versão.</span>';
+      if (!text) return `<span class="text-medium-emphasis">${this.$t('components.release_notes.no_notes')}</span>`;
       if (/<[a-z][\s\S]*>/i.test(text)) return text;
       const escaped = String(text)
         .replace(/&/g, '&amp;')

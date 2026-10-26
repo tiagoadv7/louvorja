@@ -573,10 +573,11 @@ function setupIpc(mainWindow) {
   // Pasta de JSONs: sempre gravável (ou pasta customizada pelo usuário)
   const getDbDir = () => Store.get('db_local_folder') || path.join(getWritableBase(), 'db');
 
-  // Arquivos da Bíblia em espanhol (IDs de versão a partir de 1001, ver
-  // scripts/import-bible-es.js) -- só existem em disco, nunca no SQLite nem na API.
-  const isSpanishBibleFile = (filename) =>
-    filename === 'es_bible_book' || filename === 'es_bible_version' || /^bible_10\d\d_/.test(filename);
+  // Catálogo em espanhol (Bíblia, músicas e álbuns; IDs na faixa 9xxx, ver
+  // scripts/import-bible-es.js e scripts/import-albuns-es.mjs) -- só existe em
+  // disco, nunca no SQLite nem na API.
+  const isSpanishContentFile = (filename) =>
+    /^(es_(bible_(book|version)|musics|categories|hymnal)|bible_10\d\d_|album_9\d{3,4}$|music_9\d{5,6}$)/.test(filename);
 
   // Busca e cacheia o JSON de uma música quando ele ainda não existe em disco.
   // Usado pela verificação de arquivos (files:scan-*): sem isso, uma música cujo
@@ -665,7 +666,7 @@ function setupIpc(mainWindow) {
     // 0. Bíblia em espanhol (importada por scripts/import-bible-es.js) vive só
     // em JSON -- antes do SQLite, que devolveria vazio pra IDs que não existem
     // nele.
-    if (isSpanishBibleFile(filename)) {
+    if (isSpanishContentFile(filename)) {
       try {
         const fp = path.join(getDbDir(), `${filename}.json`);
         if (fs.existsSync(fp)) return JSON.parse(fs.readFileSync(fp, 'utf8'));
@@ -802,6 +803,9 @@ function setupIpc(mainWindow) {
   // writable=true → aponta para pasta gravável (userData); false → instalação original
   const getAutoMediaDir  = (albumName, writable = false) => {
     const base = writable ? getWritableConfigDir() : getConfigDir();
+    if (albumName?.startsWith('es/')) {
+      return path.join(base, 'musicas', 'es', sanitizeDir(albumName.slice(3)));
+    }
     return albumName ? path.join(base, 'musicas', sanitizeDir(albumName)) : path.join(base, 'musicas');
   };
   const getAutoImagesDir = (writable = false) => path.join(writable ? getWritableConfigDir() : getConfigDir(), 'imagens');
@@ -2578,9 +2582,12 @@ document.getElementById('f').onsubmit=async(e)=>{
 
   // Retorna álbuns com arquivos faltando + lista flat de todos os itens.
   // Igual ao ARQUIVOS_SISTEMA do LouvorJA Delphi: Arquivo | Diretório | Status
-  ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token) => {
+  // scope 'es' = só álbuns/hinários em espanhol (ids 9xxx, ver scripts/import-*-es);
+  // 'pt' (padrão) = o resto, pela tabela Delphi quando existe, senão pelos JSON.
+  ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token, scope = 'pt') => {
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });
+    const isSpanishAlbumFile = (f) => /^album_9\d{3,4}\.json$/.test(f);
 
     // ── Emite progresso e cede controle ────────────────────────────────────
     const sendProgress = async (current, total, albumName) => {
@@ -2592,7 +2599,7 @@ document.getElementById('f').onsubmit=async(e)=>{
     };
 
     // ── Scan via ARQUIVOS_SISTEMA (fonte Delphi — contagem idêntica ao Delphi) ──
-    if (sqliteReader.isOpen() && sqliteReader.hasArquivosSistema()) {
+    if (scope !== 'es' && sqliteReader.isOpen() && sqliteReader.hasArquivosSistema()) {
       try {
         const rows = sqliteReader.getArquivosSistema();
         if (rows.length > 0) {
@@ -2801,7 +2808,9 @@ document.getElementById('f').onsubmit=async(e)=>{
       const dbDir = getDbDir();
       if (!fs.existsSync(dbDir)) return emptyResult();
 
-      const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
+      const albumFiles = fs.readdirSync(dbDir)
+        .filter(f => f.startsWith('album_') && f.endsWith('.json'))
+        .filter(f => (scope === 'es') === isSpanishAlbumFile(f));
       if (!albumFiles.length) return emptyResult();
 
       const seen        = new Set();

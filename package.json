@@ -1,6 +1,6 @@
 {
   "name": "louvorja",
-  "version": "1.28.9-beta.12",
+  "version": "1.28.9-beta.12.4",
   "description": "LouvorJA - Software de Louvor Adventista, projeção de letras, músicas e vídeos para facilitar a experiência de louvor em sua igreja.",
   "author": {
     "name": "Mayco Rolbuche",
@@ -173,6 +173,10 @@
           "database.db",
           "capas/**/*"
         ]
+      },
+      {
+        "from": "bundled/db",
+        "to": "db"
       }
     ],
     "publish": {

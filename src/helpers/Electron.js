@@ -242,10 +242,13 @@ export default {
       ? window.electron.scanMissingFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN)
       : Promise.resolve({ total: 0, missing: [], counts: {} }),
 
-  scanAlbumsFiles: () =>
-    isElectron()
-      ? window.electron.scanAlbumsFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN)
-      : Promise.resolve({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] }),
+  // Confere só o catálogo do idioma atual: espanhol mostra os álbuns em espanhol
+  // (ids 9xxx) e português mostra os de português, sem misturar os dois.
+  scanAlbumsFiles: async (locale = "pt") => {
+    if (!isElectron()) return { total: 0, totalFiles: 0, foundFiles: 0, albums: [], allMissing: [] };
+    const scope = locale === "es" ? "es" : "pt";
+    return window.electron.scanAlbumsFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN, scope);
+  },
 
   // Verifica álbuns específicos (baixados via album_<id>.json) diretamente pelo
   // id — ao contrário de scanAlbumsFiles, não depende do SQLite Delphi (cujas

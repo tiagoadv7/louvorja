@@ -22,7 +22,7 @@
             $modules.open(module_key);
           "
         >
-          <v-list-item-title>{{ moduleTitle(module) }}</v-list-item-title>
+          <v-list-item-title>{{ moduleTitle(module, module_key) }}</v-list-item-title>
         </v-list-item>
       </template>
       <v-divider class="my-1" />
@@ -30,21 +30,21 @@
         prepend-icon="mdi-album"
         @click="$appdata.toogle('menu.show'); openAlbumsManager()"
       >
-        <v-list-item-title>Gerenciar Álbuns</v-list-item-title>
+        <v-list-item-title>{{ $t('components.menu.albums') }}</v-list-item-title>
       </v-list-item>
       <v-list-item
         v-if="$electron.isElectron()"
         prepend-icon="mdi-folder-sync-outline"
         @click="$appdata.toogle('menu.show'); dispatchSyncFiles()"
       >
-        <v-list-item-title>Sincronizar arquivos</v-list-item-title>
+        <v-list-item-title>{{ $t('components.menu.sync') }}</v-list-item-title>
       </v-list-item>
       <v-list-item
         v-if="$electron.isElectron()"
         prepend-icon="mdi-update"
         @click="$appdata.toogle('menu.show'); dispatchCheckUpdates()"
       >
-        <v-list-item-title>Verificar atualizações</v-list-item-title>
+        <v-list-item-title>{{ $t('components.menu.updates') }}</v-list-item-title>
       </v-list-item>
     </v-list>
   </v-navigation-drawer>
@@ -123,7 +123,10 @@ export default {
     dispatchCheckUpdates() {
       window.dispatchEvent(new CustomEvent('check-updates'));
     },
-    moduleTitle(module) {
+    moduleTitle(module, key) {
+      const i18nKey = `modules.${key}.title`;
+      const localized = this.$t(i18nKey);
+      if (localized !== i18nKey) return localized;
       if (!module.title) return module.manifest?.name || '';
       const translated = this.$t(module.title);
       if (translated !== module.title) return translated;

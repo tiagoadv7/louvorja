@@ -155,7 +155,11 @@ function parseSlja(iniText) {
       // LouvorJA Delphi original — posição em bytes BASS, não segundos (ver
       // bassBytesToSeconds acima) — só cai nesse caminho em imports de
       // arquivos .slja exportados pelo Delphi antigo.
-      tempo_seconds: sec.tempo_hms ? hmsToSeconds(sec.tempo_hms) : bassBytesToSeconds(sec.tempo),
+      tempo_seconds: sec.tempo_hms
+        ? hmsToSeconds(sec.tempo_hms)
+        : sec.tempo?.includes(":")
+          ? hmsToSeconds(sec.tempo)
+          : bassBytesToSeconds(sec.tempo),
       text_align: sec.text_align || "center",
     });
   }

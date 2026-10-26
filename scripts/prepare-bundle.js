@@ -51,7 +51,16 @@ const args       = process.argv.slice(2);
 const devOnly    = args.includes('--dev-only');
 const bundleOnly = args.includes('--bundle-only');
 
+// Sem LouvorJA instalado, a origem é a pasta de dados em Documentos (ou a indicada
+// em LOUVORJA_DATA_DIR): database.db e capas/ direto nela.
+const DATA_DOCS = process.env.LOUVORJA_DATA_DIR || path.join(os.homedir(), 'Documents', 'LouvorJA-dados');
+
 function findDelphiConfig() {
+  const docsDb = path.join(DATA_DOCS, 'database.db');
+  if (fs.existsSync(docsDb) && fs.statSync(docsDb).size > 1024) {
+    console.log(`[prepare-bundle] usando dados de ${DATA_DOCS}`);
+    return DATA_DOCS;
+  }
   for (const dir of DELPHI_CANDIDATES) {
     const db = path.join(dir, 'database.db');
     if (fs.existsSync(db) && fs.statSync(db).size > 1024) {
@@ -137,6 +146,39 @@ function deploy(destConfig, label) {
   console.log(`[${label}] Destino: ${destConfig}`);
 }
 
+// ── Catálogo em espanhol para o instalador ───────────────────────────────────
+// Sem isso o app instalado não tem coletâneas, hinário e bíblia em espanhol
+// offline (esses arquivos só existem no disco de dev, ver scripts/import-*-es).
+// Vão pra db/ ao lado do executável (mesma pasta que o app já usa pro catálogo).
+// Áudios não entram (são grandes); ficam em config/musicas/es.
+const ES_DB_SRC = fs.existsSync(path.join(DATA_DOCS, 'db'))
+  ? path.join(DATA_DOCS, 'db')
+  : path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'louvorja', 'db');
+const BUNDLED_DB = path.join(__dirname, '..', 'bundled', 'db');
+// Hinário, bíblia e catálogo das coleções em espanhol (JSON, sem os áudios): o
+// áudio das coleções fica na pasta do usuário (config/musicas/es), não no instalador.
+const ES_FILE = /^(es_hymnal\.json$|es_bible_|bible_10\d\d_|es_categories\.json$|es_musics\.json$|album_9\d{3,4}\.json$|music_9\d{5,6}\.json$)/;
+
+function deployEsCatalog() {
+  if (!fs.existsSync(ES_DB_SRC)) {
+    console.log('[bundle-db] catálogo espanhol não encontrado — pulando');
+    return;
+  }
+  fs.rmSync(BUNDLED_DB, { recursive: true, force: true });
+  fs.mkdirSync(BUNDLED_DB, { recursive: true });
+  const hymnIds = new Set(
+    JSON.parse(fs.readFileSync(path.join(ES_DB_SRC, 'es_hymnal.json'), 'utf8')).map((h) => `music_${h.id_music}.json`)
+  );
+  let n = 0;
+  for (const f of fs.readdirSync(ES_DB_SRC)) {
+    if (ES_FILE.test(f) || hymnIds.has(f)) {
+      fs.copyFileSync(path.join(ES_DB_SRC, f), path.join(BUNDLED_DB, f));
+      n++;
+    }
+  }
+  console.log(`[bundle-db] catálogo espanhol: ${n} arquivos em ${BUNDLED_DB}`);
+}
+
 if (!bundleOnly) {
   console.log('\n=== Destino DEV (userData) ===');
   deploy(DEV_CONFIG, 'dev');
@@ -145,6 +187,7 @@ if (!bundleOnly) {
 if (!devOnly) {
   console.log('\n=== Destino BUNDLE (para o instalador) ===');
   deploy(BUNDLED_CONFIG, 'bundle');
+  deployEsCatalog();
 }
 
 console.log('\n[prepare-bundle] Concluido.');

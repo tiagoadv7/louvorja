@@ -10,7 +10,7 @@
         <div class="dc-header-spacer" />
         <div class="dc-header-title">
           <v-icon size="18" color="primary" class="mr-2">mdi-download-box-outline</v-icon>
-          Centro de Downloads
+          {{ $t('components.download_center.title') }}
         </div>
         <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
       </div>
@@ -34,7 +34,7 @@
           <v-list nav density="compact" bg-color="transparent" class="mt-auto pb-2">
             <v-list-item
               prepend-icon="mdi-download-circle-outline"
-              title="Meus Downloads"
+              :title="$t('components.download_center.downloads')"
               :active="section === 'downloads'"
               active-color="white"
               rounded="lg"
@@ -42,7 +42,7 @@
             />
             <v-list-item
               prepend-icon="mdi-cog-outline"
-              title="Configurações"
+              :title="$t('components.download_center.settings')"
               :active="section === 'settings'"
               active-color="white"
               rounded="lg"
@@ -60,9 +60,9 @@
 
           <!-- HOME -->
           <template v-else-if="section === 'home'">
-            <div class="dc-section-title">Bem-vindo ao Centro de Downloads</div>
+            <div class="dc-section-title">{{ $t('components.download_center.welcome') }}</div>
             <p class="text-body-2 text-medium-emphasis mt-1 mb-4">
-              Baixe coletâneas completas (letras, capas, áudio) para usar o LouvorJA sem conexão.
+              {{ $t('components.download_center.welcome_desc') }}
             </p>
             <div class="dc-home-grid mt-3">
               <div
@@ -84,7 +84,7 @@
 
           <!-- HINÁRIOS -->
           <template v-else-if="section === 'hymnals'">
-            <div class="dc-section-title">Hinários</div>
+            <div class="dc-section-title">{{ $t('components.download_center.nav_hymnals') }}</div>
             <div class="dc-hymnal-grid mt-3">
               <div v-for="h in hymnalItems" :key="h.file" class="dc-hymnal-card">
                 <!-- Capa: ícone do hinário (SVG local) -->
@@ -106,6 +106,7 @@
                   <div class="dc-hymnal-name">{{ h.name }}</div>
                   <div class="dc-hymnal-desc">{{ h.description }}</div>
                   <v-btn
+                    v-if="!h.localOnly"
                     :color="isDownloaded(h.file) ? 'success' : 'primary'"
                     variant="tonal"
                     size="small"
@@ -114,7 +115,7 @@
                     :loading="downloading[h.file]"
                     :prepend-icon="isDownloaded(h.file) ? 'mdi-refresh' : 'mdi-download'"
                     @click="downloadFile(h.file)"
-                  >{{ isDownloaded(h.file) ? 'Atualizar' : 'Baixar' }}</v-btn>
+                  >{{ isDownloaded(h.file) ? $t('components.download_center.update') : $t('components.download_center.download') }}</v-btn>
                 </div>
               </div>
             </div>
@@ -122,9 +123,9 @@
 
           <!-- COLETÂNEAS -->
           <template v-else-if="section === 'collections'">
-            <div class="dc-section-title">Coletâneas</div>
+            <div class="dc-section-title">{{ $t('components.download_center.nav_collections') }}</div>
             <div v-if="!isElectron" class="text-caption text-medium-emphasis mt-1 mb-1">
-              No navegador, apenas os dados de letras são baixados (sem áudio ou imagens locais).
+              {{ $t('components.download_center.no_browser') }}
             </div>
 
             <div class="dc-tabs-row">
@@ -136,7 +137,7 @@
                   class="dc-tab"
                   :class="{ 'dc-tab--active': catFilter === null }"
                   @click="catFilter = null"
-                >Todas as Coletâneas</button>
+                >{{ $t('components.download_center.all_collections') }}</button>
                 <button
                   v-for="cat in categories"
                   :key="cat.id_category"
@@ -187,9 +188,9 @@
                 <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
 
                 <div v-if="albumStats[album.id_album]" class="dc-album-stats">
-                  <span title="Músicas">🎵 {{ albumStats[album.id_album].json }}</span>
-                  <span title="Áudios">🔊 {{ albumStats[album.id_album].audio }}</span>
-                  <span title="Imagens">🖼 {{ albumStats[album.id_album].images }}</span>
+                  <span :title="$t('components.download_center.stat_songs')">🎵 {{ albumStats[album.id_album].json }}</span>
+                  <span :title="$t('components.download_center.stat_audio')">🔊 {{ albumStats[album.id_album].audio }}</span>
+                  <span :title="$t('components.download_center.stat_images')">🖼 {{ albumStats[album.id_album].images }}</span>
                 </div>
 
                 <v-btn
@@ -210,7 +211,7 @@
 
           <!-- BÍBLIAS -->
           <template v-else-if="section === 'bibles'">
-            <div class="dc-section-title">Bíblias</div>
+            <div class="dc-section-title">{{ $t('components.download_center.bibles') }}</div>
             <div class="dc-pkg-list mt-2">
               <div v-for="b in bibleItems" :key="b.id" class="dc-pkg-row">
                 <v-icon size="32" :color="b.color" class="mr-3 flex-shrink-0">mdi-book-open-variant</v-icon>
@@ -227,7 +228,7 @@
                     :loading="downloading[b.id]"
                     :prepend-icon="allDownloaded(b.files) ? 'mdi-refresh' : 'mdi-download'"
                     @click="downloadMulti(b.id, b.files)"
-                  >{{ allDownloaded(b.files) ? 'Atualizar' : 'Baixar' }}</v-btn>
+                  >{{ allDownloaded(b.files) ? $t('components.download_center.update') : $t('components.download_center.download') }}</v-btn>
                 </div>
               </div>
             </div>
@@ -235,25 +236,22 @@
 
           <!-- CONFIGURAÇÕES -->
           <template v-else-if="section === 'settings'">
-            <div class="dc-section-title">Configurações</div>
+            <div class="dc-section-title">{{ $t('components.download_center.settings') }}</div>
 
             <div class="text-caption text-medium-emphasis mb-4">
-              {{ userFiles.length }} arquivo(s) baixado(s) • {{ totalSize }}.
-              O alternador de <b>Modo Online/Offline</b> agora fica no menu
-              superior. Com o modo offline ativado, o app usa os arquivos já
-              baixados em vez de acessar a internet — baixe os conteúdos em
-              <b>Coletâneas</b>.
+              {{ userFiles.length }} {{ $t('components.download_center.files_downloaded') }} • {{ totalSize }}.
+              <span v-html="$t('components.download_center.online_note')"></span>
             </div>
 
             <v-divider class="mb-4" />
 
             <!-- Pastas locais -->
-            <div class="text-subtitle-2 mb-3">Pastas de armazenamento</div>
+            <div class="text-subtitle-2 mb-3">{{ $t('components.download_center.folders') }}</div>
 
             <div v-if="dbFolder" class="dc-folder-row mb-2">
               <v-icon size="16" class="mr-2" color="primary">mdi-database-outline</v-icon>
               <div class="dc-folder-info">
-                <div class="text-caption font-weight-medium">Banco de dados (JSON)</div>
+                <div class="text-caption font-weight-medium">{{ $t('components.download_center.folder_db') }}</div>
                 <div class="dc-folder-path text-caption text-medium-emphasis" :title="dbFolder">{{ dbFolder }}</div>
               </div>
               <v-btn
@@ -262,7 +260,7 @@
                 size="x-small"
                 density="compact"
                 class="ml-1"
-                title="Abrir pasta"
+                :title="$t('components.download_center.open_folder')"
                 @click="$electron.shellOpenFolder(dbFolder)"
               />
             </div>
@@ -270,7 +268,7 @@
             <div v-if="configFolder" class="dc-folder-row mb-4">
               <v-icon size="16" class="mr-2" color="primary">mdi-folder-music-outline</v-icon>
               <div class="dc-folder-info">
-                <div class="text-caption font-weight-medium">Mídias (capas, áudios, imagens)</div>
+                <div class="text-caption font-weight-medium">{{ $t('components.download_center.folder_media') }}</div>
                 <div class="dc-folder-path text-caption text-medium-emphasis" :title="configFolder">{{ configFolder }}</div>
               </div>
               <v-btn
@@ -279,7 +277,7 @@
                 size="x-small"
                 density="compact"
                 class="ml-1"
-                title="Abrir pasta"
+                :title="$t('components.download_center.open_folder')"
                 @click="$electron.shellOpenFolder(configFolder)"
               />
             </div>
@@ -287,10 +285,9 @@
             <v-divider class="mb-4" />
 
             <!-- Verificação de arquivos -->
-            <div class="text-subtitle-2 mb-3">Verificação de arquivos locais</div>
+            <div class="text-subtitle-2 mb-3">{{ $t('components.download_center.verify_title') }}</div>
             <div class="text-caption text-medium-emphasis mb-3">
-              Verifica quais arquivos de mídia (capas, imagens, áudios) estão faltando nas
-              pastas locais e oferece o download automático.
+              {{ $t('components.download_center.verify_desc') }}
             </div>
 
             <!-- Resultado do scan -->
@@ -302,8 +299,8 @@
                 density="compact"
                 class="mb-3"
               >
-                <div class="text-body-2 font-weight-medium">Todos os arquivos estão presentes</div>
-                <div class="text-caption">Nenhum arquivo de mídia em falta.</div>
+                <div class="text-body-2 font-weight-medium">{{ $t('components.download_center.all_present') }}</div>
+                <div class="text-caption">{{ $t('components.download_center.none_missing') }}</div>
               </v-alert>
               <v-alert
                 v-else
@@ -313,28 +310,28 @@
                 class="mb-3"
               >
                 <div class="text-body-2 font-weight-medium mb-1">
-                  {{ scanResult.total }} arquivo(s) em falta
+                  {{ scanResult.total }} {{ $t('components.download_center.files_missing') }}
                 </div>
                 <div class="d-flex ga-3 flex-wrap mb-2">
                   <span v-if="scanResult.counts.cover" class="text-caption">
-                    🖼 {{ scanResult.counts.cover }} capa(s)
+                    🖼 {{ scanResult.counts.cover }} {{ $t('components.download_center.covers_short') }}
                   </span>
                   <span v-if="scanResult.counts.image" class="text-caption">
-                    🎨 {{ scanResult.counts.image }} imagem(ns)
+                    🎨 {{ scanResult.counts.image }} {{ $t('components.download_center.images_short') }}
                   </span>
                   <span v-if="scanResult.counts.audio" class="text-caption">
-                    🔊 {{ scanResult.counts.audio }} áudio(s)
+                    🔊 {{ scanResult.counts.audio }} {{ $t('components.download_center.audio_short') }}
                   </span>
                 </div>
                 <div v-if="configFolder" class="text-caption text-medium-emphasis" style="word-break:break-all">
-                  Pasta verificada: <span class="font-weight-medium" style="font-family:monospace">{{ configFolder }}</span>
+                  {{ $t('components.download_center.folder_checked') }} <span class="font-weight-medium" style="font-family:monospace">{{ configFolder }}</span>
                   <v-btn
                     variant="text"
                     size="x-small"
                     density="compact"
                     class="ml-1"
                     @click="$electron.shellOpenFolder(configFolder)"
-                  >Abrir</v-btn>
+                  >{{ $t('components.download_center.open') }}</v-btn>
                 </div>
               </v-alert>
             </template>
@@ -363,7 +360,7 @@
                 :loading="scanning"
                 :disabled="downloadingMissing"
                 @click="runScanMissing"
-              >Verificar arquivos</v-btn>
+              >{{ $t('components.download_center.verify_btn') }}</v-btn>
 
               <v-btn
                 v-if="scanResult && scanResult.total > 0 && !downloadingMissing"
@@ -372,7 +369,7 @@
                 size="small"
                 prepend-icon="mdi-download-multiple"
                 @click="confirmDialog = true"
-              >Baixar em falta ({{ scanResult.total }})</v-btn>
+              >{{ $t('components.download_center.download_missing_btn') }} ({{ scanResult.total }})</v-btn>
             </div>
 
             <v-divider class="mb-4" />
@@ -382,39 +379,39 @@
               <v-card rounded="lg">
                 <v-card-title class="pt-5 px-5 pb-2 d-flex align-center">
                   <v-icon color="warning" class="mr-2" size="22">mdi-download-circle</v-icon>
-                  Baixar arquivos em falta
+                  {{ $t('components.download_center.download_missing_title') }}
                 </v-card-title>
 
                 <v-card-text class="px-5">
                   <p class="text-body-2 mb-4">
-                    Foram encontrados <b>{{ scanResult && scanResult.total }}</b>
-                    arquivo(s) em falta no sistema. Deseja baixá-los agora?
+                    {{ $t('components.download_center.found_label') }} <b>{{ scanResult && scanResult.total }}</b>
+                    {{ $t('components.download_center.missing_question') }}
                   </p>
 
                   <div class="dc-missing-counts">
                     <div v-if="scanResult && scanResult.counts && scanResult.counts.cover" class="dc-missing-row">
                       <v-icon size="16" color="primary" class="mr-2">mdi-image-album</v-icon>
                       <span class="text-body-2 flex-grow-1">
-                        {{ scanResult.counts.cover }} capa(s) de álbum
+                        {{ scanResult.counts.cover }} {{ $t('components.download_center.cover_album') }}
                       </span>
                     </div>
                     <div v-if="scanResult && scanResult.counts && scanResult.counts.image" class="dc-missing-row">
                       <v-icon size="16" color="primary" class="mr-2">mdi-image</v-icon>
                       <span class="text-body-2 flex-grow-1">
-                        {{ scanResult.counts.image }} imagem(ns) de slides
+                        {{ scanResult.counts.image }} {{ $t('components.download_center.image_slides') }}
                       </span>
                     </div>
                     <div v-if="scanResult && scanResult.counts && scanResult.counts.audio" class="dc-missing-row">
                       <v-icon size="16" color="primary" class="mr-2">mdi-music-note</v-icon>
                       <span class="text-body-2 flex-grow-1">
-                        {{ scanResult.counts.audio }} arquivo(s) de áudio
+                        {{ scanResult.counts.audio }} {{ $t('components.download_center.audio_files') }}
                       </span>
                     </div>
                   </div>
 
                   <v-alert type="info" variant="tonal" density="compact" class="mt-4">
                     <div class="text-caption">
-                      Os arquivos serão salvos em subpastas de:
+                      {{ $t('components.download_center.saved_in') }}
                       <span class="font-weight-medium" style="word-break:break-all">{{ configFolder || 'config/' }}</span>
                     </div>
                   </v-alert>
@@ -422,14 +419,14 @@
 
                 <v-card-actions class="px-5 pb-4">
                   <v-spacer />
-                  <v-btn variant="text" size="small" @click="confirmDialog = false">Cancelar</v-btn>
+                  <v-btn variant="text" size="small" @click="confirmDialog = false">{{ $t('components.download_center.cancel') }}</v-btn>
                   <v-btn
                     color="primary"
                     variant="flat"
                     size="small"
                     prepend-icon="mdi-download"
                     @click="startMissingDownload"
-                  >Baixar agora</v-btn>
+                  >{{ $t('components.download_center.download_now') }}</v-btn>
                 </v-card-actions>
               </v-card>
             </v-dialog>
@@ -438,12 +435,12 @@
           <!-- MEUS DOWNLOADS -->
           <template v-else-if="section === 'downloads'">
             <div class="dc-section-title">
-              Meus Downloads
+              {{ $t('components.download_center.downloads') }}
               <span class="text-caption text-medium-emphasis ml-2">({{ totalSize }})</span>
             </div>
 
             <div v-if="localFiles.length === 0" class="text-caption text-medium-emphasis mt-3">
-              Nenhum arquivo baixado ainda.
+              {{ $t('components.download_center.no_downloads') }}
             </div>
 
             <template v-else>
@@ -451,7 +448,7 @@
               <template v-if="downloadedAlbums.length > 0">
                 <div class="dc-dl-group-title mt-4">
                   <v-icon size="14" class="mr-1">mdi-music-box-multiple-outline</v-icon>
-                  Coletâneas
+                  {{ $t('components.download_center.nav_collections') }}
                   <span class="dc-dl-group-count">{{ downloadedAlbums.length }}</span>
                 </div>
                 <div class="dc-albums-grid mt-2">
@@ -470,7 +467,7 @@
                       <v-icon v-else size="42" color="grey-lighten-1">mdi-music-box</v-icon>
                       <div
                         class="dc-album-badge-ok"
-                        :title="albumMissingCount(album.id_album) > 0 ? `${albumMissingCount(album.id_album)} arquivo(s) em falta` : 'Completo'"
+                        :title="albumMissingCount(album.id_album) > 0 ? `${albumMissingCount(album.id_album)} ${$t('components.download_center.files_missing')}` : $t('components.download_center.complete')"
                       >
                         <v-icon size="16" :color="albumMissingCount(album.id_album) > 0 ? 'warning' : 'success'">
                           {{ albumMissingCount(album.id_album) > 0 ? 'mdi-alert' : 'mdi-check' }}
@@ -482,11 +479,11 @@
                 </div>
               </template>
 
-              <!-- Hinários -->
+              <!-- {{ $t('components.download_center.nav_hymnals') }} -->
               <template v-if="downloadedHymnals.length > 0">
                 <div class="dc-dl-group-title mt-4">
                   <v-icon size="14" class="mr-1">mdi-music-note</v-icon>
-                  Hinários
+                  {{ $t('components.download_center.nav_hymnals') }}
                   <span class="dc-dl-group-count">{{ downloadedHymnals.length }}</span>
                 </div>
                 <div class="dc-albums-grid mt-2">
@@ -515,11 +512,11 @@
                 </div>
               </template>
 
-              <!-- Bíblias -->
+              <!-- {{ $t('components.download_center.bibles') }} -->
               <template v-if="downloadedBibleSets.length > 0">
                 <div class="dc-dl-group-title mt-4">
                   <v-icon size="14" class="mr-1">mdi-book-open-variant</v-icon>
-                  Bíblias
+                  {{ $t('components.download_center.bibles') }}
                   <span class="dc-dl-group-count">{{ downloadedBibleSets.length }}</span>
                 </div>
                 <div class="dc-pkg-list mt-2">
@@ -534,11 +531,11 @@
                 </div>
               </template>
 
-              <!-- Outros -->
+              <!-- {{ $t('components.download_center.others') }} -->
               <template v-if="downloadedOthers.length > 0">
                 <div class="dc-dl-group-title mt-4">
                   <v-icon size="14" class="mr-1">mdi-file-outline</v-icon>
-                  Outros
+                  {{ $t('components.download_center.others') }}
                   <span class="dc-dl-group-count">{{ downloadedOthers.length }}</span>
                 </div>
                 <div class="dc-local-list mt-2">
@@ -561,26 +558,26 @@
     <v-card rounded="lg">
       <v-card-title class="pt-5 px-5 pb-2 d-flex align-center">
         <v-icon color="warning" class="mr-2" size="22">mdi-refresh-circle</v-icon>
-        Álbum já baixado
+        {{ $t('components.download_center.replace_title') }}
       </v-card-title>
       <v-card-text class="px-5">
         <p class="text-body-2 mb-3">
-          O álbum <b>{{ replaceAlbumTarget?.name }}</b> já foi baixado anteriormente.
+          {{ $t('components.download_center.album_word') }} <b>{{ replaceAlbumTarget?.name }}</b> {{ $t('components.download_center.downloaded_before') }}
         </p>
         <p class="text-body-2">
-          Deseja <b>substituir</b> os arquivos existentes ou apenas baixar os que estão faltando?
+          {{ $t('components.download_center.want') }} <b>{{ $t('components.download_center.replace_word') }}</b> {{ $t('components.download_center.replace_question') }}
         </p>
       </v-card-text>
       <v-card-actions class="px-5 pb-4">
         <v-btn variant="text" size="small" @click="replaceDialog = false; replaceAlbumTarget = null">
-          Cancelar
+          {{ $t('components.download_center.cancel') }}
         </v-btn>
         <v-spacer />
         <v-btn variant="tonal" color="primary" size="small" prepend-icon="mdi-download" @click="onReplaceChoice(false)">
-          Baixar faltantes
+          {{ $t('components.download_center.download_missing_only') }}
         </v-btn>
         <v-btn variant="flat" color="warning" size="small" prepend-icon="mdi-refresh" @click="onReplaceChoice(true)">
-          Substituir tudo
+          {{ $t('components.download_center.replace_all_btn') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -592,24 +589,9 @@ import $database from '@/helpers/Database';
 import $storage from '@/helpers/Storage';
 import hasdFlame from '@/assets/imgs/hasd-flame.svg';
 
-const NAV_ITEMS = [
-  { section: 'home',        icon: 'mdi-home-outline',         label: 'Início' },
-  { section: 'hymnals',     icon: 'mdi-music-note',           label: 'Hinários',   description: 'Hinários completos com letras e áudio', color: '#1565C0' },
-  { section: 'collections', icon: 'mdi-music-box-multiple',   label: 'Coletâneas', description: 'Coletâneas de músicas por categoria',   color: '#2E7D32' },
-  { section: 'bibles',      icon: 'mdi-book-open-variant',    label: 'Bíblias',    description: 'Textos bíblicos em português e espanhol', color: '#EF6C00' },
-];
-
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
-const HYMNAL_ITEMS = [
-  { file: 'pt_hymnal',      name: 'Hinário 2022', description: 'Hinário moderno',           cover: hasdFlame, icon: 'mdi-music-note',        color: '#1B5E43' },
-  { file: 'pt_hymnal_1996', name: 'Hinário 1996', description: 'Hinário histórico de 1996', cover: hasdFlame, icon: 'mdi-music-note-outline', color: '#1B5E43' },
-];
-
-const BIBLE_ITEMS = [
-  { id: 'bible_pt', name: 'Bíblia Português', files: ['pt_bible_book', 'pt_bible_version'], color: 'green' },
-  { id: 'bible_es', name: 'Biblia Español',   files: ['es_bible_book', 'es_bible_version'], color: 'orange' },
-];
+const DC = 'components.download_center.';
 
 export default {
   name: 'DownloadCenter',
@@ -646,9 +628,6 @@ export default {
     albumProgress: {},
     albumStats:    {},
     _progressHandler: null,
-    navItems:    NAV_ITEMS,
-    hymnalItems: HYMNAL_ITEMS,
-    bibleItems:  BIBLE_ITEMS,
     // Configurações
     clearing: false,
     // Verificação de arquivos
@@ -676,6 +655,34 @@ export default {
   }),
 
   computed: {
+    navItems() {
+      const t = (k) => this.$t(DC + k);
+      return [
+        { section: 'home',        icon: 'mdi-home-outline',       label: t('nav_home') },
+        { section: 'hymnals',     icon: 'mdi-music-note',         label: t('nav_hymnals'),     description: t('nav_hymnals_desc'),     color: '#1565C0' },
+        { section: 'collections', icon: 'mdi-music-box-multiple', label: t('nav_collections'), description: t('nav_collections_desc'), color: '#2E7D32' },
+        { section: 'bibles',      icon: 'mdi-book-open-variant',  label: t('nav_bibles'),      description: t('nav_bibles_desc'),      color: '#EF6C00' },
+      ];
+    },
+    // Hinário espanhol é só local (ver scripts/import-hinario-es.mjs): não tem
+    // download pela API, então o card só mostra o que já está no disco.
+    hymnalItems() {
+      const t = (k) => this.$t(DC + k);
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
+      if (locale === 'es') {
+        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true }];
+      }
+      return [
+        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, icon: 'mdi-music-note',         color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+      ];
+    },
+    bibleItems() {
+      return [
+        { id: 'bible_pt', name: this.$t(DC + 'bible_pt'), files: ['pt_bible_book', 'pt_bible_version'], color: 'green' },
+        { id: 'bible_es', name: this.$t(DC + 'bible_es'), files: ['es_bible_book', 'es_bible_version'], color: 'orange' },
+      ];
+    },
     isElectron() {
       return this.$electron.isElectron();
     },
@@ -718,7 +725,7 @@ export default {
     },
 
     downloadedHymnals() {
-      const map = Object.fromEntries(HYMNAL_ITEMS.map(h => [h.file, h]));
+      const map = Object.fromEntries(this.hymnalItems.map(h => [h.file, h]));
       return this.localFiles
         .filter(f => map[f.name])
         .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '' }));
@@ -727,15 +734,15 @@ export default {
     downloadedBibleSets() {
       const sizeMap = Object.fromEntries(this.localFiles.map(f => [f.name, f.size || 0]));
       const downloaded = new Set(this.localFiles.map(f => f.name));
-      return BIBLE_ITEMS
+      return this.bibleItems
         .filter(b => b.files.some(f => downloaded.has(f)))
         .map(b => ({ ...b, totalSize: b.files.reduce((s, f) => s + (sizeMap[f] || 0), 0) }));
     },
 
     downloadedOthers() {
       const known = new Set([
-        ...HYMNAL_ITEMS.map(h => h.file),
-        ...BIBLE_ITEMS.flatMap(b => b.files),
+        'pt_hymnal', 'pt_hymnal_1996', 'es_hymnal',
+        ...this.bibleItems.flatMap(b => b.files),
       ]);
       return this.userFiles.filter(f =>
         !f.name.startsWith('album_') &&
@@ -980,7 +987,7 @@ export default {
       this.downloading = { ...this.downloading, [filename]: true };
       try {
         const ok = await $database.download(filename);
-        if (!ok) this.$alert?.error?.({ text: `Falha ao baixar: ${filename}. Verifique sua conexão.`, translate: false });
+        if (!ok) this.$alert?.error?.({ text: this.$t('components.download_center.fail_download_file', { filename }), translate: false });
         await this.loadLocalFiles();
       } catch (e) {
         this.$alert?.error?.({ text: String(e), translate: false });
@@ -997,7 +1004,7 @@ export default {
           if (!await $database.download(f)) failed.push(f);
         }
         await this.loadLocalFiles();
-        if (failed.length) this.$alert?.error?.({ text: `Falha ao baixar: ${failed.join(', ')}. Verifique sua conexão.`, translate: false });
+        if (failed.length) this.$alert?.error?.({ text: this.$t('components.download_center.fail_download_list', { files: failed.join(', ') }), translate: false });
       } catch (e) {
         this.$alert?.error?.({ text: String(e), translate: false });
       } finally {
@@ -1029,12 +1036,12 @@ export default {
       const setProgress = (percent, message) => {
         this.albumProgress = { ...this.albumProgress, [id]: { percent, message } };
       };
-      setProgress(0, 'Baixando dados do álbum...');
+      setProgress(0, this.$t('components.download_center.downloading_album_data'));
       const statsLocal = { json: 0, audio: 0, images: 0 };
 
       try {
         const okAlbum = await $database.download(`album_${id}`);
-        if (!okAlbum) throw new Error(`Falha ao baixar álbum "${album.name}"`);
+        if (!okAlbum) throw new Error(this.$t('components.download_center.fail_album', { name: album.name }));
         statsLocal.json++;
 
         const albumData  = await this.$electron.dbLocalGet(`album_${id}`);
@@ -1044,19 +1051,19 @@ export default {
         let done = 1;
 
         setProgress(Math.round((done / grandTotal) * 100),
-          hasCover ? 'Baixando capa...' : `Baixando ${musics.length} músicas...`);
+          hasCover ? this.$t('components.download_center.downloading_cover') : this.$t('components.download_center.downloading_songs', { count: musics.length }));
 
         if (albumData.url_image) {
           await this._cacheUrl(this.resolveUrl(albumData.url_image));
           statsLocal.images++;
           done++;
-          setProgress(Math.round((done / grandTotal) * 100), `Baixando ${musics.length} músicas...`);
+          setProgress(Math.round((done / grandTotal) * 100), this.$t('components.download_center.downloading_songs', { count: musics.length }));
         }
 
         for (let i = 0; i < musics.length; i++) {
           const m = musics[i];
           setProgress(Math.round((done / grandTotal) * 100),
-            `[${i + 1}/${musics.length}] ${m.name || 'música'}`);
+            `[${i + 1}/${musics.length}] ${m.name || this.$t('components.download_center.song')}`);
 
           const okMusic = await $database.download(`music_${m.id_music}`);
           if (okMusic) {
@@ -1096,7 +1103,7 @@ export default {
 
     async downloadAlbumFull(album, overwrite = false) {
       const id = album.id_album;
-      this.albumProgress = { ...this.albumProgress, [id]: { percent: 0, message: 'Iniciando...' } };
+      this.albumProgress = { ...this.albumProgress, [id]: { percent: 0, message: this.$t('components.download_center.starting') } };
       try {
         const result = await this.$electron.albumDownloadFull(
           id,
@@ -1114,13 +1121,13 @@ export default {
           await this.loadDownloadedAlbumInfos();
           if ((s.skipped || 0) > 0 && !overwrite) {
             this.$alert?.info?.({
-              text: `${s.skipped} arquivo(s) já existiam e foram ignorados. Use "Substituir" para forçar o re-download.`,
+              text: this.$t('components.download_center.skipped_files', { count: s.skipped }),
               translate: false,
             });
           }
         } else {
           this.$alert?.error?.({
-            text: `Falha ao baixar álbum "${album.name}": ${result.error || 'erro desconhecido'}`,
+            text: this.$t('components.download_center.fail_album_result', { name: album.name, error: result.error || this.$t('components.download_center.unknown_error') }),
             translate: false,
           });
           await this.loadLocalFiles();
@@ -1183,7 +1190,7 @@ export default {
       if (!this.scanResult?.missing?.length) return;
 
       this.downloadingMissing = true;
-      this.missingProgress    = { percent: 0, message: 'Iniciando...' };
+      this.missingProgress    = { percent: 0, message: this.$t('components.download_center.starting') };
       this.subscribeMissingProgress();
 
       try {
@@ -1199,7 +1206,7 @@ export default {
           await this.loadLocalFiles();
           await this.loadDownloadedAlbumsStatus();
         } else {
-          this.$alert?.error?.({ text: result.error || 'Erro ao baixar arquivos.', translate: false });
+          this.$alert?.error?.({ text: result.error || this.$t('components.download_center.download_files_error'), translate: false });
         }
       } catch (e) {
         this.$alert?.error?.({ text: String(e), translate: false });

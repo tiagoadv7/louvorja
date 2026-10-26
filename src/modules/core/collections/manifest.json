@@ -4,7 +4,6 @@
   "description": "Lista as coletâneas",
   "category": "musics",
   "icon": "mdi-music-box-multiple",
-  "language": "pt",
   "dependencies": [
     "album"
   ]

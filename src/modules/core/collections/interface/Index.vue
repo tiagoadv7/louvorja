@@ -247,6 +247,9 @@ export default {
     _customDurationCache: {},
   }),
   computed: {
+    currentLocale() {
+      return this.$i18n.locale?.value || this.$i18n.locale;
+    },
     /*show() {
       let module = this.$modules.get(manifest.id);
       return module.show;
@@ -288,6 +291,9 @@ export default {
     },
   },
   watch: {
+    currentLocale() {
+      this.loadData();
+    },
     mediaShow(now, prev) {
       if (prev && !now && this.playingCustomCollection && !this.mediaMinimized) this._stopCustomQueue();
     },
@@ -308,7 +314,7 @@ export default {
       this.loading = true;
 
       this.categories = await this.$database.get(
-        `${this.$i18n.locale}_categories`,
+        `${this.currentLocale}_categories`,
       );
 
       if (this.categories == null) {

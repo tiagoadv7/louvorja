@@ -309,7 +309,10 @@ const Media = {
       // aparecia de novo na hora (localUrl continua null de propósito, é streaming),
       // e a única ação nele é baixar o álbum: clicar "Ouvir Online" parecia
       // redirecionar direto pra baixar o álbum em vez de simplesmente tocar online.
-      if (!localUrl && rawUrl && rawUrl.startsWith("app-local://") && !params._skipOnlineChoice) {
+      // file:// (caminho local do SQLite) e URL remota sem internet também não têm
+      // como tocar: antes só app-local:// caía aqui e o resto ficava mudo.
+      const cannotStream = rawUrl && (!/^https?:/.test(rawUrl) || !hasInternet);
+      if (!localUrl && rawUrl && cannotStream && !params._skipOnlineChoice) {
         this._crossfading = false;
         $appdata.set("modules.media.config.mode", mode);
         $appdata.set("modules.media.loading", false);
