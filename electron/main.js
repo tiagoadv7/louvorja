@@ -265,6 +265,15 @@ function createLoadingWindow() {
   // esperar a janela principal abrir pra só então saber que tem um arquivo
   // pendente.
   loadingWindow.loadFile(loadingPath, { query: { mode: pendingSljaPath ? 'open-file' : 'app' } });
+  // O sinal de "janela visível" pode sair antes de a página registrar o listener
+  // (ready-to-show corre em paralelo com o carregamento do HTML) e se perder --
+  // aí a animação fica pausada e a tela some. Reenvia quando o documento termina
+  // de carregar, se a janela já estiver visível nesse momento.
+  loadingWindow.webContents.once('did-finish-load', () => {
+    if (loadingWindow && !loadingWindow.isDestroyed() && loadingWindow.isVisible()) {
+      loadingWindow.webContents.send('loading-window-shown');
+    }
+  });
 
   loadingWindow.once('ready-to-show', () => {
     if (loadingWindow && !loadingWindow.isDestroyed()) {
@@ -1178,6 +1187,7 @@ function registerIpcHandlers() {
     }
 
     let opacity = 0;
+    mainWindow.webContents.send('main-window-shown');
     const step = () => {
       opacity = Math.min(1, opacity + 0.06);
       if (!mainWindow.isDestroyed()) mainWindow.setOpacity(opacity);

@@ -9,15 +9,14 @@
   >
     <img :src="logoUrl" height="16" width="16" class="me-2 sysbar-logo-in" style="vertical-align: middle; object-fit: contain;" />
     <!-- Mesmo wordmark do logo oficial "LOUVORJA" (branco + "JA" dourado +
-         barrinha dourada embaixo) -- texto fixo (não $t('app.name'), que é
-         "Louvor JA" com espaço, usado em título de janela/about/etc.): isso
-         aqui é a marca, não texto traduzível. Anima uma vez só ao montar
+         barrinha dourada embaixo). Muda só o início pro espanhol ("LOOR JA",
+         ver wordmark). Anima uma vez só ao montar
          (que é quando a janela principal aparece, logo depois do splash de
          loading fechar) -- mesmo espírito motion design do loading, só numa
          escala bem menor pra caber nessa barra de 16-24px. -->
-    <span class="sysbar-wordmark">
+    <span class="sysbar-wordmark" :class="{ 'is-live': wordmarkLive }">
       <span class="sysbar-wordmark-text">
-        <span class="sysbar-word-in">LOUVOR</span><span class="accent sysbar-word-in sysbar-word-in--ja">JA</span>
+        <span class="sysbar-word-in">{{ wordmark[0] }}</span><span class="accent sysbar-word-in sysbar-word-in--ja">{{ wordmark[1] }}</span>
       </span>
       <span class="sysbar-wordmark-bar"></span>
     </span>
@@ -123,6 +122,7 @@ export default {
     isMaximized: false,
     outputOpen: false,
     menuHandler: null,
+    wordmarkLive: false,
     outputHandlers: [],
     _f5Handler: null,
     logoUrl: `${import.meta.env.BASE_URL}ico/favicon.svg`,
@@ -139,6 +139,10 @@ export default {
   computed: {
     is_desktop() {
       return this.$appdata.get("is_desktop");
+    },
+    wordmark() {
+      const locale = this.$i18n?.locale?.value || this.$i18n?.locale;
+      return locale === "es" ? ["LOOR", "JA"] : ["LOUVOR", "JA"];
     },
     updateBadge() {
       return ['available', 'downloading', 'downloaded'].includes(this.updateStep);
@@ -223,6 +227,14 @@ export default {
     },
   },
   async mounted() {
+    // A janela principal nasce com opacidade 0 e só aparece quando o app termina
+    // de carregar (ver 'main-window-shown' em electron/main.js). Sem esperar isso,
+    // a animação do nome rodava escondida e chegava pronta, sem animar na tela.
+    // O prazo de 6s é só pra o texto nunca ficar invisível se o evento não chegar.
+    this._wordmarkTimer = setTimeout(() => { this.wordmarkLive = true; }, 6000);
+    this._shownHandler = this.$electron.on?.('main-window-shown', () => {
+      this.wordmarkLive = true;
+    });
     if (!this.$electron.isElectron()) return;
 
     this.isMaximized = await this.$electron.windowIsMaximized();
@@ -287,6 +299,8 @@ export default {
     ].filter(Boolean);
   },
   beforeUnmount() {
+    clearTimeout(this._wordmarkTimer);
+    if (this._shownHandler) this.$electron.off('main-window-shown', this._shownHandler);
     if (this._f5Handler) window.removeEventListener('keydown', this._f5Handler);
     if (this.menuHandler) this.$electron.off("menu:open-output", this.menuHandler);
     if (this._updateStateHandler) this.$electron.off('updater:state', this._updateStateHandler);
@@ -345,6 +359,10 @@ export default {
   opacity: 0;
   transform: translateY(6px);
   animation: sysbarWordIn .35s cubic-bezier(.22, 1, .36, 1) .12s forwards;
+}
+.sysbar-wordmark:not(.is-live) .sysbar-word-in,
+.sysbar-wordmark:not(.is-live) .sysbar-wordmark-bar {
+  animation-play-state: paused;
 }
 .sysbar-word-in--ja { animation-delay: .22s; }
 @keyframes sysbarWordIn { to { opacity: 1; transform: translateY(0); } }

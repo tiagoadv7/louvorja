@@ -315,6 +315,11 @@
       window.loadingBridge.onShown(function () {
         document.body.classList.add('visible');
       });
+      // Rede de segurança: se o sinal de "janela visível" se perder, o conteúdo
+      // não pode ficar invisível pra sempre.
+      setTimeout(function () {
+        document.body.classList.add('visible');
+      }, 6000);
     } else {
       document.body.classList.add('visible');
     }

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Canais que o renderer pode ouvir (main → renderer)
 const RECEIVE_CHANNELS = [
+  'main-window-shown',
   'state-update',
   'state-update-batch',
   'set-module',
@@ -142,7 +143,7 @@ contextBridge.exposeInMainWorld('electron', {
   albumDownloadFull: (albumId, dbBaseUrl, filesBaseUrl, token, overwrite = false) =>
     ipcRenderer.invoke('album:download-full', albumId, dbBaseUrl, filesBaseUrl, token, overwrite),
   scanMissingFiles: (dbBaseUrl, token) => ipcRenderer.invoke('files:scan-missing', dbBaseUrl, token),
-  scanAlbumsFiles: (dbBaseUrl, token) => ipcRenderer.invoke('files:scan-albums', dbBaseUrl, token),
+  scanAlbumsFiles: (dbBaseUrl, token, scope) => ipcRenderer.invoke('files:scan-albums', dbBaseUrl, token, scope),
   checkAlbumsComplete: (albumIds, dbBaseUrl, token) =>
     ipcRenderer.invoke('files:check-albums-complete', albumIds, dbBaseUrl, token),
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>
