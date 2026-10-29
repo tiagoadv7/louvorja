@@ -8,8 +8,8 @@
           <v-icon size="22">mdi-cloud-sync-outline</v-icon>
         </v-avatar>
         <div class="flex-grow-1 min-w-0">
-          <div class="text-subtitle-1 font-weight-bold">Nova Versão de Banco de Dados</div>
-          <div class="text-caption text-medium-emphasis">Versão {{ newVersion }}</div>
+          <div class="text-subtitle-1 font-weight-bold">{{ $t('components.db_update.title') }}</div>
+          <div class="text-caption text-medium-emphasis">{{ $t('components.db_update.version', { version: newVersion }) }}</div>
         </div>
         <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" @click="dismiss" />
       </div>
@@ -20,10 +20,9 @@
           <v-icon size="40">mdi-folder-sync-outline</v-icon>
         </v-avatar>
         <div class="text-center">
-          <div class="text-h6 font-weight-bold">Nova versão do banco de dados disponível</div>
+          <div class="text-h6 font-weight-bold">{{ $t('components.db_update.heading') }}</div>
           <div class="text-body-2 text-medium-emphasis mt-1">
-            Uma nova versão do banco de dados oficial foi publicada no servidor.
-            Sincronize os arquivos para manter sua coletânea atualizada.
+            {{ $t('components.db_update.body') }}
           </div>
         </div>
       </v-card-text>
@@ -31,10 +30,10 @@
       <v-divider />
 
       <v-card-actions class="px-5 py-3" style="gap:12px">
-        <v-btn variant="text" @click="dismiss">Agora não</v-btn>
+        <v-btn variant="text" @click="dismiss">{{ $t('components.db_update.later') }}</v-btn>
         <v-spacer />
         <v-btn color="primary" variant="flat" prepend-icon="mdi-folder-sync-outline" @click="apply">
-          Sincronizar arquivos
+          {{ $t('components.db_update.sync') }}
         </v-btn>
       </v-card-actions>
 

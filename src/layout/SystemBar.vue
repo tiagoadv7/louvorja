@@ -153,14 +153,14 @@ export default {
     },
     updateBadgeText() {
       if (this.updateStep === 'downloading') return `${this.updateDownloadPercent}%`;
-      if (this.updateStep === 'downloaded') return 'Instalar';
-      return 'Atualizar';
+      if (this.updateStep === 'downloaded') return this.$t('components.app_update.bar_install');
+      return this.$t('components.app_update.bar_update');
     },
     updateBadgeTooltip() {
       const v = this.updateVersion ? `v${this.updateVersion}` : '';
-      if (this.updateStep === 'downloading') return `Baixando atualização ${v}...`;
-      if (this.updateStep === 'downloaded') return `Atualização ${v} pronta — clique para instalar`;
-      return `Atualização ${v} disponível — clique para ver detalhes`;
+      if (this.updateStep === 'downloading') return this.$t('components.app_update.bar_downloading', { version: v });
+      if (this.updateStep === 'downloaded') return this.$t('components.app_update.bar_ready', { version: v });
+      return this.$t('components.app_update.bar_available', { version: v });
     },
     activeModuleTitle() {
       const modules = this.$appdata.get("modules") || {};

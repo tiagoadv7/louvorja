@@ -16,12 +16,12 @@
             <v-icon size="20">mdi-folder-sync-outline</v-icon>
           </v-avatar>
           <div>
-            <div class="text-subtitle-2 font-weight-bold">Sincronizar arquivos</div>
-            <div class="text-caption text-medium-emphasis">Verificação de integridade da coletânea</div>
+            <div class="text-subtitle-2 font-weight-bold">{{ $t('components.file_check.title') }}</div>
+            <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.subtitle') }}</div>
           </div>
         </div>
         <div v-if="step === 'downloading'" class="d-flex align-center">
-          <v-btn icon="mdi-window-minimize" variant="text" size="small" density="comfortable" title="Continuar em segundo plano" @click="minimizeDownload" />
+          <v-btn icon="mdi-window-minimize" variant="text" size="small" density="comfortable" :title="$t('components.file_check.continue_bg')" @click="minimizeDownload" />
         </div>
         <v-btn v-else icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
       </div>
@@ -34,25 +34,25 @@
           <!-- Barra de estatísticas (apenas nos passos com dados) -->
           <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center flex-wrap ga-2 px-4 py-2">
             <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle-outline">
-              Encontrados: <strong class="ml-1">{{ foundFiles }}</strong>
+              {{ $t('components.file_check.found') }}: <strong class="ml-1">{{ foundFiles }}</strong>
             </v-chip>
             <v-chip size="small" :color="totalMissing > 0 ? 'error' : 'success'" variant="tonal"
                     :prepend-icon="totalMissing > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-all'">
-              Em falta: <strong class="ml-1">{{ totalMissing }}</strong>
+              {{ $t('components.file_check.missing') }}: <strong class="ml-1">{{ totalMissing }}</strong>
             </v-chip>
             <template v-if="stats">
               <v-chip v-if="stats.audio.missing > 0" size="x-small" color="warning" variant="tonal" prepend-icon="mdi-music">
-                {{ stats.audio.missing }} áudio(s)
+                {{ $t('components.file_check.audio_count', { count: stats.audio.missing }) }}
               </v-chip>
               <v-chip v-if="stats.cover.missing + stats.image.missing > 0" size="x-small" color="secondary" variant="tonal" prepend-icon="mdi-image-outline">
-                {{ stats.cover.missing + stats.image.missing }} imagem(ns)
+                {{ $t('components.file_check.image_count', { count: stats.cover.missing + stats.image.missing }) }}
               </v-chip>
             </template>
             <v-spacer />
             <span class="text-caption text-medium-emphasis">
-              {{ totalScanned }} álbum(s) · {{ totalFiles }} arquivo(s)
-              <template v-if="albumsOK > 0"> · {{ albumsOK }} ok</template>
-              <template v-if="albumsWithIssues > 0"> · {{ albumsWithIssues }} incompleto(s)</template>
+              {{ $t('components.file_check.album_summary', { albums: totalScanned, files: totalFiles }) }}
+              <template v-if="albumsOK > 0">{{ $t('components.file_check.ok_count', { count: albumsOK }) }}</template>
+              <template v-if="albumsWithIssues > 0">{{ $t('components.file_check.incomplete_count', { count: albumsWithIssues }) }}</template>
             </span>
           </div>
 
@@ -61,11 +61,11 @@
             <div class="fcd-scan-ring mb-5">
               <v-icon size="40" color="primary">mdi-folder-search-outline</v-icon>
             </div>
-            <div class="text-body-1 font-weight-semibold mb-1">Verificando arquivos locais...</div>
+            <div class="text-body-1 font-weight-semibold mb-1">{{ $t('components.file_check.scanning') }}</div>
             <div v-if="scanAlbum.total > 0" class="text-caption text-medium-emphasis mb-2 text-center" style="max-width:320px">
               {{ scanAlbum.current }}/{{ scanAlbum.total }} — {{ scanAlbum.name }}
             </div>
-            <div v-else class="text-caption text-medium-emphasis mb-2">Isso pode levar alguns segundos</div>
+            <div v-else class="text-caption text-medium-emphasis mb-2">{{ $t('components.file_check.scanning_hint') }}</div>
             <v-progress-linear
               :indeterminate="scanAlbum.total === 0"
               :model-value="scanAlbum.total > 0 ? Math.round((scanAlbum.current / scanAlbum.total) * 100) : 0"
@@ -77,17 +77,17 @@
           <template v-else-if="step === 'results'">
             <!-- Toolbar de seleção -->
             <div class="fcd-toolbar d-flex align-center px-4 py-2" style="gap: 12px">
-              <span class="text-caption text-medium-emphasis">Selecionar:</span>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-check-all" @click="selectAll">Todos</v-btn>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">Nenhum</v-btn>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">Inverter</v-btn>
+              <span class="text-caption text-medium-emphasis">{{ $t('components.file_check.select_label') }}</span>
+              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-check-all" @click="selectAll">{{ $t('components.file_check.select_all') }}</v-btn>
+              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">{{ $t('components.file_check.select_none') }}</v-btn>
+              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">{{ $t('components.file_check.select_invert') }}</v-btn>
               <v-spacer />
               <v-btn-toggle v-model="viewMode" color="primary" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4 fcd-view-toggle">
-                <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="'Agrupado por álbum'" />
-                <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="'Lista simples'" />
+                <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="$t('components.file_check.view_grouped')" />
+                <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="$t('components.file_check.view_flat')" />
               </v-btn-toggle>
               <v-chip size="small" color="primary" variant="tonal" prepend-icon="mdi-check">
-                {{ selectedCount }} / {{ fileList.length }} selecionado(s)
+                {{ $t('components.file_check.selected_count', { count: selectedCount, total: fileList.length }) }}
               </v-chip>
             </div>
             <v-divider />
@@ -108,10 +108,10 @@
                       </v-icon>
                       <span class="text-body-2 font-weight-medium text-truncate flex-grow-1">{{ album.name }}</span>
                       <v-chip size="x-small" color="error" variant="tonal" class="mx-2 flex-shrink-0">
-                        {{ album.missing }} em falta
+                        {{ $t('components.file_check.album_missing', { count: album.missing }) }}
                       </v-chip>
                       <span class="text-caption text-medium-emphasis flex-shrink-0 me-2">
-                        {{ album.foundFiles }}/{{ album.totalFiles }} arquivo(s)
+                        {{ $t('components.file_check.album_files', { found: album.foundFiles, total: album.totalFiles }) }}
                       </span>
                     </template>
                   </v-expansion-panel-title>
@@ -143,7 +143,7 @@
                       </div>
                       <div class="fcd-col-status">
                         <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
-                          {{ item.type === 'audio' ? 'áudio' : item.type === 'cover' ? 'capa' : 'imagem' }}
+                          {{ item.type === 'audio' ? $t('components.file_check.type_audio') : item.type === 'cover' ? $t('components.file_check.type_cover') : $t('components.file_check.type_image') }}
                         </v-chip>
                       </div>
                     </div>
@@ -157,9 +157,9 @@
               <!-- Cabeçalho da lista -->
               <div class="fcd-list-header">
                 <div class="fcd-col-check" />
-                <div class="fcd-col-name">Arquivo</div>
-                <div class="fcd-col-dir">Localização</div>
-                <div class="fcd-col-status">Tipo</div>
+                <div class="fcd-col-name">{{ $t('components.file_check.col_file') }}</div>
+                <div class="fcd-col-dir">{{ $t('components.file_check.col_location') }}</div>
+                <div class="fcd-col-status">{{ $t('components.file_check.col_type') }}</div>
               </div>
 
               <!-- Linhas (virtual scroll) -->
@@ -190,7 +190,7 @@
                     </div>
                     <div class="fcd-col-status">
                       <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
-                        {{ item.type === 'audio' ? 'áudio' : item.type === 'cover' ? 'capa' : 'imagem' }}
+                        {{ item.type === 'audio' ? $t('components.file_check.type_audio') : item.type === 'cover' ? $t('components.file_check.type_cover') : $t('components.file_check.type_image') }}
                       </v-chip>
                     </div>
                   </div>
@@ -204,29 +204,29 @@
             <v-avatar color="success" variant="tonal" size="72" class="mb-4">
               <v-icon size="40">mdi-check-circle-outline</v-icon>
             </v-avatar>
-            <div class="text-body-2 text-medium-emphasis mb-6">Todos os arquivos da coletânea estão presentes.</div>
+            <div class="text-body-2 text-medium-emphasis mb-6">{{ $t('components.file_check.all_good') }}</div>
             <div class="d-flex ga-6">
               <div class="text-center">
                 <div class="text-h4 font-weight-black text-primary">{{ totalScanned }}</div>
-                <div class="text-caption text-medium-emphasis">álbuns</div>
+                <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.stat_albums') }}</div>
               </div>
               <v-divider vertical />
               <div class="text-center">
                 <div class="text-h4 font-weight-black text-success">{{ totalFiles }}</div>
-                <div class="text-caption text-medium-emphasis">arquivos</div>
+                <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.stat_files') }}</div>
               </div>
               <template v-if="stats && stats.audio.found > 0">
                 <v-divider vertical />
                 <div class="text-center">
                   <div class="text-h4 font-weight-black text-warning">{{ stats.audio.found }}</div>
-                  <div class="text-caption text-medium-emphasis">áudios</div>
+                  <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.stat_audios') }}</div>
                 </div>
               </template>
               <template v-if="stats && (stats.cover.found + stats.image.found) > 0">
                 <v-divider vertical />
                 <div class="text-center">
                   <div class="text-h4 font-weight-black text-secondary">{{ stats.cover.found + stats.image.found }}</div>
-                  <div class="text-caption text-medium-emphasis">imagens</div>
+                  <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.stat_images') }}</div>
                 </div>
               </template>
             </div>
@@ -237,7 +237,7 @@
             <div class="d-flex align-center ga-5 mb-6">
               <v-progress-circular size="42" width="3" indeterminate color="primary" />
               <div class="flex-grow-1 min-w-0">
-                <div class="text-body-2 font-weight-semibold mb-2">Baixando arquivos...</div>
+                <div class="text-body-2 font-weight-semibold mb-2">{{ $t('components.file_check.downloading') }}</div>
                 <div class="text-caption text-medium-emphasis text-truncate">{{ dlMessage }}</div>
               </div>
               <div class="text-right flex-shrink-0">
@@ -257,9 +257,9 @@
             <v-avatar color="success" variant="tonal" size="72" class="mb-4">
               <v-icon size="40">mdi-download-circle-outline</v-icon>
             </v-avatar>
-            <div class="text-h6 font-weight-bold mb-1">Download concluído!</div>
+            <div class="text-h6 font-weight-bold mb-1">{{ $t('components.file_check.done_title') }}</div>
             <div class="text-body-2 text-medium-emphasis">
-              {{ dlTotal }} arquivo(s) processado(s) com sucesso.
+              {{ $t('components.file_check.done_text', { count: dlTotal }) }}
             </div>
           </v-card-text>
 
@@ -282,22 +282,22 @@
             :disabled="selectedCount === 0"
             @click="startDownload"
           >
-            Baixar {{ selectedCount === 1 ? 'selecionado' : 'selecionados' }} ({{ selectedCount }})
+            {{ selectedCount === 1 ? $t('components.file_check.download_one', { count: selectedCount }) : $t('components.file_check.download_many', { count: selectedCount }) }}
           </v-btn>
           <v-divider vertical style="height:28px; align-self:center" />
           <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
-            Verificar novamente
+            {{ $t('components.file_check.rescan') }}
           </v-btn>
           <v-divider vertical style="height:28px; align-self:center" />
-          <v-btn variant="text" size="small" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
+          <v-btn variant="text" size="small" class="px-5" prepend-icon="mdi-close" @click="close">{{ $t('components.file_check.close') }}</v-btn>
         </template>
 
         <template v-else-if="step === 'all-good' || step === 'done'">
           <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
-            Verificar novamente
+            {{ $t('components.file_check.rescan') }}
           </v-btn>
           <v-divider vertical style="height:28px; align-self:center" />
-          <v-btn size="small" color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">Fechar</v-btn>
+          <v-btn size="small" color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">{{ $t('components.file_check.close') }}</v-btn>
         </template>
       </div>
 
@@ -311,7 +311,7 @@
       v-if="showPill"
       type="button"
       class="fcd-pill"
-      :title="dlDoneInBackground ? 'Download concluído' : 'Baixando arquivos em segundo plano'"
+      :title="dlDoneInBackground ? $t('components.file_check.pill_done_title') : $t('components.file_check.pill_running_title')"
       @click="restore"
     >
       <v-progress-circular
@@ -320,7 +320,7 @@
         :model-value="dlDoneInBackground ? 100 : dlPercent"
         :color="dlDoneInBackground ? 'success' : 'primary'"
       />
-      <span>{{ dlDoneInBackground ? 'Concluído' : `${dlPercent}%` }}</span>
+      <span>{{ dlDoneInBackground ? $t('components.file_check.pill_done') : `${dlPercent}%` }}</span>
     </button>
   </transition>
 </template>
@@ -626,7 +626,7 @@ export default {
       this.dlTotal    = items.length;
       this.dlCurrent  = 0;
       this.dlPercent  = 0;
-      this.dlMessage  = 'Iniciando...';
+      this.dlMessage  = this.$t('components.file_check.starting');
       this.dlFileSize = '';
       this.dlSpeed    = '';
       this.step       = 'downloading';

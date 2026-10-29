@@ -30,15 +30,15 @@
     <div v-if="step === 'available' || step === 'downloaded'" class="d-flex justify-end ga-2 mt-4">
       <template v-if="step === 'available'">
         <v-btn size="small" variant="text" color="white" class="px-2" @click="openDialog">
-          Detalhes
+          {{ $t('components.app_update.action_details') }}
         </v-btn>
         <v-btn size="small" variant="flat" color="white" class="text-primary px-3" @click="startDownload">
-          Baixar
+          {{ $t('components.app_update.action_download') }}
         </v-btn>
       </template>
       <template v-else-if="step === 'downloaded'">
         <v-btn size="small" variant="flat" color="white" class="text-primary px-3" @click="install">
-          Instalar
+          {{ $t('components.app_update.action_install') }}
         </v-btn>
       </template>
     </div>
@@ -84,21 +84,21 @@
           color="primary"
           hide-details
           density="compact"
-          label="Usar versões beta (pré-release)"
+          :label="$t('components.app_update.opt_beta')"
         />
         <v-checkbox
           v-model="autoCheck"
           color="primary"
           hide-details
           density="compact"
-          label="Verificar novas versões ao iniciar"
+          :label="$t('components.app_update.opt_check')"
         />
         <v-checkbox
           v-model="autoDownload"
           color="primary"
           hide-details
           density="compact"
-          label="Baixar atualizações automaticamente"
+          :label="$t('components.app_update.opt_auto')"
         />
       </v-card-text>
       <v-divider />
@@ -106,7 +106,7 @@
       <!-- ── Verificando ── -->
       <v-card-text v-if="step === 'checking'" class="d-flex flex-column align-center py-6 ga-5">
           <v-progress-circular indeterminate color="primary" size="52" width="4" />
-          <div class="text-body-2 text-medium-emphasis">Verificando atualizações...</div>
+          <div class="text-body-2 text-medium-emphasis">{{ $t('components.app_update.checking') }}</div>
         </v-card-text>
 
         <!-- ── Sem atualização ── -->
@@ -115,9 +115,9 @@
             <v-icon size="40">mdi-check-circle-outline</v-icon>
           </v-avatar>
           <div class="text-center">
-            <div class="text-h6 font-weight-bold">Você está atualizado!</div>
+            <div class="text-h6 font-weight-bold">{{ $t('components.app_update.uptodate_title') }}</div>
             <div class="text-body-2 text-medium-emphasis mt-1">
-              A versão instalada (<strong>v{{ currentVersion }}</strong>) já é a mais recente disponível.
+              {{ $t('components.app_update.uptodate_text', { version: 'v' + currentVersion }) }}
             </div>
           </div>
         </v-card-text>
@@ -130,7 +130,7 @@
           <v-chip size="x-large" color="primary" variant="tonal" class="text-h6 font-weight-black px-10">
             v{{ updateInfo?.version || '?' }}
           </v-chip>
-          <div class="text-caption text-medium-emphasis mt-2">Nova versão disponível</div>
+          <div class="text-caption text-medium-emphasis mt-2">{{ $t('components.app_update.new_version') }}</div>
         </v-card-text>
 
         <!-- ── Pronto para instalar ── -->
@@ -139,10 +139,10 @@
             <v-icon size="40">mdi-download-circle-outline</v-icon>
           </v-avatar>
           <div class="text-center">
-            <div class="text-h6 font-weight-bold">Pronta para instalar!</div>
+            <div class="text-h6 font-weight-bold">{{ $t('components.app_update.ready_title') }}</div>
             <div class="text-body-2 text-medium-emphasis mt-1">
-              Versão <strong>v{{ updateInfo?.version }}</strong> foi baixada.<br>
-              {{ autoDownload ? 'Será instalada automaticamente ao fechar o programa.' : 'O app será reiniciado para concluir a instalação.' }}
+              {{ $t('components.app_update.ready_text', { version: 'v' + updateInfo?.version }) }}<br>
+              {{ autoDownload ? $t('components.app_update.auto_install_note') : $t('components.app_update.restart_note') }}
             </div>
           </div>
         </v-card-text>
@@ -153,10 +153,10 @@
             <v-icon size="40">mdi-alert-circle-outline</v-icon>
           </v-avatar>
           <div class="text-center px-4">
-            <div class="text-h6 font-weight-bold">Erro ao baixar atualização</div>
+            <div class="text-h6 font-weight-bold">{{ $t('components.app_update.error_title') }}</div>
             <div class="text-body-2 text-medium-emphasis mt-2">{{ errorMessage }}</div>
             <v-btn size="small" variant="text" color="primary" class="mt-3" prepend-icon="mdi-open-in-new" @click="openReleasePage">
-              Baixar manualmente pelo navegador
+              {{ $t('components.app_update.manual_download') }}
             </v-btn>
           </div>
         </v-card-text>
@@ -176,22 +176,22 @@
       </v-card-actions>
       <v-card-actions v-else class="px-5 py-3 justify-end" style="gap:12px">
         <template v-if="step === 'checking'">
-          <v-btn variant="text" @click="dialog = false">Cancelar</v-btn>
+          <v-btn variant="text" @click="dialog = false">{{ $t('components.app_update.action_cancel') }}</v-btn>
         </template>
         <template v-else-if="step === 'available'">
-          <v-btn variant="text" @click="dialog = false">Mais tarde</v-btn>
+          <v-btn variant="text" @click="dialog = false">{{ $t('components.app_update.action_later') }}</v-btn>
           <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-download" @click="startDownload">
-            Baixar agora
+            {{ $t('components.app_update.action_download_now') }}
           </v-btn>
         </template>
         <template v-else-if="step === 'downloaded'">
-          <v-btn variant="text" @click="dialog = false">Mais tarde</v-btn>
+          <v-btn variant="text" @click="dialog = false">{{ $t('components.app_update.action_later') }}</v-btn>
           <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-restart" @click="install">
-            Instalar e reiniciar
+            {{ $t('components.app_update.action_install_restart') }}
           </v-btn>
         </template>
         <template v-else>
-          <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="dialog = false">Fechar</v-btn>
+          <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="dialog = false">{{ $t('components.app_update.action_close') }}</v-btn>
         </template>
       </v-card-actions>
 
@@ -243,16 +243,16 @@ export default {
       return 'mdi-information-outline';
     },
     snackTitle() {
-      if (this.step === 'available')   return 'Nova versão disponível';
-      if (this.step === 'downloading') return `Baixando atualização — ${this.downloadPercent}%`;
-      if (this.step === 'downloaded')  return 'Pronta para instalar';
-      if (this.step === 'error')       return this.errorMessage || 'Erro ao baixar a atualização';
+      if (this.step === 'available')   return this.$t('components.app_update.new_version');
+      if (this.step === 'downloading') return this.$t('components.app_update.snack_downloading', { percent: this.downloadPercent });
+      if (this.step === 'downloaded')  return this.$t('components.app_update.snack_ready');
+      if (this.step === 'error')       return this.errorMessage || this.$t('components.app_update.error_default');
       return '';
     },
     snackSubtitle() {
       if (this.step === 'available')   return `v${this.updateInfo?.version || '?'}`;
       if (this.step === 'downloading') return this.downloadStatus;
-      if (this.step === 'downloaded')  return `v${this.updateInfo?.version} — reinicie para instalar`;
+      if (this.step === 'downloaded')  return this.$t('components.app_update.snack_restart', { version: this.updateInfo?.version });
       return '';
     },
 
@@ -281,19 +281,19 @@ export default {
     },
     dialogTitle() {
       const map = {
-        checking:       'Verificando atualizações',
-        available:      'Atualização disponível',
-        downloading:    'Baixando atualização',
-        downloaded:     'Atualização pronta',
-        'not-available': 'Verificar atualizações',
-        error:          'Erro ao baixar atualização',
+        checking:       'components.app_update.title_checking',
+        available:      'components.app_update.title_available',
+        downloading:    'components.app_update.title_downloading',
+        downloaded:     'components.app_update.title_downloaded',
+        'not-available': 'components.app_update.title_not_available',
+        error:          'components.app_update.title_error',
       };
-      return map[this.step] || 'Atualizações';
+      return this.$t(map[this.step] || 'components.app_update.title_default');
     },
     dialogSubtitle() {
-      if (this.step === 'available')  return `v${this.updateInfo?.version || '?'} disponível para download`;
-      if (this.step === 'downloaded') return `v${this.updateInfo?.version || '?'} pronta para instalar`;
-      return `Versão atual: ${this.currentVersion}`;
+      if (this.step === 'available')  return this.$t('components.app_update.sub_available', { version: this.updateInfo?.version || '?' });
+      if (this.step === 'downloaded') return this.$t('components.app_update.sub_downloaded', { version: this.updateInfo?.version || '?' });
+      return this.$t('components.app_update.sub_current', { version: this.currentVersion });
     },
   },
 
@@ -415,13 +415,13 @@ export default {
         // Promise resolver — isso aqui é só uma rede de segurança caso, por
         // algum motivo, nenhum estado tenha chegado.
         if (result && result.ok === false && this.step !== 'error') {
-          this.errorMessage = result.error || 'Erro ao baixar a atualização.';
+          this.errorMessage = result.error || this.$t('components.app_update.error_default');
           this.step = 'error';
         }
       } catch (_) {
         if (this.step !== 'error') {
           this.step = 'error';
-          if (!this.errorMessage) this.errorMessage = 'Erro ao baixar a atualização.';
+          if (!this.errorMessage) this.errorMessage = this.$t('components.app_update.error_default');
         }
       }
     },
