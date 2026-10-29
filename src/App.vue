@@ -140,8 +140,13 @@ export default {
     //    só roda de novo se houver nova versão do banco de dados (ver onDbUpdateSyncRequested) ou
     //    manualmente via "Sincronizar arquivos" no menu (fileCheck.open(true)).
     //    Delay maior para garantir que o router e os refs estão prontos.
+    // Em espanhol roda em toda abertura, para checar o hinário e os álbuns em espanhol
+    // (cantado + playback, ver scripts/import-hinario-es.mjs). Igual ao português: a
+    // varredura silenciosa só abre o diálogo se houver algo faltando, e o download
+    // começa só depois da confirmação.
+    const isSpanish = (this.$i18n?.locale?.value || this.$i18n?.locale) === 'es';
     this.$electron.storeGet('startup_file_check_done', false)
-      .then(done => { if (!done) this.scheduleStartupFileCheck(); })
+      .then(done => { if (!done || isSpanish) this.scheduleStartupFileCheck(); })
       .catch(() => this.scheduleStartupFileCheck());
 
     // 4. Verifica atualização do banco SQLite via API (após 6s para não competir com o
