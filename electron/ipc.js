@@ -4,6 +4,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const Store = require('./store');
 const sqliteReader = require('./sqlite-reader');
+const { refreshHymnalEs } = require('./hymnal-es-sync');
 
 // GUI empacotada sem terminal anexado — sem isso, uma falha real do check de
 // atualização do banco SQLite (ver 'sqlite:check-db-update'/'sqlite:apply-db-update'
@@ -2591,6 +2592,23 @@ document.getElementById('f').onsubmit=async(e)=>{
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });
     const isSpanishAlbumFile = (f) => /^album_9\d{3,4}\.json$/.test(f);
+
+    // Hinário em espanhol: antes de varrer, atualiza o catálogo a partir da API
+    // (ver electron/hymnal-es-sync.js). Falha de rede não impede a verificação.
+    if (scope === 'es' && dbBaseUrl) {
+      try {
+        const sync = await refreshHymnalEs({
+          dbDir: getDbDir(),
+          apiDbBase: `${new URL(dbBaseUrl).origin}/db`,
+          token,
+          fetch: (url, init) => require('electron').net.fetch(url, init),
+        });
+        if (!sync.ok) console.warn('[IPC] catálogo espanhol não atualizado:', sync.error);
+        else if (sync.changed) console.log(`[IPC] catálogo espanhol atualizado: ${sync.changed} hino(s)`);
+      } catch (e) {
+        console.warn('[IPC] catálogo espanhol:', e.message);
+      }
+    }
 
     // ── Emite progresso e cede controle ────────────────────────────────────
     const sendProgress = async (current, total, albumName) => {
