@@ -105,12 +105,34 @@ function githubRequest(method, urlPath, body) {
   });
 }
 
-/** Compara versões semver básicas (a.b.c). Retorna >0 se a>b. */
+/**
+ * Compara versões com sufixo de beta (ex.: "v1.28.9-beta.12.7" e "1.28.9-beta.13").
+ * Retorna >0 se a>b. A parte "a.b.c" compara número a número; sem sufixo a versão
+ * é maior que a beta do mesmo "a.b.c"; no sufixo, cada parte compara como número.
+ */
 function compareVersions(a, b) {
-  const pa = String(a).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const split = (v) => {
+    const [main, pre] = String(v).replace(/^v/, '').split(/-(.*)/);
+    return { main: main.split('.').map((n) => parseInt(n, 10) || 0), pre: pre ? pre.split('.') : null };
+  };
+  const va = split(a);
+  const vb = split(b);
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+    if ((va.main[i] || 0) !== (vb.main[i] || 0)) return (va.main[i] || 0) - (vb.main[i] || 0);
+  }
+  if (!va.pre || !vb.pre) return (va.pre ? 0 : 1) - (vb.pre ? 0 : 1);
+  for (let i = 0; i < Math.max(va.pre.length, vb.pre.length); i++) {
+    const x = va.pre[i];
+    const y = vb.pre[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x) ? Number(x) : NaN;
+    const ny = /^\d+$/.test(y) ? Number(y) : NaN;
+    if (!Number.isNaN(nx) && !Number.isNaN(ny)) {
+      if (nx !== ny) return nx - ny;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
   }
   return 0;
 }
@@ -178,7 +200,7 @@ async function buildChangelog(repoInfo) {
   }
 
   const previous = releases
-    .filter((r) => r && !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name) && r.tag_name !== tag)
+    .filter((r) => r && !r.draft && /^v\d+\.\d+\.\d+(-[\w.]+)?$/.test(r.tag_name) && r.tag_name !== tag)
     .sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
   if (!previous) {
     console.warn('[publish] Nenhuma release anterior encontrada — changelog não gerado.');
