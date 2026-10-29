@@ -311,12 +311,22 @@
     // num navegador, pra testar/ajustar o visual) não existe
     // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
     // nenhum.
-    if (window.loadingBridge && window.loadingBridge.onShown) {
-      window.loadingBridge.onShown(function () {
-        document.body.classList.add('visible');
-      });
-    } else {
+    // Libera as animações e recomeça todas do zero. Se a janela ficou escondida
+    // um tempo, o relógio delas já andou e a entrada (letras, barra) aparecia
+    // pronta. Só age na primeira vez: o reenvio do did-finish-load não pode
+    // reiniciar a entrada no meio.
+    function reveal() {
+      if (document.body.classList.contains('visible')) return;
       document.body.classList.add('visible');
+      document.getAnimations().forEach(function (a) {
+        a.currentTime = 0;
+        a.play();
+      });
+    }
+    if (window.loadingBridge && window.loadingBridge.onShown) {
+      window.loadingBridge.onShown(reveal);
+    } else {
+      reveal();
     }
   </script>
 </body>
