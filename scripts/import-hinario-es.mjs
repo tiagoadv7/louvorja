@@ -1,10 +1,11 @@
-// Baixa o áudio do Himnario Adventista (espanhol) da API e grava os music_<id>.json
+// Baixa os áudios do Himnario Adventista (espanhol) e grava os music_<id>.json
 // que o módulo de hinário usa pra tocar e mostrar a letra.
 //
-// Os nomes dos arquivos no servidor nem sempre batem com o título do hino
-// (acentos, ñ, maiúsculas, ¡ ¿), então cada hino testa algumas variantes até achar
-// uma que responda 200. Sem áudio no servidor, o music_<id>.json é gravado mesmo
-// assim (só com a letra), pra o hino continuar abrindo.
+// A API é a fonte da verdade: cada hino tem em /db/music_<id> as URLs exatas do
+// cantado (url_music, .opus) e do playback (url_instrumental_music, "- PB.mp3").
+// Os nomes dos arquivos não são o título do hino (ñ, acentos e pontuação saem),
+// então nada é adivinhado aqui. Nenhum áudio é baixado: o music_<id>.json guarda
+// as URLs da API e o player toca direto do servidor (cantado e playback).
 //
 // Uso: node scripts/import-hinario-es.mjs <pasta de dados do app>
 
@@ -17,47 +18,13 @@ if (!appDataDir) {
   process.exit(1);
 }
 
-const API_BASE = "https://files.louvorja.com.br/musics/es/Himnario%20Adventista/";
+const API_DB = "https://api.louvorja.com.br/db";
 const FOLDER = "Himnario Adventista";
 const DB_DIR = path.join(appDataDir, "db");
-const AUDIO_DIR = path.join(appDataDir, "config", "musicas", FOLDER);
 const DEFAULT_LYRIC_IMAGE = "app-local://imagens/generico_116.jpg";
 const CONCURRENCY = 10;
 
 const hymnal = JSON.parse(fs.readFileSync(path.join(DB_DIR, "es_hymnal.json"), "utf8"));
-fs.mkdirSync(AUDIO_DIR, { recursive: true });
-
-const strip = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
-const sentenceCase = (s) => s.toLowerCase().replace(/^(\S)/, (c) => c.toUpperCase());
-
-function candidates(title) {
-  const out = new Set();
-  for (const base of new Set([title, title.replace(/[¡¿]/g, "").trim()])) {
-    for (const v of [base, strip(base), base.replace(/[ñ]/g, "n").replace(/[Ñ]/g, "N")]) {
-      out.add(v);
-      out.add(sentenceCase(v));
-    }
-  }
-  return [...out];
-}
-
-async function exists(name) {
-  const url = API_BASE + encodeURIComponent(name) + ".opus";
-  try {
-    const r = await fetch(url, { method: "HEAD" });
-    return r.ok ? url : null;
-  } catch {
-    return null;
-  }
-}
-
-async function findRemote(title) {
-  for (const name of candidates(title)) {
-    const url = await exists(name);
-    if (url) return { name, url };
-  }
-  return null;
-}
 
 async function pool(items, worker, size) {
   const results = new Array(items.length);
@@ -71,6 +38,14 @@ async function pool(items, worker, size) {
     }),
   );
   return results;
+}
+
+// Registro do hino na API: URLs dos dois áudios e tempo do playback.
+async function fetchMusic(id) {
+  const r = await fetch(`${API_DB}/music_${id}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const { data } = await r.json();
+  return data || null;
 }
 
 function hmsToSeconds(hms) {
@@ -93,34 +68,23 @@ function stanzas(text) {
   return parts.length ? parts : [""];
 }
 
-console.log(`Procurando áudio de ${hymnal.length} hinos...`);
-const found = await pool(hymnal, (h) => findRemote(h.name), CONCURRENCY);
-const withAudio = hymnal.map((h, i) => ({ h, remote: found[i] })).filter((x) => x.remote);
-console.log(`Encontrados no servidor: ${withAudio.length} de ${hymnal.length}`);
-
-console.log("Baixando áudios...");
-const failed = [];
-async function download({ remote }) {
-  const dst = path.join(AUDIO_DIR, `${remote.name}.opus`);
-  if (fs.existsSync(dst)) return;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const r = await fetch(remote.url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      fs.writeFileSync(dst, Buffer.from(await r.arrayBuffer()));
-      return;
-    } catch (err) {
-      if (attempt === 3) failed.push(`${remote.name}: ${err.message}`);
-    }
+console.log(`Consultando a API para ${hymnal.length} hinos...`);
+const records = await pool(hymnal, async (h) => {
+  try {
+    return await fetchMusic(h.id_music);
+  } catch (err) {
+    console.log(`  [${h.id_music}] ${h.name}: ${err.message}`);
+    return null;
   }
-}
-await pool(withAudio, download, CONCURRENCY);
-if (failed.length) console.log(`Falhas no download (${failed.length}):\n  ${failed.join("\n  ")}`);
+}, CONCURRENCY);
+const byId = new Map(hymnal.map((h, i) => [h.id_music, records[i]]));
 
-const audioById = new Map(withAudio.map(({ h, remote }) => [h.id_music, remote]));
+const sungCount = records.filter((r) => r?.url_music).length;
+const pbCount = records.filter((r) => r?.url_instrumental_music).length;
+console.log(`Na API: ${sungCount} cantados e ${pbCount} playbacks de ${hymnal.length} hinos`);
 
 for (const h of hymnal) {
-  const remote = audioById.get(h.id_music);
+  const remote = byId.get(h.id_music);
   const parts = stanzas(h.lyric);
   const duration = h.duration || "00:00:00";
   const total = hmsToSeconds(duration);
@@ -149,8 +113,8 @@ for (const h of hymnal) {
       instrumental_duration: duration,
       url_image: DEFAULT_LYRIC_IMAGE,
       image_position: null,
-      url_music: remote ? remote.url : "",
-      url_instrumental_music: "",
+      url_music: remote?.url_music || "",
+      url_instrumental_music: remote?.url_instrumental_music || "",
       lyric,
       albums: [],
     }),
@@ -159,7 +123,8 @@ for (const h of hymnal) {
 }
 
 // Álbum do hinário (id 9000, fora de categorias): é o que o verificador de arquivos
-// lê pra conferir e baixar os áudios faltantes em config/musicas/es/Himnario Adventista.
+// lê pra conferir e baixar os áudios faltantes em config/musicas/<pasta do hinário>.
+// Lista os dois arquivos de cada hino: cantado (.opus) e playback (- PB.mp3).
 fs.writeFileSync(
   path.join(DB_DIR, "album_9000.json"),
   JSON.stringify({
@@ -172,7 +137,7 @@ fs.writeFileSync(
     musics: hymnal.map((h, i) => ({
       id_music: h.id_music,
       name: h.name,
-      has_instrumental_music: 0,
+      has_instrumental_music: h.has_instrumental_music ?? 0,
       duration: h.duration || "00:00:00",
       track: i + 1,
     })),
@@ -180,4 +145,4 @@ fs.writeFileSync(
   "utf8",
 );
 
-console.log(`Pronto: ${hymnal.length} music_<id>.json gravados, ${withAudio.length} com áudio em ${AUDIO_DIR}`);
+console.log(`Pronto: ${hymnal.length} music_<id>.json gravados em ${DB_DIR} (áudio direto da API)`);
