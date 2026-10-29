@@ -2171,7 +2171,7 @@ function setupIpc(mainWindow) {
   // único "database.db" baixável por HTTP na API real (confirmado: HEAD/GET
   // em `${dbBaseUrl}/database.db` sempre voltam 404) — o contrato real é
   // `${origin}/params?type=env`, que devolve um texto "chave=valor" por linha
-  // incluindo `db_version=<inteiro>`. Deriva o "origin" a partir de
+  // incluindo `https_db_version=<inteiro>` (ver o parser abaixo). Deriva o "origin" a partir de
   // dbBaseUrl (que aponta pra .../json_db) em vez de um novo env var.
   //
   // Reexecuta algumas vezes antes de desistir: updater.log mostrado em
@@ -2194,9 +2194,12 @@ function setupIpc(mainWindow) {
       const resp = await fetchWithTimeout(url, {}, 15000).catch((e) => { lastErr = e; return null; });
       if (resp && resp.ok) {
         const text = await resp.text();
-        const match = text.match(/^db_version=(\d+)/m);
+        // https_db_version é a versão do database.db publicado: é a mesma chave que
+        // o LouvorJA Delphi compara (configweb.ja guarda https_db_version=185 e avisa
+        // quando o servidor passa disso). db_version fica só de fallback.
+        const match = text.match(/^https_db_version=(\d+)/m) || text.match(/^db_version=(\d+)/m);
         if (match) return { ok: true, version: parseInt(match[1], 10) };
-        lastErr = new Error('db_version não encontrado na resposta');
+        lastErr = new Error('https_db_version/db_version não encontrado na resposta');
       } else if (resp) {
         lastErr = new Error(`HTTP ${resp.status}`);
       }
