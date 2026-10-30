@@ -6,21 +6,6 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* Todas as animações desta página ficam PAUSADAS (congeladas antes
-       mesmo da contagem do delay começar) até o <body> ganhar a classe
-       "visible" -- ver o <script> no fim do arquivo, que só adiciona essa
-       classe quando o processo main avisa (via loading-preload.js) que a
-       janela apareceu DE VERDADE na tela. Sem isso, as animações corriam
-       desde o carregamento da página (a janela nasce com show:false,
-       escondida) -- num boot mais lento, a entrada inteira (cascata de
-       letras, barra crescendo, anel girando) podia já ter acabado escondida
-       antes do usuário ver a janela, sobrando só o resultado parado. */
-    body:not(.visible) *,
-    body:not(.visible) *::before,
-    body:not(.visible) *::after {
-      animation-play-state: paused !important;
-    }
-
     html, body {
       width: 100%;
       height: 100%;
@@ -311,22 +296,23 @@
     // num navegador, pra testar/ajustar o visual) não existe
     // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
     // nenhum.
-    // Libera as animações e recomeça todas do zero. Se a janela ficou escondida
-    // um tempo, o relógio delas já andou e a entrada (letras, barra) aparecia
-    // pronta. Só age na primeira vez: o reenvio do did-finish-load não pode
-    // reiniciar a entrada no meio.
-    function reveal() {
-      if (document.body.classList.contains('visible')) return;
-      document.body.classList.add('visible');
+    // As animações rodam desde o carregamento. Quando a janela aparece de verdade
+    // (sinal do processo main, via loading-preload.js), recomeçam do zero: se ela
+    // ficou escondida um tempo, o relógio delas já andou e a entrada (letras,
+    // barra) aparecia pronta. Só age na primeira vez, para o reenvio do
+    // did-finish-load não reiniciar a entrada no meio. Se o sinal se perder, o
+    // nome continua animando normalmente.
+    var restarted = false;
+    function restartAnimations() {
+      if (restarted) return;
+      restarted = true;
       document.getAnimations().forEach(function (a) {
         a.currentTime = 0;
         a.play();
       });
     }
     if (window.loadingBridge && window.loadingBridge.onShown) {
-      window.loadingBridge.onShown(reveal);
-    } else {
-      reveal();
+      window.loadingBridge.onShown(restartAnimations);
     }
   </script>
 </body>
