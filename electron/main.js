@@ -56,6 +56,9 @@ let outputWindow  = null;
 let returnWindow  = null;
 let loadingWindow = null;
 let pipWindow     = null;
+// Utilitários (relógio, cronômetro, sorteio, texto dinâmico) abertos em janela
+// própria: uma janela por módulo, indexada pelo id do módulo (ver createUtilityWindow).
+const utilityWindows = new Map();
 
 // Espelha "popup_module" (ver relay de 'state-update' abaixo) — só pra saber,
 // aqui no processo main, qual módulo está projetado agora. Necessário porque
@@ -387,6 +390,51 @@ function createMainWindow() {
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.destroy();
     tryGC();
   });
+}
+
+// ── Utilitários em janela própria ───────────────────────────────────────────
+// Relógio, cronômetro, sorteio e texto dinâmico abrem numa janela comum (com
+// moldura e tamanho ajustável), separada da projeção. Usa a mesma rota de popup
+// do módulo (#/popup?module=<id>&window=1), mas NÃO é transparente: a janela
+// tem fundo próprio. O estado chega pelas mesmas atualizações da projeção
+// (ver 'state-update' e 'state-update-batch' em registerIpcHandlers).
+function createUtilityWindow(moduleId) {
+  const existing = utilityWindows.get(moduleId);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+    return existing;
+  }
+
+  const win = new BrowserWindow({
+    width: 960,
+    height: 600,
+    minWidth: 480,
+    minHeight: 320,
+    title: 'LouvorJA',
+    autoHideMenuBar: true,
+    backgroundColor: '#121212',
+    icon: path.join(__dirname, '../public/ico/favicon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: !isDev,
+      spellcheck: false,
+      backgroundThrottling: false,
+    },
+    show: false,
+  });
+
+  win.loadURL(getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`));
+  win.once('ready-to-show', () => win.show());
+  win.on('closed', () => utilityWindows.delete(moduleId));
+  utilityWindows.set(moduleId, win);
+  return win;
+}
+
+function liveUtilityWindows() {
+  return [...utilityWindows.values()].filter((w) => !w.isDestroyed());
 }
 
 // Repinta uma janela transparente algumas vezes ao longo de ~300ms. Motivo:
@@ -935,6 +983,12 @@ function registerIpcHandlers() {
     useBeta: !!savedUserData.update_use_beta,
   });
 
+  ipcMain.handle('utility:open-window', (_e, moduleId) => {
+    const allowed = ['clock', 'cronometro_culto', 'sorteio', 'dynamic_text'];
+    if (!allowed.includes(moduleId)) return false;
+    createUtilityWindow(moduleId);
+    return true;
+  });
   ipcMain.handle('window:minimize',     () => mainWindow?.minimize());
   ipcMain.handle('window:maximize',     () => {
     if (!mainWindow) return;
@@ -1071,6 +1125,11 @@ function registerIpcHandlers() {
       if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update', data);
       return;
     }
+    // Resync de uma janela de utilitário (ver output:ready): só essas janelas.
+    if (data && data.target === 'utility') {
+      liveUtilityWindows().forEach((w) => w.webContents.send('state-update', data));
+      return;
+    }
     // Sem target: atualização "ao vivo" normal — broadcast pra todas (comportamento original)
     if (outputWindow && !outputWindow.isDestroyed()) {
       outputWindow.webContents.send('state-update', data);
@@ -1081,6 +1140,7 @@ function registerIpcHandlers() {
     if (pipWindow && !pipWindow.isDestroyed()) {
       pipWindow.webContents.send('state-update', data);
     }
+    liveUtilityWindows().forEach((w) => w.webContents.send('state-update', data));
   });
 
   // Lote atômico (ver AppData.js setMultiple / preload.js) — sempre
@@ -1093,6 +1153,7 @@ function registerIpcHandlers() {
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('state-update-batch', entries);
     if (returnWindow && !returnWindow.isDestroyed()) returnWindow.webContents.send('state-update-batch', entries);
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.webContents.send('state-update-batch', entries);
+    liveUtilityWindows().forEach((w) => w.webContents.send('state-update-batch', entries));
   });
 
   // Foco de áudio entre janelas — diferente de 'state-update' (que só vai da

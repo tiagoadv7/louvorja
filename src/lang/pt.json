@@ -276,6 +276,9 @@
             "pill_done_title": "Download concluído",
             "pill_running_title": "Baixando arquivos em segundo plano",
             "pill_done": "Concluído"
+        },
+        "window": {
+            "open_in_window": "Abrir em janela"
         }
     },
     "alert": {

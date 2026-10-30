@@ -58,6 +58,15 @@
             />
 
             <v-btn
+              v-if="windowable && $electron.isElectron()"
+              class="ms-2"
+              icon="mdi-open-in-new"
+              variant="text"
+              size="small"
+              :title="$t('components.window.open_in_window')"
+              @click="openWindow()"
+            />
+            <v-btn
               v-if="minimizable"
               class="ms-2"
               icon="mdi-minus"
@@ -137,6 +146,7 @@ export default {
     compact_footer: Boolean,
     closable: Boolean,
     minimizable: Boolean,
+    windowable: Boolean,
     titleClass: String,
     dark: Boolean,
     index: [Boolean, Number, String],
@@ -293,6 +303,9 @@ export default {
     },
     minimize() {
       this.$emit("minimize");
+    },
+    openWindow() {
+      this.$emit("openWindow");
     },
     scroll() {
       let data = {};

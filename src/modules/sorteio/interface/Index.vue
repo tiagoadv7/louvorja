@@ -5,6 +5,8 @@
     :icon="module.icon"
     closable
     minimizable
+    windowable
+    @open-window="$electron.openUtilityWindow('sorteio')"
     compact
     compact_footer
     @close="close()"

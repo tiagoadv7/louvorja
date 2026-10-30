@@ -5,6 +5,8 @@
     :icon="module.icon"
     closable
     minimizable
+    windowable
+    @open-window="$electron.openUtilityWindow('dynamic_text')"
     :index="show ? 1 : 0"
     size="small"
     @close="close()"

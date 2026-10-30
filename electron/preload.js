@@ -214,6 +214,7 @@ contextBridge.exposeInMainWorld('electron', {
   // Foco de áudio — bidirecional entre janela principal e janela de saída
   sendAudioFocusRequest: (data) => ipcRenderer.send('audio-focus-request', data),
   notifyOutputReady: (target) => ipcRenderer.send('output:ready', target),
+  openUtilityWindow: (moduleId) => ipcRenderer.invoke('utility:open-window', moduleId),
   appLoaded: () => ipcRenderer.send('app:loaded'),
 
   // ── Eventos (main → renderer) ────────────────────────────────────────────

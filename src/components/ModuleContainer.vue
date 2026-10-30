@@ -6,6 +6,7 @@
     :icon="module.icon"
     closable
     minimizable
+    :windowable="windowable"
     :compact="compact"
     :index="index"
     :size="manifest?.moduleOptions?.size ?? null"
@@ -13,6 +14,7 @@
     :height="manifest?.moduleOptions?.height ?? null"
     @close="close()"
     @minimize="minimize()"
+    @open-window="openWindow()"
     @scroll="scroll()"
     @hasScroll="hasScroll()"
   >
@@ -53,6 +55,12 @@ export default {
     manifest: {
       type: Object,
       required: true,
+    },
+    // Mostra o botão "abrir em janela" (só no Electron): o módulo passa a
+    // rodar numa janela própria, fora da janela principal.
+    windowable: {
+      type: Boolean,
+      default: false,
     },
     title: {
       type: String,
@@ -144,6 +152,9 @@ export default {
     minimize() {
       this.$modules.minimize(this.module_id);
       this.$emit("minimize");
+    },
+    openWindow() {
+      if (this.module_id) this.$electron.openUtilityWindow(this.module_id);
     },
     scroll() {
       this.$emit("scroll");

@@ -250,6 +250,10 @@ export default {
     return window.electron.scanAlbumsFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN, scope);
   },
 
+  // Abre um utilitário (relógio, cronômetro, sorteio, texto dinâmico) numa janela própria.
+  openUtilityWindow: (moduleId) =>
+    isElectron() ? window.electron.openUtilityWindow(moduleId) : Promise.resolve(false),
+
   // Espaço da biblioteca: tamanho das pastas pedidas + uso total + disco livre.
   libraryStorage: (folders = []) =>
     isElectron() ? window.electron.libraryStorage(folders) : Promise.resolve(null),

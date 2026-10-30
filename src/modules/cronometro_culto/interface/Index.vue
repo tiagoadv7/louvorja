@@ -5,6 +5,8 @@
     :icon="module.icon"
     closable
     minimizable
+    windowable
+    @open-window="$electron.openUtilityWindow('cronometro_culto')"
     @close="close()"
     @minimize="$modules.minimize(module_id)"
     @resize="resize"

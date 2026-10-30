@@ -67,6 +67,7 @@ export default {
   data: () => ({
     module: null,
     visible: false,
+    isUtility: false,
     stateHandler: null,
     batchHandler: null,
     moduleHandler: null,
@@ -93,8 +94,20 @@ export default {
     },
   },
   methods: {
+    // Entradas de estado que só valem para a projeção/principal, não para o
+    // utilitário desta janela: popup_module e show/minimized do próprio módulo.
+    isOwnUtilityEntry(param) {
+      return param === "popup_module"
+        || param === `modules.${this.module}.show`
+        || param === `modules.${this.module}.minimized`;
+    },
+
     _applyStateEntry(data) {
       if (!data || !data.param) return;
+      // Janela de utilitário: o próprio módulo fica sempre ativo aqui. A
+      // principal manda show/minimized e popup_module do módulo dela (fechado),
+      // que não podem apagar o utilitário desta janela.
+      if (this.isUtility && this.isOwnUtilityEntry(data.param)) return;
       this.$appdata.set(data.param, data.value);
       // Sem o "&& data.value" antigo: precisa reagir também quando o valor
       // vem vazio (desligar a projeção pelo ícone da tela agora só limpa
@@ -102,7 +115,9 @@ export default {
       // que o <component :is="moduleComponent"> realmente desmonte. Com o
       // guard antigo, uma string vazia nunca atualizava "module", e o
       // conteúdo anterior ficava preso na tela pra sempre.
-      if (data.param === "popup_module") {
+      // Janela de utilitário (window=1) fica no módulo da própria janela: a
+      // projeção trocar o popup_module não pode mudar o que esta janela mostra.
+      if (data.param === "popup_module" && !this.isUtility) {
         this.module = data.value || null;
       }
       if (data.param === "theme" && data.value) {
@@ -138,6 +153,7 @@ export default {
 
     initElectron() {
       this.$appdata.set("is_popup", true);
+      this.isUtility = new URLSearchParams(window.location.hash.split("?")[1] || "").get("window") === "1";
 
       this.$userdata.load();
       const savedTheme = this.$userdata.get("theme");
@@ -150,6 +166,11 @@ export default {
       if (moduleId) {
         this.module = moduleId;
         this.$appdata.set("popup_module", moduleId);
+        // Utilitário em janela própria: o módulo fica aberto e ativo nesta janela.
+        if (this.isUtility) {
+          this.$appdata.set(`modules.${moduleId}.show`, true);
+          this.$appdata.set(`modules.${moduleId}.minimized`, false);
+        }
       }
 
       this.stateHandler = window.electron.on("state-update", (data) => {
@@ -174,7 +195,7 @@ export default {
         this.startFadeOut();
       });
 
-      window.electron.notifyOutputReady('output');
+      window.electron.notifyOutputReady(this.isUtility ? 'utility' : 'output');
 
       // Fallback: para módulos sem imagem de capa (ou se modules.media.data não chegar),
       // revela depois de 500 ms para não bloquear indefinidamente a janela de saída.
