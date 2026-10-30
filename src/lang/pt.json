@@ -101,7 +101,7 @@
             "updates": "Verificar atualizações"
         },
         "download_center": {
-            "title": "Biblioteca",
+            "title": "Biblioteca Local",
             "welcome": "Bem-vindo ao Centro de Downloads",
             "welcome_desc": "Baixe coletâneas completas (letras, capas, áudio) para usar o LouvorJA sem conexão.",
             "nav_home": "Início",
@@ -180,7 +180,19 @@
             "download_files_error": "Erro ao baixar arquivos.",
             "song": "música",
             "storage_used": "Usado: {used}",
-            "storage_free": "Livre: {free} de {total}"
+            "storage_free": "Livre: {free} de {total}",
+            "lib_categories": "Categorias",
+            "lib_search": "Buscar coletâneas...",
+            "lib_sort_recent": "Mais recentes",
+            "lib_sort_name": "Nome (A-Z)",
+            "lib_download": "Baixar",
+            "lib_redownload": "Baixar de novo",
+            "lib_download_all": "Baixar todas",
+            "lib_downloaded": "Baixada",
+            "lib_not_downloaded": "Não baixada",
+            "lib_category": "Categoria",
+            "lib_songs": "Músicas",
+            "lib_size": "Tamanho"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",

@@ -139,85 +139,115 @@
               {{ $t('components.download_center.no_browser') }}
             </div>
 
-            <div class="dc-tabs-row">
-              <button class="dc-tabs-arrow" @click="scrollTabs(-200)">
-                <v-icon size="18">mdi-chevron-left</v-icon>
-              </button>
-              <div ref="tabsEl" class="dc-tabs">
+            <div class="lib">
+              <!-- Categorias -->
+              <aside class="lib-side">
                 <button
-                  class="dc-tab"
-                  :class="{ 'dc-tab--active': catFilter === null }"
+                  class="lib-cat"
+                  :class="{ 'lib-cat--on': catFilter === null }"
                   @click="catFilter = null"
-                >{{ $t('components.download_center.all_collections') }}</button>
+                >
+                  <v-icon size="18">mdi-file-document-outline</v-icon>
+                  <span class="lib-cat-name">{{ $t('components.download_center.all_collections') }}</span>
+                  <span class="lib-count">{{ allAlbumsCount }}</span>
+                </button>
+                <div class="lib-side-title">{{ $t('components.download_center.lib_categories') }}</div>
                 <button
                   v-for="cat in categories"
                   :key="cat.id_category"
-                  class="dc-tab"
-                  :class="{ 'dc-tab--active': catFilter === cat.id_category }"
+                  class="lib-cat"
+                  :class="{ 'lib-cat--on': catFilter === cat.id_category }"
                   @click="catFilter = cat.id_category"
-                >{{ cat.name }}</button>
-              </div>
-              <button class="dc-tabs-arrow" @click="scrollTabs(200)">
-                <v-icon size="18">mdi-chevron-right</v-icon>
-              </button>
-            </div>
-
-            <div class="dc-albums-grid">
-              <div
-                v-for="album in filteredAlbums"
-                :key="album.id_album"
-                class="dc-album-card"
-              >
-                <div class="dc-album-img-wrap">
-                  <img
-                    v-if="albumImageUrl(album)"
-                    :src="resolveUrl(albumImageUrl(album))"
-                    class="dc-album-img"
-                    loading="lazy"
-                  />
-                  <v-icon v-else size="42" color="grey-lighten-1">mdi-music-box</v-icon>
-
-                  <div v-if="albumProgress[album.id_album]" class="dc-album-overlay">
-                    <div class="dc-album-progress">
-                      <v-progress-circular
-                        :model-value="albumProgress[album.id_album].percent"
-                        color="white"
-                        size="36"
-                        width="3"
-                      >
-                        <span style="font-size:9px;color:#fff">{{ albumProgress[album.id_album].percent }}%</span>
-                      </v-progress-circular>
-                      <div class="dc-album-progress-msg">{{ albumProgress[album.id_album].message }}</div>
-                    </div>
-                  </div>
-
-                  <div v-else-if="isAlbumComplete(album)" class="dc-album-badge-ok">
-                    <v-icon size="16" color="success">mdi-check</v-icon>
-                  </div>
-                </div>
-
-                <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
-                <div v-if="folderBytes(album.folder_name || album.name)" class="text-caption text-medium-emphasis">{{ fmtBytes(folderBytes(album.folder_name || album.name)) }}</div>
-
-                <div v-if="albumStats[album.id_album]" class="dc-album-stats">
-                  <span :title="$t('components.download_center.stat_songs')">🎵 {{ albumStats[album.id_album].json }}</span>
-                  <span :title="$t('components.download_center.stat_audio')">🔊 {{ albumStats[album.id_album].audio }}</span>
-                  <span :title="$t('components.download_center.stat_images')">🖼 {{ albumStats[album.id_album].images }}</span>
-                </div>
-
-                <v-btn
-                  icon
-                  variant="text"
-                  size="x-small"
-                  :color="isAlbumComplete(album) ? 'success' : 'primary'"
-                  :disabled="!!albumProgress[album.id_album]"
-                  @click="downloadAlbumAny(album)"
                 >
-                  <v-icon size="20">
-                    {{ isAlbumComplete(album) ? 'mdi-refresh' : 'mdi-download' }}
-                  </v-icon>
+                  <v-icon size="18">mdi-folder-outline</v-icon>
+                  <span class="lib-cat-name">{{ cat.name }}</span>
+                  <span class="lib-count">{{ (cat.albums || []).length }}</span>
+                </button>
+              </aside>
+
+              <!-- Lista -->
+              <section class="lib-main">
+                <div class="lib-toolbar">
+                  <div class="lib-search">
+                    <v-icon size="18">mdi-magnify</v-icon>
+                    <input v-model="albumSearch" :placeholder="$t('components.download_center.lib_search')" />
+                  </div>
+                  <select v-model="albumSort" class="lib-select">
+                    <option value="recent">{{ $t('components.download_center.lib_sort_recent') }}</option>
+                    <option value="name">{{ $t('components.download_center.lib_sort_name') }}</option>
+                  </select>
+                  <div class="lib-view">
+                    <button :class="{ 'lib-view--on': albumView === 'grid' }" @click="albumView = 'grid'">
+                      <v-icon size="18">mdi-view-grid-outline</v-icon>
+                    </button>
+                    <button :class="{ 'lib-view--on': albumView === 'list' }" @click="albumView = 'list'">
+                      <v-icon size="18">mdi-view-list</v-icon>
+                    </button>
+                  </div>
+                  <v-btn color="primary" variant="flat" size="small" prepend-icon="mdi-cloud-download-outline" :disabled="!isElectron || !libraryPending" @click="downloadAllLibrary">
+                    {{ $t('components.download_center.lib_download_all') }}
+                  </v-btn>
+                </div>
+
+                <div class="lib-list" :class="albumView === 'grid' ? 'lib-list--grid' : 'lib-list--rows'">
+                  <div
+                    v-for="album in libraryAlbums"
+                    :key="album.id_album"
+                    class="lib-row"
+                    :class="{ 'lib-row--on': selectedAlbum && selectedAlbum.id_album === album.id_album }"
+                    @click="selectedAlbumId = album.id_album"
+                  >
+                    <div class="lib-cover">
+                      <img v-if="albumImageUrl(album)" :src="resolveUrl(albumImageUrl(album))" loading="lazy" />
+                      <v-icon v-else size="26" color="grey-lighten-1">mdi-music-box</v-icon>
+                    </div>
+                    <div class="lib-info">
+                      <div class="lib-name" :title="album.name">{{ album.name }}</div>
+                      <div class="lib-sub">{{ albumSubtitle(album) }}</div>
+                    </div>
+                    <v-btn
+                      size="small"
+                      variant="outlined"
+                      :color="isAlbumComplete(album) ? 'success' : 'primary'"
+                      :disabled="!!albumProgress[album.id_album]"
+                      @click.stop="downloadAlbumAny(album)"
+                    >
+                      <template v-if="albumProgress[album.id_album]">{{ albumProgress[album.id_album].percent }}%</template>
+                      <template v-else>{{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}</template>
+                    </v-btn>
+                    <div class="lib-size">{{ albumSizeLabel(album) }}</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Detalhes do álbum selecionado -->
+              <aside v-if="selectedAlbum" class="lib-detail">
+                <div class="lib-detail-cover">
+                  <img v-if="albumImageUrl(selectedAlbum)" :src="resolveUrl(albumImageUrl(selectedAlbum))" />
+                  <v-icon v-else size="64" color="grey-lighten-1">mdi-music-box</v-icon>
+                </div>
+                <div class="lib-detail-name">{{ selectedAlbum.name }}</div>
+                <div class="lib-detail-sub">{{ albumSubtitle(selectedAlbum) }}</div>
+                <div class="lib-status" :class="{ 'lib-status--ok': isAlbumComplete(selectedAlbum) }">
+                  <v-icon size="14">{{ isAlbumComplete(selectedAlbum) ? 'mdi-check-circle-outline' : 'mdi-cloud-outline' }}</v-icon>
+                  {{ isAlbumComplete(selectedAlbum) ? $t('components.download_center.lib_downloaded') : $t('components.download_center.lib_not_downloaded') }}
+                </div>
+                <dl class="lib-facts">
+                  <div><dt>{{ $t('components.download_center.lib_category') }}</dt><dd>{{ albumCategoryName(selectedAlbum) }}</dd></div>
+                  <div><dt>{{ $t('components.download_center.lib_songs') }}</dt><dd>{{ albumSongCount(selectedAlbum) }}</dd></div>
+                  <div><dt>{{ $t('components.download_center.lib_size') }}</dt><dd>{{ albumSizeLabel(selectedAlbum) || '—' }}</dd></div>
+                </dl>
+                <v-btn
+                  block
+                  color="primary"
+                  variant="flat"
+                  prepend-icon="mdi-download"
+                  :disabled="!!albumProgress[selectedAlbum.id_album]"
+                  @click="downloadAlbumAny(selectedAlbum)"
+                >
+                  {{ isAlbumComplete(selectedAlbum) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}
                 </v-btn>
-              </div>
+              </aside>
             </div>
           </template>
 
@@ -636,6 +666,10 @@ export default {
     storage:       null,
     categories:    [],
     catFilter:     null,
+    albumSearch:   '',
+    albumSort:     'recent',
+    albumView:     'list',
+    selectedAlbumId: null,
     localFiles:    [],
     downloading:   {},
     albumProgress: {},
@@ -698,6 +732,29 @@ export default {
     },
     isElectron() {
       return this.$electron.isElectron();
+    },
+
+    // Total de coletâneas distintas (a aba "Todas" conta cada uma uma vez).
+    allAlbumsCount() {
+      const ids = new Set();
+      for (const cat of this.categories || []) for (const a of cat.albums || []) ids.add(a.id_album);
+      return ids.size;
+    },
+    // Lista da coluna central: categoria escolhida + busca + ordenação.
+    libraryAlbums() {
+      const q = this.albumSearch.trim().toLowerCase();
+      let list = this.filteredAlbums.slice();
+      if (q) list = list.filter(a => (a.name || '').toLowerCase().includes(q));
+      if (this.albumSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+      else list.sort((a, b) => (b.id_album || 0) - (a.id_album || 0));
+      return list;
+    },
+    selectedAlbum() {
+      const list = this.libraryAlbums;
+      return list.find(a => a.id_album === this.selectedAlbumId) || list[0] || null;
+    },
+    libraryPending() {
+      return this.libraryAlbums.some(a => !this.isAlbumComplete(a));
     },
 
     filteredAlbums() {
@@ -1007,6 +1064,28 @@ export default {
     // Capa a exibir para um álbum na grade de Coletâneas: se já foi baixado,
     // usa a capa do JSON local (app-local://, funciona sem internet). Só cai
     // para a URL online (categories) quando o álbum ainda não foi baixado.
+    albumSubtitle(album) {
+      return album.description || album.subtitle || '';
+    },
+    albumCategoryName(album) {
+      const cat = (this.categories || []).find(c => (c.albums || []).some(a => a.id_album === album.id_album));
+      return cat ? cat.name : '—';
+    },
+    albumSongCount(album) {
+      const s = this.albumStats[album.id_album];
+      return s ? s.json : '—';
+    },
+    albumSizeLabel(album) {
+      const bytes = this.folderBytes(album.folder_name || album.name);
+      return bytes ? this.fmtBytes(bytes) : '';
+    },
+    // Baixa, em sequência, só as coletâneas da lista atual que ainda faltam.
+    async downloadAllLibrary() {
+      for (const album of this.libraryAlbums) {
+        if (!this.isAlbumComplete(album)) await this.downloadAlbumFull(album, false);
+      }
+    },
+
     albumImageUrl(album) {
       const local = this.downloadedAlbumInfos[String(album.id_album)];
       if (local?.url_image) return local.url_image;
@@ -1368,6 +1447,132 @@ export default {
 }
 
 /* ── Conteúdo ───────────────────────────────────────────────────── */
+/* ── Biblioteca Local (layout de três colunas: categorias, lista e detalhes) ── */
+.lib {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 220px;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.lib-side, .lib-detail {
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 10px;
+  overflow-y: auto;
+}
+.lib-side-title {
+  margin: 14px 6px 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.lib-cat {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.lib-cat:hover { background: rgba(255,255,255,0.05); }
+.lib-cat--on { background: rgba(var(--v-theme-primary), 0.18); outline: 1px solid rgba(var(--v-theme-primary), 0.5); }
+.lib-cat-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-count {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+}
+.lib-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.lib-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lib-search {
+  flex: 1 1 220px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+}
+.lib-search input { flex: 1; background: transparent; outline: none; color: inherit; font-size: 13px; }
+.lib-select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  font-size: 13px;
+}
+.lib-view { display: flex; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05); }
+.lib-view button { padding: 6px 8px; }
+.lib-view--on { background: rgba(var(--v-theme-primary), 0.25); }
+.lib-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
+.lib-list--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.lib-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.lib-list--grid .lib-row { grid-template-columns: 1fr; text-align: center; }
+.lib-row:hover { background: rgba(255,255,255,0.06); }
+.lib-row--on { border-color: rgba(var(--v-theme-primary), 0.7); background: rgba(var(--v-theme-primary), 0.12); }
+.lib-cover {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+}
+.lib-cover img { width: 100%; height: 100%; object-fit: cover; }
+.lib-info { min-width: 0; }
+.lib-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-sub { font-size: 12px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-size { font-size: 12px; text-align: right; opacity: 0.8; }
+.lib-detail { display: flex; flex-direction: column; gap: 10px; }
+.lib-detail-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+}
+.lib-detail-cover img { width: 100%; height: 100%; object-fit: cover; }
+.lib-detail-name { font-size: 16px; font-weight: 700; }
+.lib-detail-sub { font-size: 12px; opacity: 0.6; }
+.lib-status {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  background: rgba(255,255,255,0.08);
+}
+.lib-status--ok { color: rgb(var(--v-theme-success)); background: rgba(var(--v-theme-success), 0.15); }
+.lib-facts { display: flex; flex-direction: column; gap: 8px; font-size: 12px; margin-top: 4px; }
+.lib-facts div { display: flex; justify-content: space-between; gap: 8px; }
+.lib-facts dt { opacity: 0.6; }
+.lib-facts dd { margin: 0; font-weight: 600; text-align: right; }
+
 .dc-content {
   flex: 1;
   overflow-y: auto;

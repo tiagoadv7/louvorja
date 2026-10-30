@@ -104,7 +104,7 @@
             "updates": "Buscar actualizaciones"
         },
         "download_center": {
-            "title": "Biblioteca",
+            "title": "Biblioteca Local",
             "welcome": "Bienvenido al Centro de descargas",
             "welcome_desc": "Descarga colecciones completas (letras, portadas, audio) para usar Loor JA sin conexión.",
             "nav_home": "Inicio",
@@ -183,7 +183,19 @@
             "download_files_error": "Error al descargar archivos.",
             "song": "canción",
             "storage_used": "Usado: {used}",
-            "storage_free": "Libre: {free} de {total}"
+            "storage_free": "Libre: {free} de {total}",
+            "lib_categories": "Categorías",
+            "lib_search": "Buscar colecciones...",
+            "lib_sort_recent": "Más recientes",
+            "lib_sort_name": "Nombre (A-Z)",
+            "lib_download": "Descargar",
+            "lib_redownload": "Descargar de nuevo",
+            "lib_download_all": "Descargar todas",
+            "lib_downloaded": "Descargada",
+            "lib_not_downloaded": "No descargada",
+            "lib_category": "Categoría",
+            "lib_songs": "Canciones",
+            "lib_size": "Tamaño"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",
