@@ -200,7 +200,16 @@
             "stat_done": "Concluídos",
             "stat_queue": "Em andamento",
             "stat_used": "Espaço usado",
-            "in_progress": "Em andamento"
+            "in_progress": "Em andamento",
+            "brand_a": "Biblioteca",
+            "brand_b": "Local",
+            "storage_title": "Espaço em disco",
+            "local": "Local",
+            "lib_count": "coletâneas",
+            "lib_empty": "Nenhuma coletânea encontrada.",
+            "no_active": "Nenhum download em andamento.",
+            "library": "Biblioteca baixada",
+            "brand_sub": "Centro de downloads"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",

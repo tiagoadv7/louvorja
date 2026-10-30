@@ -203,7 +203,16 @@
             "stat_done": "Completadas",
             "stat_queue": "En curso",
             "stat_used": "Espacio usado",
-            "in_progress": "En curso"
+            "in_progress": "En curso",
+            "brand_a": "Biblioteca",
+            "brand_b": "Local",
+            "storage_title": "Espacio en disco",
+            "local": "Local",
+            "lib_count": "colecciones",
+            "lib_empty": "No se encontró ninguna colección.",
+            "no_active": "No hay descargas en curso.",
+            "library": "Biblioteca descargada",
+            "brand_sub": "Centro de descargas"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",
