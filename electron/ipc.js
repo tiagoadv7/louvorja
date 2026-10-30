@@ -2618,6 +2618,34 @@ document.getElementById('f').onsubmit=async(e)=>{
     return { usedBytes, perFolder, disk };
   });
 
+  // Excluir / abrir a pasta de uma coletânea baixada. Só mexe dentro de config/musicas
+  // (checado abaixo). Com albumId, remove também o JSON do álbum e das músicas dele.
+  ipcMain.handle('library:delete-folder', async (_e, folder, albumId) => {
+    if (typeof folder !== 'string' || !folder.trim()) return { ok: false };
+    const base = path.resolve(path.join(getWritableConfigDir(), 'musicas'));
+    const dir = path.resolve(getAutoMediaDir(folder, true));
+    if (!dir.startsWith(base + path.sep)) return { ok: false };
+    await fs.promises.rm(dir, { recursive: true, force: true });
+    if (albumId) {
+      const dbDir = getDbDir();
+      const albumFile = path.join(dbDir, `album_${albumId}.json`);
+      try {
+        const album = JSON.parse(await fs.promises.readFile(albumFile, 'utf8'));
+        for (const m of album.musics || []) {
+          await fs.promises.rm(path.join(dbDir, `music_${m.id_music}.json`), { force: true });
+        }
+      } catch (_) { /* álbum sem JSON local */ }
+      await fs.promises.rm(albumFile, { force: true });
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('library:open-folder', async (_e, folder) => {
+    if (typeof folder !== 'string' || !folder.trim()) return false;
+    const dir = getAutoMediaDir(folder, true);
+    return (await shell.openPath(dir)) === '';
+  });
+
   ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token, scope = 'pt') => {
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });

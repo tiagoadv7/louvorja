@@ -145,6 +145,8 @@ contextBridge.exposeInMainWorld('electron', {
   scanMissingFiles: (dbBaseUrl, token) => ipcRenderer.invoke('files:scan-missing', dbBaseUrl, token),
   scanAlbumsFiles: (dbBaseUrl, token, scope) => ipcRenderer.invoke('files:scan-albums', dbBaseUrl, token, scope),
   libraryStorage: (folders) => ipcRenderer.invoke('library:storage', folders),
+  libraryDeleteFolder: (folder, albumId) => ipcRenderer.invoke('library:delete-folder', folder, albumId),
+  libraryOpenFolder: (folder) => ipcRenderer.invoke('library:open-folder', folder),
   checkAlbumsComplete: (albumIds, dbBaseUrl, token) =>
     ipcRenderer.invoke('files:check-albums-complete', albumIds, dbBaseUrl, token),
   downloadMissingFiles: (missingList, filesBaseUrl, token) =>

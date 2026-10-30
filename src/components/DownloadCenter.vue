@@ -68,7 +68,7 @@
 
           <!-- EXPLORAR: coletâneas -->
           <section v-if="isExplore">
-            <div class="ah-heading">{{ $t('components.download_center.nav_collections') }}</div>
+            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-view-grid-outline</v-icon>{{ $t('components.download_center.nav_collections') }}</div>
             <div class="ah-muted">{{ $t('components.download_center.nav_collections_desc') }}</div>
 
             <div class="ah-chips">
@@ -81,7 +81,7 @@
                 class="ah-chip"
                 :class="{ active: catFilter === cat.id_category }"
                 @click="catFilter = cat.id_category"
-              >{{ cat.name }} · {{ (cat.albums || []).length }}</button>
+              ><v-icon size="14" class="mr-1">{{ categoryIcon(cat.name) }}</v-icon>{{ cat.name }} · {{ (cat.albums || []).length }}</button>
             </div>
 
             <div class="ah-toolbar">
@@ -138,7 +138,7 @@
 
           <!-- HINÁRIOS -->
           <section v-else-if="section === 'hymnals'">
-            <div class="ah-heading">{{ $t('components.download_center.nav_hymnals') }}</div>
+            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-music-note</v-icon>{{ $t('components.download_center.nav_hymnals') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="h in hymnalItems" :key="h.file" class="ah-album">
                 <div class="ah-cover ah-cover--logo">
@@ -163,7 +163,7 @@
 
           <!-- BÍBLIAS -->
           <section v-else-if="section === 'bibles'">
-            <div class="ah-heading">{{ $t('components.download_center.nav_bibles') }}</div>
+            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-book-open-variant</v-icon>{{ $t('components.download_center.nav_bibles') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="b in bibleItems" :key="b.id" class="ah-album">
                 <div class="ah-cover ah-cover--logo">
@@ -199,19 +199,7 @@
             </div>
 
             <div class="ah-panel mt-4">
-              <b>{{ $t('components.download_center.in_progress') }}</b>
-              <div v-if="activeDownloads.length === 0" class="ah-empty">{{ $t('components.download_center.no_active') }}</div>
-              <div v-for="d in activeDownloads" :key="d.id" class="ah-item">
-                <div class="ah-row-info">
-                  <div class="ah-album-title">{{ d.name }}</div>
-                  <div class="ah-progress"><span :style="{ width: d.percent + '%' }" /></div>
-                  <div class="ah-muted">{{ d.message }} · {{ d.percent }}%</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="ah-panel mt-4">
-              <b>{{ $t('components.download_center.library') }}</b>
+              <b class="ah-title"><v-icon size="18">mdi-folder-music-outline</v-icon>{{ $t('components.download_center.library') }}</b>
               <div v-if="localFiles.length === 0" class="ah-empty">{{ $t('components.download_center.no_downloads') }}</div>
               <div v-if="downloadedAlbums.length" class="ah-grid mt-3">
                 <article v-for="album in downloadedAlbums" :key="album.id_album" class="ah-album">
@@ -224,12 +212,36 @@
                   </div>
                   <div class="ah-album-body">
                     <div class="ah-album-title">{{ album.name }}</div>
+                    <div class="ah-item-menu">
+                      <v-menu location="bottom end">
+                        <template #activator="{ props }"><button class="ah-dots" v-bind="props"><v-icon size="16">mdi-dots-horizontal</v-icon></button></template>
+                        <v-list density="compact" theme="dark" bg-color="#0f2236">
+                          <v-list-item prepend-icon="mdi-folder-open-outline" :title="$t('components.download_center.open_folder')" @click="openFolder(album.folder)" />
+                          <v-list-item prepend-icon="mdi-delete-outline" class="text-error" :title="$t('components.download_center.delete_album')" @click="askDelete(album.name, album.folder, album.id_album)" />
+                        </v-list>
+                      </v-menu>
+                    </div>
                   </div>
                 </article>
               </div>
-              <div v-for="h in downloadedHymnals" :key="h.name" class="ah-item">
-                <v-icon size="20" color="success">mdi-check-circle</v-icon>
-                <span class="ah-row-info">{{ h.label }}</span>
+              <div v-for="h in downloadedHymnals" :key="h.name" class="ah-album">
+                <div class="ah-cover ah-cover--logo">
+                  <div v-if="h.coverSvg" class="ah-logo" v-html="h.coverSvg" />
+                  <v-icon v-else size="56" :color="h.color">{{ h.icon }}</v-icon>
+                  <div class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
+                </div>
+                <div class="ah-album-body">
+                  <div class="ah-album-title">{{ h.label }}</div>
+                  <div class="ah-item-menu" v-if="h.folder">
+                    <v-menu location="bottom end">
+                      <template #activator="{ props }"><button class="ah-dots" v-bind="props"><v-icon size="16">mdi-dots-horizontal</v-icon></button></template>
+                      <v-list density="compact" theme="dark" bg-color="#0f2236">
+                        <v-list-item prepend-icon="mdi-folder-open-outline" :title="$t('components.download_center.open_folder')" @click="openFolder(h.folder)" />
+                        <v-list-item prepend-icon="mdi-delete-outline" class="text-error" :title="$t('components.download_center.delete_album')" @click="askDelete(h.label, h.folder)" />
+                      </v-list>
+                    </v-menu>
+                  </div>
+                </div>
               </div>
               <div v-for="b in downloadedBibleSets" :key="b.id" class="ah-item">
                 <v-icon size="20" color="success">mdi-check-circle</v-icon>
@@ -245,7 +257,7 @@
 
           <!-- CONFIGURAÇÕES -->
           <section v-else-if="section === 'settings'">
-            <div class="ah-heading">{{ $t('components.download_center.settings') }}</div>
+            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-cog-outline</v-icon>{{ $t('components.download_center.settings') }}</div>
             <div class="ah-muted">{{ $t('components.download_center.verify_desc') }}</div>
 
             <div class="ah-panel mt-4">
@@ -320,6 +332,19 @@
       </v-card>
     </v-dialog>
 
+    <!-- Diálogo: confirmar exclusão de uma coletânea baixada -->
+    <v-dialog v-model="deleteDialog" max-width="420" persistent>
+      <v-card rounded="lg" theme="dark">
+        <v-card-title class="pt-5 px-5">{{ $t('components.download_center.delete_title') }}</v-card-title>
+        <v-card-text class="px-5 text-body-2">{{ $t('components.download_center.delete_text', { name: deleteTarget && deleteTarget.name }) }}</v-card-text>
+        <v-card-actions class="px-5 pb-4">
+          <v-spacer />
+          <v-btn variant="text" size="small" @click="deleteDialog = false; deleteTarget = null">{{ $t('components.download_center.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" size="small" prepend-icon="mdi-delete-outline" @click="doDelete">{{ $t('components.download_center.delete_confirm') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Diálogo: confirmar download dos faltantes -->
     <v-dialog v-model="confirmDialog" max-width="460" persistent>
       <v-card rounded="lg" theme="dark">
@@ -356,12 +381,15 @@ import $database from '@/helpers/Database';
 import $storage from '@/helpers/Storage';
 import hasdFlame from '@/assets/imgs/hasd-flame.svg';
 import hymnalLogoRaw from '@/assets/imgs/hymnal-logo.svg?raw';
+import hasdFlameRaw from '@/assets/imgs/hasd-flame.svg?raw';
 // Sem as dimensões físicas (mm) e sem o <style> próprio: o tamanho e a cor vêm do CSS do tema.
-const hymnalLogoSvg = hymnalLogoRaw
+const cleanSvg = (raw) => raw
   .replace(/<metadata[\s\S]*?<\/metadata>/g, '')
   .replace(/<title>[\s\S]*?<\/title>/g, '')
   .replace(/<style[\s\S]*?<\/style>/g, '')
   .replace(/\s(width|height)="[^"]*"/g, '');
+const hasdFlameSvg = cleanSvg(hasdFlameRaw);
+const hymnalLogoSvg = cleanSvg(hymnalLogoRaw);
 
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
@@ -402,6 +430,8 @@ export default {
     albumSort:     'recent',
     albumStatus:   'all',
     albumEstimates: {},
+    deleteDialog: false,
+    deleteTarget: null,
     albumView:     'grid',
     selectedAlbumId: null,
     localFiles:    [],
@@ -455,7 +485,7 @@ export default {
       }
       return [
         { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note',         color: '#1B5E43' },
-        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
       ];
     },
     bibleItems() {
@@ -539,7 +569,7 @@ export default {
         .map(f => {
           const id = f.name.replace('album_', '');
           const info = this.downloadedAlbumInfos[id] || {};
-          return { id_album: id, name: info.name || f.name, url_image: info.url_image || '', size: f.size };
+          return { id_album: id, name: info.name || f.name, url_image: info.url_image || '', size: f.size, folder: info.folder_name || info.name || '' };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
     },
@@ -548,7 +578,7 @@ export default {
       const map = Object.fromEntries(this.hymnalItems.map(h => [h.file, h]));
       return this.localFiles
         .filter(f => map[f.name])
-        .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '' }));
+        .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '', coverSvg: map[f.name].coverSvg || '', folder: map[f.name].folder || '' }));
     },
 
     downloadedBibleSets() {
@@ -820,6 +850,32 @@ export default {
     hmsSeconds(hms) {
       const [h = 0, m = 0, sec = 0] = String(hms || '').split(':').map(Number);
       return h * 3600 + m * 60 + sec;
+    },
+    // Ícone por categoria (como a lista de categorias do flute).
+    categoryIcon(name) {
+      const n = (name || '').toLowerCase();
+      if (n.includes('cd')) return 'mdi-disc';
+      if (n.includes('ador') || n.includes('cantor')) return 'mdi-account-group-outline';
+      if (n.includes('infantil')) return 'mdi-teddy-bear';
+      if (n.includes('doxolog')) return 'mdi-church';
+      return 'mdi-folder-outline';
+    },
+    openFolder(folder) {
+      if (folder) this.$electron.libraryOpenFolder(folder);
+    },
+    askDelete(name, folder, albumId = null) {
+      if (!folder) return;
+      this.deleteTarget = { name, folder, albumId };
+      this.deleteDialog = true;
+    },
+    async doDelete() {
+      const t = this.deleteTarget;
+      this.deleteDialog = false;
+      this.deleteTarget = null;
+      if (!t) return;
+      await this.$electron.libraryDeleteFolder(t.folder, t.albumId);
+      await this.loadLocalFiles();
+      this.loadStorage();
     },
     albumNameById(id) {
       for (const cat of this.categories || []) {
@@ -1230,7 +1286,7 @@ export default {
   gap: 8px;
   min-height: 0;
 }
-.ah-brand { display: flex; align-items: center; font-size: 22px; font-weight: 800; padding: 4px 8px 20px; letter-spacing: -0.5px; }
+.ah-brand { display: flex; align-items: center; font-size: 19px; white-space: nowrap; font-weight: 800; padding: 4px 8px 20px; letter-spacing: -0.5px; }
 .ah-brand-accent { color: #009fe3; }
 .ah-rows .ah-album { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 14px; }
 .ah-rows .ah-cover { width: 64px; margin: 0; }
@@ -1433,5 +1489,9 @@ export default {
   border-bottom: 1px solid #203750;
 }
 .ah-item:last-child { border-bottom: 0; }
+.ah-title { display: flex; align-items: center; gap: 8px; }
+.ah-item-menu { margin-top: 6px; }
+.ah-dots { background: #16293f; border: 1px solid #294561; border-radius: 8px; padding: 4px 8px; color: #b9cce4; cursor: pointer; }
+.ah-dots:hover { color: #009fe3; }
 .ah-empty { text-align: center; padding: 26px 16px; color: var(--muted); }
 </style>

@@ -212,7 +212,11 @@
             "lib_empty": "No se encontró ninguna colección.",
             "no_active": "No hay descargas en curso.",
             "library": "Biblioteca descargada",
-            "brand_sub": "Centro de descargas"
+            "brand_sub": "Centro de descargas",
+            "delete_album": "Eliminar colección",
+            "delete_title": "¿Eliminar colección?",
+            "delete_text": "Los archivos descargados de {name} se borrarán de este equipo. Podrás volver a descargarlos después.",
+            "delete_confirm": "Eliminar"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",

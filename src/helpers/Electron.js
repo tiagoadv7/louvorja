@@ -254,6 +254,12 @@ export default {
   openUtilityWindow: (moduleId) =>
     isElectron() ? window.electron.openUtilityWindow(moduleId) : Promise.resolve(false),
 
+  // Exclui a pasta de uma coletânea baixada (e o JSON do álbum, se albumId vier).
+  libraryDeleteFolder: (folder, albumId) =>
+    isElectron() ? window.electron.libraryDeleteFolder(folder, albumId) : Promise.resolve({ ok: false }),
+  libraryOpenFolder: (folder) =>
+    isElectron() ? window.electron.libraryOpenFolder(folder) : Promise.resolve(false),
+
   // Espaço da biblioteca: tamanho das pastas pedidas + uso total + disco livre.
   libraryStorage: (folders = []) =>
     isElectron() ? window.electron.libraryStorage(folders) : Promise.resolve(null),

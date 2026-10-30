@@ -209,7 +209,11 @@
             "lib_empty": "Nenhuma coletânea encontrada.",
             "no_active": "Nenhum download em andamento.",
             "library": "Biblioteca baixada",
-            "brand_sub": "Centro de downloads"
+            "brand_sub": "Centro de downloads",
+            "delete_album": "Excluir coletânea",
+            "delete_title": "Excluir coletânea?",
+            "delete_text": "Os arquivos baixados de {name} serão apagados deste computador. Você pode baixar de novo depois.",
+            "delete_confirm": "Excluir"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",
