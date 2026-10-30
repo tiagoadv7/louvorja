@@ -71,26 +71,23 @@
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-view-grid-outline</v-icon>{{ $t('components.download_center.nav_collections') }}</div>
             <div class="ah-muted">{{ $t('components.download_center.nav_collections_desc') }}</div>
 
-            <div class="ah-explore-cols">
-            <aside class="ah-cats">
-              <button class="ah-cat" :class="{ active: catFilter === null }" @click="catFilter = null">
-                <v-icon size="18">mdi-file-document-outline</v-icon>
-                <span class="ah-cat-name">{{ $t('components.download_center.all_collections') }}</span>
-                <span class="ah-cat-count">{{ allAlbumsCount }}</span>
+            <div class="ah-chips">
+              <button class="ah-chip" :class="{ active: catFilter === null }" @click="catFilter = null">
+                <v-icon size="14">mdi-file-document-outline</v-icon>
+                {{ $t('components.download_center.all_collections') }} · {{ allAlbumsCount }}
               </button>
               <button
                 v-for="cat in categories"
                 :key="cat.id_category"
-                class="ah-cat"
+                class="ah-chip"
                 :class="{ active: catFilter === cat.id_category }"
                 @click="catFilter = cat.id_category"
               >
-                <v-icon size="18">{{ categoryIcon(cat.name) }}</v-icon>
-                <span class="ah-cat-name">{{ cat.name }}</span>
-                <span class="ah-cat-count">{{ (cat.albums || []).length }}</span>
+                <v-icon size="14">{{ categoryIcon(cat.name) }}</v-icon>
+                {{ cat.name }} · {{ (cat.albums || []).length }}
               </button>
-            </aside>
-            <div class="ah-explore-main">
+            </div>
+
 
             <div class="ah-toolbar">
               <b>{{ libraryAlbums.length }} {{ $t('components.download_center.lib_count') }}</b>
@@ -146,8 +143,6 @@
                   <div class="mt-2"><button class="ah-btn-ghost" @click="loadCategories">{{ $t('components.download_center.retry') }}</button></div>
                 </template>
               </div>
-            </div>
-            </div>
             </div>
           </section>
 
@@ -1367,6 +1362,9 @@ export default {
 .ah-heading { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
 .ah-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
 .ah-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 14px;
   border-radius: 22px;
   background: #10253e;
