@@ -120,9 +120,9 @@
                 <div class="dc-hymnal-cover">
                   <!-- Mesmo SVG, pintado com a cor primária do tema (máscara), igual aos ícones da biblioteca do flute -->
                   <div
-                    v-if="h.cover"
+                    v-if="h.coverSvg"
                     class="dc-hymnal-icon dc-hymnal-icon--themed"
-                    :style="{ maskImage: `url(${h.cover})`, WebkitMaskImage: `url(${h.cover})` }"
+                    v-html="h.coverSvg"
                   />
                   <v-icon v-else size="72" :color="h.color">{{ h.icon }}</v-icon>
                   <div v-if="isDownloaded(h.file)" class="dc-album-badge-ok">
@@ -649,6 +649,9 @@
 import $database from '@/helpers/Database';
 import $storage from '@/helpers/Storage';
 import hasdFlame from '@/assets/imgs/hasd-flame.svg';
+import hasdFlameRaw from '@/assets/imgs/hasd-flame.svg?raw';
+// Sem as dimensões físicas (mm) e sem o <style> próprio: o tamanho e a cor vêm do CSS do tema.
+const hasdFlameSvg = hasdFlameRaw.replace(/\s(width|height)="[^"]*"/g, '').replace(/<style[\s\S]*?<\/style>/g, '');
 
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
@@ -736,11 +739,11 @@ export default {
       const t = (k) => this.$t(DC + k);
       const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
       if (locale === 'es') {
-        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
+        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
       }
       return [
-        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, icon: 'mdi-music-note',         color: '#1B5E43' },
-        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note',         color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
       ];
     },
     bibleItems() {
@@ -1701,19 +1704,13 @@ export default {
   font-size: 12px;
   opacity: 0.55;
 }
-/* Ícone do hinário pintado com a cor primária do tema (máscara sobre o mesmo SVG). */
+/* Ícone do hinário (mesmo SVG do -louvorja), desenhado inline e pintado com a cor primária do tema. */
 .dc-hymnal-icon--themed {
   width: 55%;
-  aspect-ratio: 1;
-  background-color: rgb(var(--v-theme-primary));
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.35));
+  margin: 0 auto;
 }
+.dc-hymnal-icon--themed svg { width: 100%; height: auto; display: block; }
+.dc-hymnal-icon--themed path { fill: rgb(var(--v-theme-primary)) !important; }
 
 /* Barra de espaço da biblioteca (uso e disco livre), logo abaixo do título. */
 .dc-storage {
