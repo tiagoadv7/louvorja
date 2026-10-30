@@ -7,7 +7,17 @@
     <v-card class="dc-root" :class="{ 'dc-root--library': section === 'collections' }" rounded="lg" style="overflow:hidden; height:700px">
       <!-- Título -->
       <div class="dc-header">
-        <div class="dc-header-spacer" />
+        <div class="dc-header-spacer">
+          <!-- Na Biblioteca não há barra de navegação lateral: volta para o início daqui -->
+          <v-btn
+            v-if="section === 'collections'"
+            icon="mdi-arrow-left"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="goTo('home')"
+          />
+        </div>
         <div class="dc-header-title">
           <v-icon size="18" color="primary" class="mr-2">mdi-download-box-outline</v-icon>
           {{ $t('components.download_center.title') }}
@@ -1750,6 +1760,8 @@ export default {
 .dc-root--library .dc-content,
 .dc-root--library .dc-sidebar { background: #0b1420; color: #e6edf6; }
 .dc-root--library .dc-section-title { display: none; }
+.dc-root--library .dc-sidebar { display: none; }
+.dc-root--library .dc-body { gap: 0; }
 .dc-root--library .lib-cat { border: 1px solid transparent; }
 .dc-root--library .lib-search input { border: none; box-shadow: none; }
 .dc-root--library .v-btn--variant-outlined { color: #4aa8ff !important; border-color: rgba(74,168,255,0.55) !important; }

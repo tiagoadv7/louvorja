@@ -50,6 +50,16 @@
           class="ma-1"
           size="small"
         />
+        <!-- Repetir a faixa atual (coletâneas): liga/desliga, ver Media.js#_onSongFinished -->
+        <v-btn
+          v-if="source === 'media' && media.config.audio"
+          variant="text"
+          size="small"
+          class="ma-1"
+          :color="media.config.repeat ? 'primary' : ''"
+          :icon="media.config.repeat ? 'mdi-repeat-once' : 'mdi-repeat'"
+          @click="toggleRepeat"
+        />
       </div>
       <div
         v-if="media.config.audio"
@@ -571,6 +581,9 @@ export default {
     },
   },
   methods: {
+    toggleRepeat() {
+      this.$appdata.set("modules.media.config.repeat", !this.media.config.repeat);
+    },
     play() {
       if (this.source === 'video') { this.$videoPlayer.togglePlay(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.togglePlay(); return; }

@@ -1405,7 +1405,9 @@ const Media = {
     const duration = $appdata.get("modules.media.config.duration");
     if (is_paused || duration <= 0) return;
 
-    const hasQueueNext = typeof this._autoCloseCallback === 'function';
+    // Com "repetir" ligado a fila não avança: a própria faixa recomeça (ver _onSongFinished).
+    const repeat = $appdata.get("modules.media.config.repeat");
+    const hasQueueNext = !repeat && typeof this._autoCloseCallback === 'function';
     const lead = hasQueueNext ? this._PLAYALL_CROSSFADE_LEAD : 0;
     if (current_time >= duration - lead) {
       if (hasQueueNext) {
@@ -1413,7 +1415,7 @@ const Media = {
         // pouco antes do fim real para o crossfade se sobrepor ao finalzinho da atual.
         this._autoCloseCallback();
       } else {
-        this.endSong();
+        this._onSongFinished();
       }
     }
   },
@@ -1429,6 +1431,16 @@ const Media = {
     // que uma troca de faixa já está em andamento — não dispara de novo.
     if ($appdata.get("modules.media.config.is_paused")) return;
     if ($appdata.get("modules.media.config.duration") === 0) return;
+    this._onSongFinished();
+  },
+  // Fim natural da faixa. Com "repetir" ligado, recomeça a mesma faixa do zero
+  // (sem sair do slide e sem pular para a fila); senão segue o fluxo normal.
+  _onSongFinished() {
+    if ($appdata.get("modules.media.config.repeat")) {
+      this.goToTime(0);
+      this.play();
+      return;
+    }
     if (typeof this._autoCloseCallback === 'function') {
       this._autoCloseCallback();
     } else {
