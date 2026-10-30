@@ -125,7 +125,6 @@
                   <div class="ah-muted ah-clamp">{{ albumSubtitle(album) }}</div>
                   <div class="ah-meta">
                     <span>{{ albumCategoryName(album) }}</span>
-                    <span>{{ albumSizeLabel(album) }}</span>
                   </div>
                   <div class="ah-action">
                     <button
