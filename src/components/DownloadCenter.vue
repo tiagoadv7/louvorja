@@ -164,18 +164,20 @@
           <!-- BÍBLIAS -->
           <section v-else-if="section === 'bibles'">
             <div class="ah-heading">{{ $t('components.download_center.nav_bibles') }}</div>
-            <div class="ah-rows mt-3">
-              <div v-for="b in bibleItems" :key="b.id" class="ah-row">
-                <v-icon size="30" :color="b.color">mdi-book-open-variant</v-icon>
-                <div class="ah-row-info">
-                  <div class="ah-album-title">{{ b.name }}</div>
-                  <div class="ah-muted">{{ b.files.join(' + ') }}</div>
+            <div class="ah-grid mt-3">
+              <article v-for="b in bibleItems" :key="b.id" class="ah-album">
+                <div class="ah-cover ah-cover--logo">
+                  <v-icon size="64" :color="b.color">mdi-book-open-variant</v-icon>
+                  <div v-if="allDownloaded(b.files)" class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
                 </div>
-                <v-icon v-if="allDownloaded(b.files)" size="18" color="success">mdi-check-circle</v-icon>
-                <button class="ah-btn-main" :disabled="!!downloading[b.id]" @click="downloadMulti(b.id, b.files)">
-                  {{ allDownloaded(b.files) ? $t('components.download_center.update') : $t('components.download_center.download') }}
-                </button>
-              </div>
+                <div class="ah-album-body">
+                  <div class="ah-album-title">{{ b.name }}</div>
+                  <div class="ah-muted ah-clamp">{{ b.files.join(' + ') }}</div>
+                  <button class="ah-btn-main ah-btn-block" :disabled="!!downloading[b.id]" @click="downloadMulti(b.id, b.files)">
+                    {{ allDownloaded(b.files) ? $t('components.download_center.update') : $t('components.download_center.download') }}
+                  </button>
+                </div>
+              </article>
             </div>
           </section>
 
@@ -399,7 +401,7 @@ export default {
     albumSearch:   '',
     albumSort:     'recent',
     albumStatus:   'all',
-    albumView:     'list',
+    albumView:     'grid',
     selectedAlbumId: null,
     localFiles:    [],
     downloading:   {},
@@ -1220,14 +1222,14 @@ export default {
   margin-top: auto;
   background: var(--card);
   border: 1px solid #1f3550;
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 9px 11px;
 }
-.ah-storage-head { display: flex; align-items: center; gap: 6px; }
+.ah-storage-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .ah-action { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .ah-action .ah-btn-main { flex-shrink: 0; }
 .ah-size { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.ah-storage strong { display: block; font-size: 19px; margin: 8px 0 0; }
+.ah-storage strong { display: block; font-size: 14px; margin: 4px 0 0; }
 .ah-muted { color: var(--muted); font-size: 12px; }
 .ah-progress { height: 7px; background: #243b55; border-radius: 10px; overflow: hidden; margin: 10px 0; }
 .ah-progress span { display: block; height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.3s; }
