@@ -213,7 +213,9 @@
             "delete_album": "Excluir coletânea",
             "delete_title": "Excluir coletânea?",
             "delete_text": "Os arquivos baixados de {name} serão apagados deste computador. Você pode baixar de novo depois.",
-            "delete_confirm": "Excluir"
+            "delete_confirm": "Excluir",
+            "loading_catalog": "Carregando coletâneas...",
+            "retry": "Tentar de novo"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",

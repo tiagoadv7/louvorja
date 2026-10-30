@@ -216,7 +216,9 @@
             "delete_album": "Eliminar colección",
             "delete_title": "¿Eliminar colección?",
             "delete_text": "Los archivos descargados de {name} se borrarán de este equipo. Podrás volver a descargarlos después.",
-            "delete_confirm": "Eliminar"
+            "delete_confirm": "Eliminar",
+            "loading_catalog": "Cargando colecciones...",
+            "retry": "Reintentar"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",

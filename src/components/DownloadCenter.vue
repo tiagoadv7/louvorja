@@ -71,18 +71,26 @@
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-view-grid-outline</v-icon>{{ $t('components.download_center.nav_collections') }}</div>
             <div class="ah-muted">{{ $t('components.download_center.nav_collections_desc') }}</div>
 
-            <div class="ah-chips">
-              <button class="ah-chip" :class="{ active: catFilter === null }" @click="catFilter = null">
-                {{ $t('components.download_center.all_collections') }} · {{ allAlbumsCount }}
+            <div class="ah-explore-cols">
+            <aside class="ah-cats">
+              <button class="ah-cat" :class="{ active: catFilter === null }" @click="catFilter = null">
+                <v-icon size="18">mdi-file-document-outline</v-icon>
+                <span class="ah-cat-name">{{ $t('components.download_center.all_collections') }}</span>
+                <span class="ah-cat-count">{{ allAlbumsCount }}</span>
               </button>
               <button
                 v-for="cat in categories"
                 :key="cat.id_category"
-                class="ah-chip"
+                class="ah-cat"
                 :class="{ active: catFilter === cat.id_category }"
                 @click="catFilter = cat.id_category"
-              ><v-icon size="14" class="mr-1">{{ categoryIcon(cat.name) }}</v-icon>{{ cat.name }} · {{ (cat.albums || []).length }}</button>
-            </div>
+              >
+                <v-icon size="18">{{ categoryIcon(cat.name) }}</v-icon>
+                <span class="ah-cat-name">{{ cat.name }}</span>
+                <span class="ah-cat-count">{{ (cat.albums || []).length }}</span>
+              </button>
+            </aside>
+            <div class="ah-explore-main">
 
             <div class="ah-toolbar">
               <b>{{ libraryAlbums.length }} {{ $t('components.download_center.lib_count') }}</b>
@@ -99,7 +107,7 @@
                 <button :class="{ on: albumView === 'grid' }" @click="albumView = 'grid'"><v-icon size="16">mdi-view-grid-outline</v-icon></button>
                 <button :class="{ on: albumView === 'list' }" @click="albumView = 'list'"><v-icon size="16">mdi-view-list</v-icon></button>
               </div>
-              <button class="ah-btn-main" :disabled="!isElectron || !libraryPending" @click="downloadAllLibrary">
+              <button class="ah-btn-main ah-dl-all" :disabled="!isElectron || !libraryPending" @click="downloadAllLibrary">
                 <v-icon size="16">mdi-cloud-download-outline</v-icon>
                 {{ $t('components.download_center.lib_download_all') }}
               </button>
@@ -132,7 +140,15 @@
                   </div>
                 </div>
               </article>
-              <div v-if="libraryAlbums.length === 0" class="ah-empty">{{ $t('components.download_center.lib_empty') }}</div>
+              <div v-if="libraryAlbums.length === 0" class="ah-empty">
+                <template v-if="loading">{{ $t('components.download_center.loading_catalog') }}</template>
+                <template v-else>
+                  {{ $t('components.download_center.lib_empty') }}
+                  <div class="mt-2"><button class="ah-btn-ghost" @click="loadCategories">{{ $t('components.download_center.retry') }}</button></div>
+                </template>
+              </div>
+            </div>
+            </div>
             </div>
           </section>
 
@@ -666,7 +682,7 @@ export default {
       this.loading = true;
       const locale = this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
       this.categories = await this.fetchCatalog(`${locale}_categories`) || [];
-      this.loadAlbumEstimates();
+      setTimeout(() => this.loadAlbumEstimates(), 1500);
       this.loading = false;
     },
 
@@ -1493,5 +1509,15 @@ export default {
 .ah-item-menu { margin-top: 6px; }
 .ah-dots { background: #16293f; border: 1px solid #294561; border-radius: 8px; padding: 4px 8px; color: #b9cce4; cursor: pointer; }
 .ah-dots:hover { color: #009fe3; }
+.ah-explore-cols { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; }
+.ah-explore-main { min-width: 0; }
+.ah-cats { display: flex; flex-direction: column; gap: 6px; }
+.ah-cat { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent; color: #c9d7ea; cursor: pointer; text-align: left; font-size: 13px; }
+.ah-cat:hover { background: #13213a; }
+.ah-cat.active { background: #0f2a40; border-color: #1e6a95; color: #eef4fb; }
+.ah-cat.active .v-icon { color: #009fe3; }
+.ah-cat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ah-cat-count { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1c3550; }
+.ah-dl-all { border-radius: 10px; }
 .ah-empty { text-align: center; padding: 26px 16px; color: var(--muted); }
 </style>
