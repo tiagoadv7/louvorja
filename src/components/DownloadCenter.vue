@@ -15,6 +15,16 @@
         <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
       </div>
 
+      <!-- Espaço da biblioteca: o que os downloads ocupam e o disco livre -->
+      <div v-if="storage" class="dc-storage">
+        <v-icon size="16" class="mr-2">mdi-harddisk</v-icon>
+        <span>{{ $t('components.download_center.storage_used', { used: fmtBytes(storage.usedBytes) }) }}</span>
+        <template v-if="storage.disk">
+          <span class="mx-2">·</span>
+          <span>{{ $t('components.download_center.storage_free', { free: fmtBytes(storage.disk.freeBytes), total: fmtBytes(storage.disk.totalBytes) }) }}</span>
+        </template>
+      </div>
+
       <div class="dc-body">
         <!-- ── Sidebar ─────────────────────────────────────────────── -->
         <nav class="dc-sidebar">
@@ -89,11 +99,11 @@
               <div v-for="h in hymnalItems" :key="h.file" class="dc-hymnal-card">
                 <!-- Capa: ícone do hinário (SVG local) -->
                 <div class="dc-hymnal-cover">
-                  <img
+                  <!-- Mesmo SVG, pintado com a cor primária do tema (máscara), igual aos ícones da biblioteca do flute -->
+                  <div
                     v-if="h.cover"
-                    :src="h.cover"
-                    class="dc-hymnal-icon"
-                    loading="lazy"
+                    class="dc-hymnal-icon dc-hymnal-icon--themed"
+                    :style="{ maskImage: `url(${h.cover})`, WebkitMaskImage: `url(${h.cover})` }"
                   />
                   <v-icon v-else size="72" :color="h.color">{{ h.icon }}</v-icon>
                   <div v-if="isDownloaded(h.file)" class="dc-album-badge-ok">
@@ -105,6 +115,7 @@
                 <div class="dc-hymnal-info">
                   <div class="dc-hymnal-name">{{ h.name }}</div>
                   <div class="dc-hymnal-desc">{{ h.description }}</div>
+                  <div v-if="folderBytes(h.folder)" class="text-caption text-medium-emphasis">{{ fmtBytes(folderBytes(h.folder)) }}</div>
                   <v-btn
                     v-if="!h.localOnly"
                     :color="isDownloaded(h.file) ? 'success' : 'primary'"
@@ -186,6 +197,7 @@
                 </div>
 
                 <div class="dc-album-name" :title="album.name">{{ album.name }}</div>
+                <div v-if="folderBytes(album.folder_name || album.name)" class="text-caption text-medium-emphasis">{{ fmtBytes(folderBytes(album.folder_name || album.name)) }}</div>
 
                 <div v-if="albumStats[album.id_album]" class="dc-album-stats">
                   <span :title="$t('components.download_center.stat_songs')">🎵 {{ albumStats[album.id_album].json }}</span>
@@ -621,6 +633,7 @@ export default {
     dialog:        false,
     section:       'home',
     loading:       false,
+    storage:       null,
     categories:    [],
     catFilter:     null,
     localFiles:    [],
@@ -670,7 +683,7 @@ export default {
       const t = (k) => this.$t(DC + k);
       const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
       if (locale === 'es') {
-        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true }];
+        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
       }
       return [
         { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, icon: 'mdi-music-note',         color: '#1B5E43' },
@@ -776,8 +789,10 @@ export default {
 
     async init() {
       await this.loadLocalFiles();
+      this.loadStorage();
       if (this.section === 'collections') {
         await this.loadCategories();
+        this.loadStorage();
         await this.loadDownloadedAlbumInfos();
         this.loadCollectionsCompleteStatus();
       }
@@ -790,8 +805,12 @@ export default {
 
     async goTo(s) {
       this.section = s;
+      this.loadStorage();
       if (s === 'collections') {
-        if (this.categories.length === 0) await this.loadCategories();
+        if (this.categories.length === 0) {
+          await this.loadCategories();
+          this.loadStorage();
+        }
         await this.loadDownloadedAlbumInfos();
         this.loadCollectionsCompleteStatus();
       }
@@ -938,6 +957,28 @@ export default {
       } catch (_) {
         // Sem informação nova — mantém o estado anterior
       }
+    },
+
+    // Espaço da biblioteca: pastas do hinário e dos álbuns carregados (ver electron/ipc.js#library:storage).
+    async loadStorage() {
+      const folders = new Set(['Himnario Adventista']);
+      for (const cat of this.categories || []) {
+        for (const album of cat.albums || []) folders.add(album.folder_name || album.name);
+      }
+      try {
+        this.storage = await this.$electron.libraryStorage([...folders]);
+      } catch (_) {
+        this.storage = null;
+      }
+    },
+    folderBytes(name) {
+      return name && this.storage?.perFolder ? this.storage.perFolder[name] || 0 : 0;
+    },
+    fmtBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
     },
 
     isDownloaded(filename) {
@@ -1430,6 +1471,31 @@ export default {
   font-size: 12px;
   opacity: 0.55;
 }
+/* Ícone do hinário pintado com a cor primária do tema (máscara sobre o mesmo SVG). */
+.dc-hymnal-icon--themed {
+  width: 55%;
+  aspect-ratio: 1;
+  background-color: rgb(var(--v-theme-primary));
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.35));
+}
+
+/* Barra de espaço da biblioteca (uso e disco livre), logo abaixo do título. */
+.dc-storage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 6px 14px;
+  font-size: 12px;
+  opacity: 0.85;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
 .dc-hymnal-icon {
   width: 55%;
   height: auto;

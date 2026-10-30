@@ -250,6 +250,10 @@ export default {
     return window.electron.scanAlbumsFiles(import.meta.env.VITE_URL_DATABASE, import.meta.env.VITE_API_TOKEN, scope);
   },
 
+  // Espaço da biblioteca: tamanho das pastas pedidas + uso total + disco livre.
+  libraryStorage: (folders = []) =>
+    isElectron() ? window.electron.libraryStorage(folders) : Promise.resolve(null),
+
   // Verifica álbuns específicos (baixados via album_<id>.json) diretamente pelo
   // id — ao contrário de scanAlbumsFiles, não depende do SQLite Delphi (cujas
   // entradas não têm id_album e nunca combinariam com os ids de "Meus Downloads").

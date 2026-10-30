@@ -2588,6 +2588,36 @@ document.getElementById('f').onsubmit=async(e)=>{
   // Igual ao ARQUIVOS_SISTEMA do LouvorJA Delphi: Arquivo | Diretório | Status
   // scope 'es' = só álbuns/hinários em espanhol (ids 9xxx, ver scripts/import-*-es);
   // 'pt' (padrão) = o resto, pela tabela Delphi quando existe, senão pelos JSON.
+  // ── Biblioteca: espaço usado pelos downloads e espaço livre no disco ─────────
+  // Tamanho de cada pasta pedida (mesma regra de nome dos downloads, via
+  // getAutoMediaDir) e do conjunto de músicas baixadas. O disco é o volume
+  // onde fica a pasta gravável de config (statfs).
+  const sumDirBytes = async (dir) => {
+    let total = 0;
+    try {
+      for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) total += await sumDirBytes(full);
+        else if (entry.isFile()) total += (await fs.promises.stat(full)).size;
+      }
+    } catch (_) { /* pasta inexistente = 0 bytes */ }
+    return total;
+  };
+  ipcMain.handle('library:storage', async (_e, folders = []) => {
+    const perFolder = {};
+    for (const name of Array.isArray(folders) ? folders : []) {
+      if (typeof name !== 'string' || !name) continue;
+      perFolder[name] = await sumDirBytes(getAutoMediaDir(name, true));
+    }
+    const usedBytes = await sumDirBytes(path.join(getWritableConfigDir(), 'musicas'));
+    let disk = null;
+    try {
+      const s = await fs.promises.statfs(getWritableConfigDir());
+      disk = { freeBytes: Number(s.bavail) * Number(s.bsize), totalBytes: Number(s.blocks) * Number(s.bsize) };
+    } catch (_) { /* volume sem statfs: a UI mostra só o uso */ }
+    return { usedBytes, perFolder, disk };
+  });
+
   ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token, scope = 'pt') => {
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });

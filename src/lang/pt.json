@@ -101,7 +101,7 @@
             "updates": "Verificar atualizações"
         },
         "download_center": {
-            "title": "Centro de Downloads",
+            "title": "Biblioteca",
             "welcome": "Bem-vindo ao Centro de Downloads",
             "welcome_desc": "Baixe coletâneas completas (letras, capas, áudio) para usar o LouvorJA sem conexão.",
             "nav_home": "Início",
@@ -178,7 +178,9 @@
             "fail_album": "Falha ao baixar álbum \"{name}\"",
             "unknown_error": "erro desconhecido",
             "download_files_error": "Erro ao baixar arquivos.",
-            "song": "música"
+            "song": "música",
+            "storage_used": "Usado: {used}",
+            "storage_free": "Livre: {free} de {total}"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",
