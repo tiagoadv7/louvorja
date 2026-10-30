@@ -260,6 +260,7 @@
                 </dl>
                 <v-btn
                   block
+                  class="lib-detail-btn"
                   color="primary"
                   variant="flat"
                   prepend-icon="mdi-download"
@@ -1593,6 +1594,8 @@ export default {
   background: rgba(255,255,255,0.06);
 }
 .lib-detail-cover img { width: 100%; height: 100%; object-fit: cover; }
+.lib-detail > * { flex-shrink: 0; }
+.lib-detail-btn { height: 40px !important; min-height: 40px; margin-top: auto; }
 .lib-detail-name { font-size: 16px; font-weight: 700; }
 .lib-detail-sub { font-size: 12px; opacity: 0.6; }
 .lib-status {
