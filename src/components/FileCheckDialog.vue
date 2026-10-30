@@ -7,7 +7,7 @@
     :persistent="step === 'downloading'"
     @update:modelValue="v => { if (!v) close(); }"
   >
-    <v-card rounded="lg" elevation="8" style="overflow:hidden">
+    <v-card theme="dark" rounded="lg" elevation="8" style="overflow:hidden">
 
       <!-- Cabeçalho -->
       <div class="fcd-header">

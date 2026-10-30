@@ -1719,8 +1719,8 @@ export default {
   width: 55%;
   margin: 0 auto;
 }
-.dc-hymnal-icon--themed svg { width: 100%; height: auto; display: block; }
-.dc-hymnal-icon--themed path { fill: #009fe3 !important; }
+.dc-hymnal-icon--themed :deep(svg) { width: 100%; height: auto; display: block; }
+.dc-hymnal-icon--themed :deep(path) { fill: #009fe3 !important; }
 
 /* Barra de espaço da biblioteca (uso e disco livre), logo abaixo do título. */
 .dc-storage {
@@ -1753,6 +1753,39 @@ export default {
 }
 .dc-storage-text { display: flex; flex-direction: column; min-width: 180px; gap: 4px; font-size: 12px; font-weight: 600; }
 .dc-storage-free { font-weight: 400; opacity: 0.7; }
+
+/* Hinários em linhas (capa à esquerda, como a lista do flute) e demais seções no mesmo visual. */
+.dc-root--library .dc-hymnal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dc-root--library .dc-hymnal-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+}
+.dc-root--library .dc-hymnal-cover {
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dc-root--library .dc-hymnal-info { flex: 1; min-width: 0; }
+.dc-root--library .dc-hymnal-info .v-btn { max-width: 220px; }
+.dc-root--library .dc-folder-row,
+.dc-root--library .dc-local-row,
+.dc-root--library .dc-pkg-row {
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
 
 /* Biblioteca no estilo escuro do flute: paleta própria só nesta seção. */
 .dc-root--library {
@@ -1849,6 +1882,7 @@ export default {
 .dc-root--library .lib-search input { border: none; box-shadow: none; }
 .dc-root--library .v-btn--variant-outlined { color: #33b5ea !important; border-color: rgba(74,168,255,0.55) !important; }
 .dc-root--library .v-btn--variant-flat { color: #fff !important; }
+.dc-root--library .v-btn--variant-tonal { color: #33b5ea !important; background: rgba(0,159,227,0.15) !important; }
 .dc-root--library .lib-name { color: #eef4fb; }
 .dc-root--library .lib-sub,
 .dc-root--library .lib-size,
