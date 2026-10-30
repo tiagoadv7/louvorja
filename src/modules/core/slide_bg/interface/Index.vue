@@ -540,7 +540,10 @@ function syncToLocalStorage() {
       url,
       opacity:          imageOpacity.value,
       fit:              ud.get(`modules.${ID}.image_fit`,        'cover')      || 'cover',
-      background_color: ud.get(`modules.${ID}.background_color`, '') || '',
+      // '#000000' é o padrão visual do seletor (ver previewBgColor), não uma
+      // escolha: salvo por engano, pintava o "Sem Fundo" de preto. Antes de
+      // 30f164f o "Sem Fundo" era sempre transparente, então essa cor vazia = transparente.
+      background_color: savedBgColor(),
       // Fundo animado (Three.js/GSAP/anime.js/Motion — ver components/
       // AnimatedBackground.vue) — independente do tipo acima (imagem/vídeo),
       // pra poder combinar os dois (ex.: fundo animado com um logo em imagem
@@ -632,6 +635,11 @@ function setOpacity(v) {
 function setBackgroundColor(v) {
   proxy?.$userdata?.set(`modules.${ID}.background_color`, v);
   syncToLocalStorage();
+}
+// Cor de fundo salva, sem o preto padrão do seletor (usada em bgData, ver syncToLocalStorage).
+function savedBgColor() {
+  const saved = proxy?.$userdata?.get(`modules.${ID}.background_color`, '') || '';
+  return saved.toLowerCase() === '#000000' ? '' : saved;
 }
 function setImageFit(v) {
   proxy?.$userdata?.set(`modules.${ID}.image_fit`, v);
