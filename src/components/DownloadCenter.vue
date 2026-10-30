@@ -4,7 +4,7 @@
       <slot :props="props" />
     </template>
 
-    <v-card class="dc-root" :class="{ 'dc-root--library': section === 'collections' }" rounded="lg" style="overflow:hidden; height:700px">
+    <v-card class="dc-root dc-root--library" :class="{ 'dc-root--collections': section === 'collections' }" rounded="lg" style="overflow:hidden; height:700px">
       <!-- Título -->
       <div class="dc-header">
         <div class="dc-header-spacer">
@@ -1759,8 +1759,48 @@ export default {
 .dc-root--library .lib-detail-cover { background: #0a111c; }
 .dc-root--library .dc-content,
 .dc-root--library .dc-sidebar { background: #0b1420; color: #e6edf6; }
-.dc-root--library .dc-section-title { display: none; }
-.dc-root--library .dc-sidebar { display: none; }
+/* Só nas coletâneas a barra de categorias substitui a navegação lateral. */
+.dc-root--collections .dc-section-title { display: none; }
+.dc-root--collections .dc-sidebar { display: none; }
+
+/* Cartões e listas das demais seções no mesmo visual escuro da Biblioteca. */
+.dc-root--library .dc-home-card,
+.dc-root--library .dc-hymnal-card,
+.dc-root--library .dc-album-card,
+.dc-root--library .dc-pkg-row,
+.dc-root--library .dc-folder-row,
+.dc-root--library .dc-local-row,
+.dc-root--library .dc-missing-row,
+.dc-root--library .dc-bible-card {
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.05);
+  color: #e6edf6;
+  border-radius: 12px;
+}
+.dc-root--library .dc-home-card:hover,
+.dc-root--library .dc-hymnal-card:hover,
+.dc-root--library .dc-album-card:hover { background: #15243a; }
+.dc-root--library .dc-home-cover,
+.dc-root--library .dc-album-img-wrap { background: #0a111c; border-radius: 10px; }
+.dc-root--library .dc-section-title,
+.dc-root--library .dc-hymnal-name,
+.dc-root--library .dc-home-label,
+.dc-root--library .dc-album-name,
+.dc-root--library .dc-folder-path { color: #eef4fb; }
+.dc-root--library .dc-hymnal-desc,
+.dc-root--library .dc-home-desc,
+.dc-root--library .dc-folder-info,
+.dc-root--library .dc-dl-group-count { color: #8fa3bd; }
+.dc-root--library .dc-sidebar .v-list-item { color: #d9e4f2; }
+/* Contraste do texto no fundo escuro: subtítulos e rótulos secundários. */
+.dc-root--library .text-medium-emphasis,
+.dc-root--library .text-caption,
+.dc-root--library .dc-header-title,
+.dc-root--library .dc-section-title { color: #b6c6da !important; }
+.dc-root--library .dc-header-title,
+.dc-root--library .dc-section-title { color: #eef4fb !important; }
+.dc-root--library .v-btn--disabled { opacity: 0.5; }
+.dc-root--library .dc-sidebar .v-list-item--active { background: rgba(30,136,255,0.16); }
 .dc-root--library .dc-body { gap: 0; }
 .dc-root--library .lib-cat { border: 1px solid transparent; }
 .dc-root--library .lib-search input { border: none; box-shadow: none; }
