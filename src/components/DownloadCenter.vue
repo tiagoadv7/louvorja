@@ -158,6 +158,7 @@
               {{ $t('components.download_center.no_browser') }}
             </div>
 
+            <div class="lib-subtitle">{{ $t('components.download_center.subtitle') }}</div>
             <div class="lib">
               <!-- Categorias -->
               <aside class="lib-side">
@@ -191,6 +192,11 @@
                     <v-icon size="18">mdi-magnify</v-icon>
                     <input v-model="albumSearch" :placeholder="$t('components.download_center.lib_search')" />
                   </div>
+                  <select v-model="albumStatus" class="lib-select">
+                    <option value="all">{{ $t('components.download_center.lib_status_all') }}</option>
+                    <option value="downloaded">{{ $t('components.download_center.lib_status_downloaded') }}</option>
+                    <option value="pending">{{ $t('components.download_center.lib_status_pending') }}</option>
+                  </select>
                   <select v-model="albumSort" class="lib-select">
                     <option value="recent">{{ $t('components.download_center.lib_sort_recent') }}</option>
                     <option value="name">{{ $t('components.download_center.lib_sort_name') }}</option>
@@ -649,9 +655,13 @@
 import $database from '@/helpers/Database';
 import $storage from '@/helpers/Storage';
 import hasdFlame from '@/assets/imgs/hasd-flame.svg';
-import hasdFlameRaw from '@/assets/imgs/hasd-flame.svg?raw';
+import hymnalLogoRaw from '@/assets/imgs/hymnal-logo.svg?raw';
 // Sem as dimensões físicas (mm) e sem o <style> próprio: o tamanho e a cor vêm do CSS do tema.
-const hasdFlameSvg = hasdFlameRaw.replace(/\s(width|height)="[^"]*"/g, '').replace(/<style[\s\S]*?<\/style>/g, '');
+const hymnalLogoSvg = hymnalLogoRaw
+  .replace(/<metadata[\s\S]*?<\/metadata>/g, '')
+  .replace(/<title>[\s\S]*?<\/title>/g, '')
+  .replace(/<style[\s\S]*?<\/style>/g, '')
+  .replace(/\s(width|height)="[^"]*"/g, '');
 
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
@@ -690,6 +700,7 @@ export default {
     catFilter:     null,
     albumSearch:   '',
     albumSort:     'recent',
+    albumStatus:   'all',
     albumView:     'list',
     selectedAlbumId: null,
     localFiles:    [],
@@ -739,11 +750,11 @@ export default {
       const t = (k) => this.$t(DC + k);
       const locale = this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
       if (locale === 'es') {
-        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
+        return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
       }
       return [
-        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note',         color: '#1B5E43' },
-        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note',         color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
       ];
     },
     bibleItems() {
@@ -767,6 +778,8 @@ export default {
       const q = this.albumSearch.trim().toLowerCase();
       let list = this.filteredAlbums.slice();
       if (q) list = list.filter(a => (a.name || '').toLowerCase().includes(q));
+      if (this.albumStatus === 'downloaded') list = list.filter(a => this.isAlbumComplete(a));
+      if (this.albumStatus === 'pending') list = list.filter(a => !this.isAlbumComplete(a));
       if (this.albumSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
       else list.sort((a, b) => (b.id_album || 0) - (a.id_album || 0));
       return list;
@@ -1483,6 +1496,7 @@ export default {
   height: 100%;
   min-height: 0;
 }
+.lib-subtitle { font-size: 13px; opacity: 0.7; margin: 0 0 10px; }
 .lib-side, .lib-detail {
   background: rgba(255,255,255,0.03);
   border-radius: 10px;
@@ -1710,7 +1724,7 @@ export default {
   margin: 0 auto;
 }
 .dc-hymnal-icon--themed svg { width: 100%; height: auto; display: block; }
-.dc-hymnal-icon--themed path { fill: rgb(var(--v-theme-primary)) !important; }
+.dc-hymnal-icon--themed path { fill: #009fe3 !important; }
 
 /* Barra de espaço da biblioteca (uso e disco livre), logo abaixo do título. */
 .dc-storage {

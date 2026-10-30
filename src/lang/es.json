@@ -195,7 +195,11 @@
             "lib_not_downloaded": "No descargada",
             "lib_category": "Categoría",
             "lib_songs": "Canciones",
-            "lib_size": "Tamaño"
+            "lib_size": "Tamaño",
+            "subtitle": "Gestione y descargue las colecciones de música para usar en la liturgia.",
+            "lib_status_all": "Todas",
+            "lib_status_downloaded": "Descargadas",
+            "lib_status_pending": "No descargadas"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",
