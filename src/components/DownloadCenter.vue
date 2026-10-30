@@ -132,7 +132,7 @@
                       <template v-if="albumProgress[album.id_album]">{{ albumProgress[album.id_album].percent }}%</template>
                       <template v-else>{{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}</template>
                     </button>
-                    <span class="ah-size">{{ albumSizeLabel(album) || albumSongsHint(album) }}</span>
+                    <span class="ah-size">{{ albumSongsHint(album) }}<template v-if="albumSizeLabel(album)"> · {{ albumSizeLabel(album) }}</template></span>
                   </div>
                 </div>
               </article>
@@ -151,8 +151,8 @@
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-music-note</v-icon>{{ $t('components.download_center.nav_hymnals') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="h in hymnalItems" :key="h.file" class="ah-album">
-                <div class="ah-cover ah-cover--logo">
-                  <div v-if="h.coverSvg" class="ah-logo" v-html="h.coverSvg" />
+                <div class="ah-cover ah-cover--logo" :style="{ background: h.coverBg || undefined }">
+                  <div v-if="h.coverSvg" class="ah-logo" :style="{ '--logo-fill': h.coverFill || undefined }" v-html="h.coverSvg" />
                   <v-icon v-else size="56" :color="h.color">{{ h.icon }}</v-icon>
                   <div v-if="isDownloaded(h.file)" class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
                 </div>
@@ -176,7 +176,7 @@
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-book-open-variant</v-icon>{{ $t('components.download_center.nav_bibles') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="b in bibleItems" :key="b.id" class="ah-album">
-                <div class="ah-cover ah-cover--logo">
+                <div class="ah-cover ah-cover--logo" :style="{ background: h.coverBg || undefined }">
                   <v-icon size="64" :color="b.color">mdi-book-open-variant</v-icon>
                   <div v-if="allDownloaded(b.files)" class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
                 </div>
@@ -235,8 +235,8 @@
                 </article>
               </div>
               <div v-for="h in downloadedHymnals" :key="h.name" class="ah-album">
-                <div class="ah-cover ah-cover--logo">
-                  <div v-if="h.coverSvg" class="ah-logo" v-html="h.coverSvg" />
+                <div class="ah-cover ah-cover--logo" :style="{ background: h.coverBg || undefined }">
+                  <div v-if="h.coverSvg" class="ah-logo" :style="{ '--logo-fill': h.coverFill || undefined }" v-html="h.coverSvg" />
                   <v-icon v-else size="56" :color="h.color">{{ h.icon }}</v-icon>
                   <div class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
                 </div>
@@ -400,6 +400,8 @@ const cleanSvg = (raw) => raw
   .replace(/\s(width|height)="[^"]*"/g, '');
 const hasdFlameSvg = cleanSvg(hasdFlameRaw);
 const hymnalLogoSvg = cleanSvg(hymnalLogoRaw);
+const HYMNAL_2022_COLORS = { coverBg: '#000000', coverFill: '#ffffff' };
+const HYMNAL_1996_COLORS = { coverBg: '#ffffff', coverFill: '#3f8f8a' };
 
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
@@ -440,6 +442,7 @@ export default {
     albumSort:     'recent',
     albumStatus:   'all',
     albumEstimates: {},
+    albumSongs: {},
     deleteDialog: false,
     deleteTarget: null,
     albumView:     'grid',
@@ -494,8 +497,8 @@ export default {
         return [{ file: 'es_hymnal', name: t('hymnal_es'), description: t('hymnal_es_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note', color: '#1B5E43', localOnly: true, folder: 'Himnario Adventista' }];
       }
       return [
-        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, icon: 'mdi-music-note',         color: '#1B5E43' },
-        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+        { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, ...HYMNAL_2022_COLORS, icon: 'mdi-music-note',         color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, ...HYMNAL_1996_COLORS, icon: 'mdi-music-note-outline', color: '#1B5E43' },
       ];
     },
     bibleItems() {
@@ -588,7 +591,7 @@ export default {
       const map = Object.fromEntries(this.hymnalItems.map(h => [h.file, h]));
       return this.localFiles
         .filter(f => map[f.name])
-        .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '', coverSvg: map[f.name].coverSvg || '', folder: map[f.name].folder || '' }));
+        .map(f => ({ ...f, label: map[f.name].name, icon: map[f.name].icon, color: map[f.name].color, cover: map[f.name].cover || '', coverSvg: map[f.name].coverSvg || '', coverBg: map[f.name].coverBg || '', coverFill: map[f.name].coverFill || '', folder: map[f.name].folder || '' }));
     },
 
     downloadedBibleSets() {
@@ -827,7 +830,7 @@ export default {
     },
     // Antes de baixar o servidor não publica o tamanho: mostra a quantidade de músicas.
     albumSongsHint(album) {
-      const n = (album.songCount ?? null);
+      const n = this.albumSongs[album.id_album];
       return n ? `${n} ${this.$t('components.download_center.lib_songs').toLowerCase()}` : '—';
     },
     // Tamanho estimado (o servidor não publica o peso): duração das músicas × ~35 KB/s
@@ -852,6 +855,7 @@ export default {
             const musics = (body.data || body).musics || [];
             const secs = musics.reduce((sum, m) => sum + this.hmsSeconds(m.duration), 0);
             this.albumEstimates = { ...this.albumEstimates, [album.id_album]: secs * 35000 };
+            this.albumSongs = { ...this.albumSongs, [album.id_album]: musics.length };
           } catch (_) { /* sem estimativa para este álbum */ }
         }
       };
@@ -1396,13 +1400,17 @@ export default {
   padding: 8px 14px;
   border: 0;
   border-radius: 8px;
-  background: var(--accent);
-  color: #171b23;
+  border: 1px solid rgba(0, 159, 227, 0.45);
+  background: rgba(0, 159, 227, 0.1);
+  color: #33b5ea;
   font-weight: 750;
   font-size: 12px;
   cursor: pointer;
 }
-.ah-btn-main:hover { background: #33b5ea; }
+.ah-btn-main { transition: background 0.15s, color 0.15s; }
+.ah-btn-main:hover { background: #009fe3; border-color: #009fe3; color: #ffffff; }
+.ah-dl-all { background: #009fe3 !important; border-color: #009fe3 !important; color: #ffffff !important; }
+.ah-dl-all:hover { background: #33b5ea !important; }
 .ah-btn-main:disabled { opacity: 0.45; cursor: default; }
 .ah-btn-ghost {
   padding: 7px 12px;
@@ -1443,7 +1451,7 @@ export default {
 .ah-cover--logo { background: #0a111c; }
 .ah-logo { width: 62%; }
 .ah-logo :deep(svg) { width: 100%; height: auto; display: block; }
-.ah-logo :deep(path) { fill: var(--accent) !important; }
+.ah-logo :deep(path) { fill: var(--logo-fill, #009fe3) !important; }
 .ah-badge-ok {
   position: absolute;
   top: 6px;
