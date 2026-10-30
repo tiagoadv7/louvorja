@@ -199,7 +199,11 @@
             "subtitle": "Gestione y descargue las colecciones de música para usar en la liturgia.",
             "lib_status_all": "Todas",
             "lib_status_downloaded": "Descargadas",
-            "lib_status_pending": "No descargadas"
+            "lib_status_pending": "No descargadas",
+            "stat_done": "Completadas",
+            "stat_queue": "En curso",
+            "stat_used": "Espacio usado",
+            "in_progress": "En curso"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",

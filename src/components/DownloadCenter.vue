@@ -503,6 +503,34 @@
               <span class="text-caption text-medium-emphasis ml-2">({{ totalSize }})</span>
             </div>
 
+            <!-- Resumo (modelo AlbumHub): concluídos, em andamento e espaço usado -->
+            <div class="dc-stats mt-3">
+              <div class="dc-stat">
+                <span class="dc-stat-label">{{ $t('components.download_center.stat_done') }}</span>
+                <strong class="dc-stat-value">{{ downloadedAlbums.length + downloadedHymnals.length + downloadedBibleSets.length }}</strong>
+              </div>
+              <div class="dc-stat">
+                <span class="dc-stat-label">{{ $t('components.download_center.stat_queue') }}</span>
+                <strong class="dc-stat-value">{{ activeDownloads.length }}</strong>
+              </div>
+              <div class="dc-stat">
+                <span class="dc-stat-label">{{ $t('components.download_center.stat_used') }}</span>
+                <strong class="dc-stat-value">{{ totalSize }}</strong>
+              </div>
+            </div>
+
+            <!-- Downloads em andamento: progresso de cada coletânea -->
+            <div v-if="activeDownloads.length" class="dc-queue mt-3">
+              <div class="dc-dl-group-title">{{ $t('components.download_center.in_progress') }}</div>
+              <div v-for="d in activeDownloads" :key="d.id" class="dc-queue-row">
+                <div class="flex-grow-1 min-w-0">
+                  <div class="text-body-2 font-weight-medium text-truncate">{{ d.name }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ d.message }} · {{ d.percent }}%</div>
+                  <v-progress-linear :model-value="d.percent" color="#009fe3" bg-color="rgba(255,255,255,0.12)" height="5" rounded class="mt-1" />
+                </div>
+              </div>
+            </div>
+
             <div v-if="localFiles.length === 0" class="text-caption text-medium-emphasis mt-3">
               {{ $t('components.download_center.no_downloads') }}
             </div>
@@ -810,6 +838,16 @@ export default {
       return this.localFiles.filter(f => !this._isSystemFile(f.name));
     },
 
+    // Coletâneas em download agora (vem do albumProgress que o download já atualiza).
+    activeDownloads() {
+      return Object.entries(this.albumProgress).map(([id, p]) => ({
+        id,
+        name: this.albumNameById(id),
+        percent: p.percent || 0,
+        message: p.message || '',
+      }));
+    },
+
     totalSize() {
       const t = this.userFiles.reduce((s, f) => s + (f.size || 0), 0);
       return this.formatSize(t);
@@ -1065,6 +1103,13 @@ export default {
       const d = this.storage?.disk;
       if (!d || !d.totalBytes) return 0;
       return Math.min(100, ((d.totalBytes - d.freeBytes) / d.totalBytes) * 100);
+    },
+    albumNameById(id) {
+      for (const cat of this.categories || []) {
+        const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
+        if (album) return album.name;
+      }
+      return `#${id}`;
     },
     folderBytes(name) {
       return name && this.storage?.perFolder ? this.storage.perFolder[name] || 0 : 0;
@@ -1756,6 +1801,30 @@ export default {
 }
 .dc-storage-text { display: flex; flex-direction: column; min-width: 180px; gap: 4px; font-size: 12px; font-weight: 600; }
 .dc-storage-free { font-weight: 400; opacity: 0.7; }
+
+/* Meus downloads (modelo AlbumHub): cartões de resumo e fila com progresso. */
+.dc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dc-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.dc-stat-label { font-size: 12px; opacity: 0.7; }
+.dc-stat-value { font-size: 22px; color: #33b5ea; }
+.dc-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.06);
+}
 
 /* Hinários em linhas (capa à esquerda, como a lista do flute) e demais seções no mesmo visual. */
 .dc-root--library .dc-hymnal-grid {

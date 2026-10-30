@@ -196,7 +196,11 @@
             "subtitle": "Gerencie e baixe as coletâneas de músicas para usar na liturgia.",
             "lib_status_all": "Todas",
             "lib_status_downloaded": "Baixadas",
-            "lib_status_pending": "Não baixadas"
+            "lib_status_pending": "Não baixadas",
+            "stat_done": "Concluídos",
+            "stat_queue": "Em andamento",
+            "stat_used": "Espaço usado",
+            "in_progress": "Em andamento"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",
