@@ -790,7 +790,7 @@ export default {
       const n = (album.songCount ?? null);
       return n ? `${n} ${this.$t('components.download_center.lib_songs').toLowerCase()}` : '—';
     },
-    // Tamanho estimado (o servidor não publica o peso): duração das músicas × ~30 KB/s
+    // Tamanho estimado (o servidor não publica o peso): duração das músicas × ~35 KB/s
     // (cantado + playback, medido nos arquivos do hinário). Só enquanto não está baixada.
     async loadAlbumEstimates() {
       const seen = new Set();
@@ -811,7 +811,7 @@ export default {
             const body = await resp.json();
             const musics = (body.data || body).musics || [];
             const secs = musics.reduce((sum, m) => sum + this.hmsSeconds(m.duration), 0);
-            this.albumEstimates = { ...this.albumEstimates, [album.id_album]: secs * 30000 };
+            this.albumEstimates = { ...this.albumEstimates, [album.id_album]: secs * 35000 };
           } catch (_) { /* sem estimativa para este álbum */ }
         }
       };
