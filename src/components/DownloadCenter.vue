@@ -8,9 +8,10 @@
       <!-- ── Barra lateral (modelo AlbumHub) ───────────────────────────── -->
       <aside class="ah-side">
         <div class="ah-brand">
-          {{ $t('components.download_center.brand_a') }} <span>{{ $t('components.download_center.brand_b') }}</span>
-          <div class="ah-brand-sub">{{ $t('components.download_center.brand_sub') }}</div>
+          <v-icon color="#009fe3" size="26" class="mr-2">mdi-floppy</v-icon>
+          <span>{{ $t('components.download_center.brand_a') }} <span class="ah-brand-accent">{{ $t('components.download_center.brand_b') }}</span></span>
         </div>
+        <div class="ah-brand-sub">{{ $t('components.download_center.brand_sub') }}</div>
 
         <button class="ah-nav" :class="{ active: isExplore }" @click="goTo('collections')">
           <v-icon size="18">mdi-view-grid-outline</v-icon>
@@ -35,7 +36,7 @@
 
         <!-- Cartão de espaço em disco (rodapé da barra lateral) -->
         <div v-if="storage" class="ah-storage">
-          <b>{{ $t('components.download_center.storage_title') }}</b>
+          <div class="ah-storage-head"><v-icon size="18" color="#009fe3">mdi-harddisk</v-icon><b>{{ $t('components.download_center.storage_title') }}</b></div>
           <strong v-if="storage.disk">{{ fmtBytes(storage.disk.freeBytes) }}</strong>
           <div class="ah-progress"><span :style="{ width: diskUsedPct() + '%' }" /></div>
           <div class="ah-muted">{{ $t('components.download_center.storage_used', { used: fmtBytes(storage.usedBytes) }) }}</div>
@@ -118,14 +119,17 @@
                     <span>{{ albumCategoryName(album) }}</span>
                     <span>{{ albumSizeLabel(album) }}</span>
                   </div>
-                  <button
-                    class="ah-btn-main ah-btn-block"
-                    :disabled="!!albumProgress[album.id_album]"
-                    @click="downloadAlbumAny(album)"
-                  >
-                    <template v-if="albumProgress[album.id_album]">{{ albumProgress[album.id_album].percent }}%</template>
-                    <template v-else>{{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}</template>
-                  </button>
+                  <div class="ah-action">
+                    <button
+                      class="ah-btn-main"
+                      :disabled="!!albumProgress[album.id_album]"
+                      @click="downloadAlbumAny(album)"
+                    >
+                      <template v-if="albumProgress[album.id_album]">{{ albumProgress[album.id_album].percent }}%</template>
+                      <template v-else>{{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}</template>
+                    </button>
+                    <span class="ah-size">{{ albumSizeLabel(album) || albumSongsHint(album) }}</span>
+                  </div>
                 </div>
               </article>
               <div v-if="libraryAlbums.length === 0" class="ah-empty">{{ $t('components.download_center.lib_empty') }}</div>
@@ -777,6 +781,11 @@ export default {
       if (!d || !d.totalBytes) return 0;
       return Math.min(100, ((d.totalBytes - d.freeBytes) / d.totalBytes) * 100);
     },
+    // Antes de baixar o servidor não publica o tamanho: mostra a quantidade de músicas.
+    albumSongsHint(album) {
+      const n = (album.songCount ?? null);
+      return n ? `${n} ${this.$t('components.download_center.lib_songs').toLowerCase()}` : '—';
+    },
     albumNameById(id) {
       for (const cat of this.categories || []) {
         const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
@@ -1159,13 +1168,13 @@ export default {
 <style scoped>
 /* Centro de downloads no modelo do protótipo AlbumHub. */
 .ah {
-  --bg: #071426;
-  --side: #091a30;
-  --panel: #0c1d32;
-  --card: #10253d;
-  --line: #23415f;
+  --bg: #0b1420;
+  --side: #0d1828;
+  --panel: #101c2e;
+  --card: #13213a;
+  --line: #1b2f48;
   --muted: #91a9c6;
-  --accent: #ffad16;
+  --accent: #009fe3;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   height: 720px;
@@ -1177,21 +1186,21 @@ export default {
 }
 .ah-side {
   background: var(--side);
-  border-right: 1px solid #1d3552;
+  border-right: 1px solid #1b2f48;
   padding: 20px 13px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
 }
-.ah-brand { font-size: 22px; font-weight: 800; padding: 4px 8px 20px; letter-spacing: -0.5px; }
-.ah-brand span { color: var(--accent); }
+.ah-brand { display: flex; align-items: center; font-size: 22px; font-weight: 800; padding: 4px 8px 20px; letter-spacing: -0.5px; }
+.ah-brand-accent { color: #009fe3; }
 .ah-rows .ah-album { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 14px; }
 .ah-rows .ah-cover { width: 64px; margin: 0; }
 .ah-rows .ah-album-body { min-width: 0; }
 .ah-rows .ah-meta { justify-content: flex-start; gap: 16px; }
-.ah-rows .ah-btn-block { width: 160px; margin-top: 8px; }
-.ah-brand-sub { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-top: 2px; }
+.ah-rows .ah-action { margin-top: 8px; }
+.ah-brand-sub { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin: -14px 0 18px 8px; }
 .ah-nav {
   display: flex;
   align-items: center;
@@ -1206,14 +1215,18 @@ export default {
   cursor: pointer;
 }
 .ah-nav:hover { background: #192c43; }
-.ah-nav.active { background: #302c21; color: var(--accent); border-left: 3px solid var(--accent); }
+.ah-nav.active { background: #0f2a40; color: var(--accent); border-left: 3px solid var(--accent); }
 .ah-storage {
   margin-top: auto;
   background: var(--card);
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   border-radius: 12px;
   padding: 14px;
 }
+.ah-storage-head { display: flex; align-items: center; gap: 6px; }
+.ah-action { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.ah-action .ah-btn-main { flex-shrink: 0; }
+.ah-size { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .ah-storage strong { display: block; font-size: 19px; margin: 8px 0 0; }
 .ah-muted { color: var(--muted); font-size: 12px; }
 .ah-progress { height: 7px; background: #243b55; border-radius: 10px; overflow: hidden; margin: 10px 0; }
@@ -1222,7 +1235,7 @@ export default {
 .ah-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .ah-top {
   height: 66px;
-  border-bottom: 1px solid #1d3552;
+  border-bottom: 1px solid #1b2f48;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1234,7 +1247,7 @@ export default {
   flex: 1;
   max-width: 480px;
   background: #10253e;
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   border-radius: 9px;
   padding: 10px 14px;
   color: white;
@@ -1249,7 +1262,7 @@ export default {
   padding: 7px 14px;
   border-radius: 22px;
   background: #10253e;
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   color: #b9cce4;
   font-size: 12px;
   cursor: pointer;
@@ -1259,15 +1272,15 @@ export default {
 .ah-toolbar > b { margin-right: auto; }
 .ah-select {
   background: #10253e;
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   border-radius: 8px;
   padding: 7px 10px;
   color: #eef4ff;
   font-size: 12px;
 }
-.ah-view { display: flex; border: 1px solid #294561; border-radius: 8px; overflow: hidden; }
+.ah-view { display: flex; border: 1px solid #1f3550; border-radius: 8px; overflow: hidden; }
 .ah-view button { background: #10253e; border: 0; padding: 6px 9px; color: #b9cce4; cursor: pointer; }
-.ah-view button.on { background: #302c21; color: var(--accent); }
+.ah-view button.on { background: #0f2a40; color: var(--accent); }
 
 .ah-btn-main {
   display: inline-flex;
@@ -1283,13 +1296,13 @@ export default {
   font-size: 12px;
   cursor: pointer;
 }
-.ah-btn-main:hover { background: #ffc04b; }
+.ah-btn-main:hover { background: #33b5ea; }
 .ah-btn-main:disabled { opacity: 0.45; cursor: default; }
 .ah-btn-ghost {
   padding: 7px 12px;
   border-radius: 8px;
   background: #10253e;
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   color: #b9cce4;
   font-size: 12px;
   cursor: pointer;
@@ -1338,7 +1351,7 @@ export default {
   align-items: center;
   justify-content: center;
 }
-.ah-badge-ok.warn { background: #3d2e12; color: #ffb323; }
+.ah-badge-ok.warn { background: #3d2e12; color: #33b5ea; }
 .ah-album-title { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ah-clamp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
 .ah-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 8px; }
@@ -1358,17 +1371,17 @@ export default {
 .ah-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .ah-stat {
   background: var(--card);
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   border-radius: 12px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
-.ah-stat strong { font-size: 22px; color: #ffb323; }
+.ah-stat strong { font-size: 22px; color: #33b5ea; }
 .ah-panel {
   background: var(--card);
-  border: 1px solid #294561;
+  border: 1px solid #1f3550;
   border-radius: 12px;
   padding: 14px;
   display: flex;
