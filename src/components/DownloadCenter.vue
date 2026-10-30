@@ -5,43 +5,35 @@
     </template>
 
     <v-card class="dc-root dc-root--library" :class="{ 'dc-root--collections': section === 'collections' }" rounded="lg" style="overflow:hidden; height:700px">
-      <!-- Título -->
+      <!-- Cabeçalho (modelo Biblioteca Local do flute): identidade à esquerda,
+           espaço em disco e fechar à direita -->
       <div class="dc-header">
-        <div class="dc-header-spacer">
-          <!-- Na Biblioteca não há barra de navegação lateral: volta para o início daqui -->
-          <v-btn
-            v-if="section === 'collections'"
-            icon="mdi-arrow-left"
-            variant="text"
-            size="small"
-            density="compact"
-            @click="goTo('home')"
-          />
-        </div>
         <div class="dc-header-title">
-          <v-icon size="18" color="primary" class="mr-2">mdi-download-box-outline</v-icon>
-          {{ $t('components.download_center.title') }}
+          <v-icon size="38" color="#009fe3" class="mr-5 flex-shrink-0">mdi-library</v-icon>
+          <div>
+            <h2 class="dc-header-name">{{ $t('components.download_center.title') }}</h2>
+            <span class="dc-header-subtitle">{{ $t('components.download_center.subtitle') }}</span>
+          </div>
         </div>
-        <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
-      </div>
-
-      <!-- Espaço da biblioteca: o que os downloads ocupam e o disco livre -->
-      <div v-if="storage" class="dc-storage">
-        <v-icon size="16" class="mr-2">mdi-harddisk</v-icon>
-        <span>{{ $t('components.download_center.storage_used', { used: fmtBytes(storage.usedBytes) }) }}</span>
-        <template v-if="storage.disk">
-          <span class="mx-2">·</span>
-          <span>{{ $t('components.download_center.storage_free', { free: fmtBytes(storage.disk.freeBytes), total: fmtBytes(storage.disk.totalBytes) }) }}</span>
-          <v-progress-linear
-            :model-value="diskUsedPct()"
-            color="#009fe3"
-            bg-color="rgba(255,255,255,0.12)"
-            height="4"
-            rounded
-            class="ml-3"
-            style="width: 110px"
-          />
-        </template>
+        <div class="dc-header-actions">
+          <!-- Widget de espaço: o que os downloads ocupam e o disco livre -->
+          <div v-if="storage" class="dc-storage-widget">
+            <v-icon size="20" class="mr-3">mdi-harddisk</v-icon>
+            <div class="dc-storage-text">
+              <span>{{ $t('components.download_center.storage_used', { used: fmtBytes(storage.usedBytes) }) }}</span>
+              <span v-if="storage.disk" class="dc-storage-free">{{ $t('components.download_center.storage_free', { free: fmtBytes(storage.disk.freeBytes), total: fmtBytes(storage.disk.totalBytes) }) }}</span>
+              <v-progress-linear
+                v-if="storage.disk"
+                :model-value="diskUsedPct()"
+                color="#009fe3"
+                bg-color="rgba(255,255,255,0.12)"
+                height="4"
+                rounded
+              />
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
+        </div>
       </div>
 
       <div class="dc-body">
@@ -158,7 +150,6 @@
               {{ $t('components.download_center.no_browser') }}
             </div>
 
-            <div class="lib-subtitle">{{ $t('components.download_center.subtitle') }}</div>
             <div class="lib">
               <!-- Categorias -->
               <aside class="lib-side">
@@ -182,6 +173,11 @@
                   <v-icon size="18">mdi-folder-outline</v-icon>
                   <span class="lib-cat-name">{{ cat.name }}</span>
                   <span class="lib-count">{{ (cat.albums || []).length }}</span>
+                </button>
+                <!-- Na Biblioteca a navegação das seções fica aqui: volta ao início das seções -->
+                <button class="lib-cat lib-cat--back" @click="goTo('home')">
+                  <v-icon size="18">mdi-arrow-left</v-icon>
+                  <span class="lib-cat-name">{{ $t('components.download_center.nav_home') }}</span>
                 </button>
               </aside>
 
@@ -1736,6 +1732,27 @@ export default {
   opacity: 0.85;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
+
+/* Cabeçalho no modelo do flute: identidade à esquerda, espaço e fechar à direita. */
+.dc-header {
+  justify-content: space-between;
+  padding: 16px 22px;
+  min-height: 84px;
+}
+.dc-header-title { display: flex; align-items: center; min-width: 0; }
+.dc-header-name { font-size: 20px; font-weight: 700; line-height: 1.2; margin: 0; }
+.dc-header-subtitle { font-size: 13px; opacity: 0.7; }
+.dc-header-actions { display: flex; align-items: center; gap: 12px; }
+.dc-storage-widget {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+}
+.dc-storage-text { display: flex; flex-direction: column; min-width: 180px; gap: 4px; font-size: 12px; font-weight: 600; }
+.dc-storage-free { font-weight: 400; opacity: 0.7; }
 
 /* Biblioteca no estilo escuro do flute: paleta própria só nesta seção. */
 .dc-root--library {
