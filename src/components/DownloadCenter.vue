@@ -4,7 +4,7 @@
       <slot :props="props" />
     </template>
 
-    <v-card class="dc-root" rounded="lg" style="overflow:hidden; height:700px">
+    <v-card class="dc-root" :class="{ 'dc-root--library': section === 'collections' }" rounded="lg" style="overflow:hidden; height:700px">
       <!-- Título -->
       <div class="dc-header">
         <div class="dc-header-spacer" />
@@ -1700,6 +1700,66 @@ export default {
   opacity: 0.85;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
+
+/* Biblioteca no estilo escuro do flute: paleta própria só nesta seção. */
+.dc-root--library {
+  color-scheme: dark;
+  background: #0b1420 !important;
+  color: #e6edf6;
+}
+.dc-root--library .dc-header,
+.dc-root--library .dc-storage {
+  background: #0f1b2b;
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+.dc-root--library .dc-storage {
+  display: inline-flex;
+  align-self: flex-start;
+  margin: 10px 14px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  background: #13213a;
+  font-weight: 600;
+  opacity: 1;
+}
+.dc-root--library .lib-side,
+.dc-root--library .lib-detail {
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.dc-root--library .lib-search,
+.dc-root--library .lib-select,
+.dc-root--library .lib-view {
+  background: #121f33;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.dc-root--library .lib-row {
+  background: #101c2e;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+}
+.dc-root--library .lib-row:hover { background: #15243a; }
+.dc-root--library .lib-row--on { border-color: #1e88ff; background: #13243d; }
+.dc-root--library .lib-cat { color: #d9e4f2; }
+.dc-root--library .lib-cat--on { background: rgba(30,136,255,0.16); outline-color: rgba(30,136,255,0.55); }
+.dc-root--library .lib-count { background: rgba(255,255,255,0.1); color: #d9e4f2; }
+.dc-root--library .lib-status { background: rgba(255,255,255,0.06); }
+.dc-root--library .lib-cover,
+.dc-root--library .lib-detail-cover { background: #0a111c; }
+.dc-root--library .dc-content,
+.dc-root--library .dc-sidebar { background: #0b1420; color: #e6edf6; }
+.dc-root--library .dc-section-title { display: none; }
+.dc-root--library .lib-cat { border: 1px solid transparent; }
+.dc-root--library .lib-search input { border: none; box-shadow: none; }
+.dc-root--library .v-btn--variant-outlined { color: #4aa8ff !important; border-color: rgba(74,168,255,0.55) !important; }
+.dc-root--library .v-btn--variant-flat { color: #fff !important; }
+.dc-root--library .lib-name { color: #eef4fb; }
+.dc-root--library .lib-sub,
+.dc-root--library .lib-size,
+.dc-root--library .lib-facts dt { color: #8fa3bd; }
+.dc-root--library .lib-facts dd,
+.dc-root--library .lib-detail-name { color: #eef4fb; }
 
 .dc-hymnal-icon {
   width: 55%;
