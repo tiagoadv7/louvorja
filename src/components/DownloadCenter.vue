@@ -32,6 +32,15 @@
         <template v-if="storage.disk">
           <span class="mx-2">·</span>
           <span>{{ $t('components.download_center.storage_free', { free: fmtBytes(storage.disk.freeBytes), total: fmtBytes(storage.disk.totalBytes) }) }}</span>
+          <v-progress-linear
+            :model-value="diskUsedPct()"
+            color="#009fe3"
+            bg-color="rgba(255,255,255,0.12)"
+            height="4"
+            rounded
+            class="ml-3"
+            style="width: 110px"
+          />
         </template>
       </div>
 
@@ -1038,6 +1047,12 @@ export default {
         this.storage = null;
       }
     },
+    // Percentual do disco ocupado (barra da pílula de espaço).
+    diskUsedPct() {
+      const d = this.storage?.disk;
+      if (!d || !d.totalBytes) return 0;
+      return Math.min(100, ((d.totalBytes - d.freeBytes) / d.totalBytes) * 100);
+    },
     folderBytes(name) {
       return name && this.storage?.perFolder ? this.storage.perFolder[name] || 0 : 0;
     },
@@ -1750,9 +1765,9 @@ export default {
   border-radius: 12px;
 }
 .dc-root--library .lib-row:hover { background: #15243a; }
-.dc-root--library .lib-row--on { border-color: #1e88ff; background: #13243d; }
+.dc-root--library .lib-row--on { border-color: #009fe3; background: #13243d; }
 .dc-root--library .lib-cat { color: #d9e4f2; }
-.dc-root--library .lib-cat--on { background: rgba(30,136,255,0.16); outline-color: rgba(30,136,255,0.55); }
+.dc-root--library .lib-cat--on { background: rgba(0,159,227,0.16); outline-color: rgba(0,159,227,0.55); }
 .dc-root--library .lib-count { background: rgba(255,255,255,0.1); color: #d9e4f2; }
 .dc-root--library .lib-status { background: rgba(255,255,255,0.06); }
 .dc-root--library .lib-cover,
@@ -1800,11 +1815,11 @@ export default {
 .dc-root--library .dc-header-title,
 .dc-root--library .dc-section-title { color: #eef4fb !important; }
 .dc-root--library .v-btn--disabled { opacity: 0.5; }
-.dc-root--library .dc-sidebar .v-list-item--active { background: rgba(30,136,255,0.16); }
+.dc-root--library .dc-sidebar .v-list-item--active { background: rgba(0,159,227,0.16); }
 .dc-root--library .dc-body { gap: 0; }
 .dc-root--library .lib-cat { border: 1px solid transparent; }
 .dc-root--library .lib-search input { border: none; box-shadow: none; }
-.dc-root--library .v-btn--variant-outlined { color: #4aa8ff !important; border-color: rgba(74,168,255,0.55) !important; }
+.dc-root--library .v-btn--variant-outlined { color: #33b5ea !important; border-color: rgba(74,168,255,0.55) !important; }
 .dc-root--library .v-btn--variant-flat { color: #fff !important; }
 .dc-root--library .lib-name { color: #eef4fb; }
 .dc-root--library .lib-sub,

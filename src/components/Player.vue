@@ -1,5 +1,12 @@
 <template>
   <v-card theme="dark" class="w-100 pa-0 ma-0 d-flex align-center" :rounded="0">
+    <!-- Miniplayer minimizado de coletânea: a letra do slide atual flutua acima da barra -->
+    <div
+      v-if="location == 'footer' && source === 'media' && media.minimized && slide_text"
+      class="mini-lyric"
+    >
+      <div class="mini-lyric-text">{{ slide_text }}</div>
+    </div>
     <div
       v-if="location == 'footer' && $vuetify.display.width > 800"
       class="d-flex align-center"
@@ -707,3 +714,38 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+/* Letra do slide flutuando acima da barra no miniplayer minimizado (mesmo espírito
+   da miniatura do mini player de vídeo, mas com o texto da música no lugar da capa). */
+.mini-lyric {
+  position: absolute;
+  left: 16px;
+  bottom: 100%;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 190px;
+  margin-bottom: 8px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  z-index: 2;
+}
+.mini-lyric-text {
+  color: #f6c32a;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.35;
+  text-align: center;
+  text-transform: uppercase;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+</style>

@@ -1,10 +1,5 @@
 <template>
   <v-footer id="footer-bar" class="pa-0" color="primary">
-    <!-- Miniatura flutuante acima da barra quando a coletânea está minimizada
-         (mesmo visual do mini player de vídeo: slide em 16:9 sobre a barra). -->
-    <div v-if="$media.isMinimized() && miniThumb" class="footer-mini-float">
-      <img :src="miniThumb" alt="" draggable="false" />
-    </div>
     <l-player v-if="$media.isMinimized()" location="footer" />
     <l-player v-else-if="videoActive" location="footer" source="video" />
     <l-player v-else-if="soundmasterActive" location="footer" source="soundmaster" />
@@ -48,11 +43,6 @@ export default {
     // Módulo Vídeo minimizado com algo carregado → mostra na barra do rodapé
     // (mesmo lugar/estilo da barra do player de mídia), com o controle de
     // play/pause e o mini player flutuante (PIP) acessíveis sem reabrir o painel.
-    // Capa do slide da coletânea minimizada (miniatura flutuante acima da barra).
-    miniThumb() {
-      const image = this.$appdata.get("modules.media.config.image");
-      return image ? this.$path.file(image) : "";
-    },
     videoActive() {
       return this.$videoPlayer.isMinimized() && !!this.$videoPlayer.getConfig().src;
     },
@@ -99,23 +89,5 @@ export default {
 <style scoped>
 #footer-bar {
   flex: 0 !important;
-}
-.footer-mini-float {
-  position: absolute;
-  left: 16px;
-  bottom: 100%;
-  width: 300px;
-  aspect-ratio: 16 / 9;
-  margin-bottom: 8px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #000;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  z-index: 2;
-}
-.footer-mini-float img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 </style>
