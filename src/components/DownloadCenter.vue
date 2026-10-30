@@ -1777,7 +1777,7 @@ export default {
   justify-content: center;
 }
 .dc-root--library .dc-hymnal-info { flex: 1; min-width: 0; }
-.dc-root--library .dc-hymnal-info .v-btn { max-width: 220px; }
+.dc-root--library .dc-hymnal-info .v-btn { width: auto !important; min-width: 170px; max-width: 220px; }
 .dc-root--library .dc-folder-row,
 .dc-root--library .dc-local-row,
 .dc-root--library .dc-pkg-row {
