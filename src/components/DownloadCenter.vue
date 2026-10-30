@@ -401,6 +401,7 @@ export default {
     albumSearch:   '',
     albumSort:     'recent',
     albumStatus:   'all',
+    albumEstimates: {},
     albumView:     'grid',
     selectedAlbumId: null,
     localFiles:    [],
@@ -635,6 +636,7 @@ export default {
       this.loading = true;
       const locale = this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
       this.categories = await this.fetchCatalog(`${locale}_categories`) || [];
+      this.loadAlbumEstimates();
       this.loading = false;
     },
 
@@ -788,6 +790,37 @@ export default {
       const n = (album.songCount ?? null);
       return n ? `${n} ${this.$t('components.download_center.lib_songs').toLowerCase()}` : '—';
     },
+    // Tamanho estimado (o servidor não publica o peso): duração das músicas × ~30 KB/s
+    // (cantado + playback, medido nos arquivos do hinário). Só enquanto não está baixada.
+    async loadAlbumEstimates() {
+      const seen = new Set();
+      const todo = (this.categories || []).flatMap(c => c.albums || []).filter(a => {
+        if (seen.has(a.id_album) || this.albumEstimates[a.id_album]) return false;
+        seen.add(a.id_album);
+        return true;
+      });
+      const origin = new URL(import.meta.env.VITE_URL_DATABASE).origin;
+      const headers = import.meta.env.VITE_API_TOKEN ? { 'Api-Token': import.meta.env.VITE_API_TOKEN } : {};
+      let next = 0;
+      const worker = async () => {
+        while (next < todo.length) {
+          const album = todo[next++];
+          try {
+            const resp = await fetch(`${origin}/db/album_${album.id_album}`, { headers });
+            if (!resp.ok) continue;
+            const body = await resp.json();
+            const musics = (body.data || body).musics || [];
+            const secs = musics.reduce((sum, m) => sum + this.hmsSeconds(m.duration), 0);
+            this.albumEstimates = { ...this.albumEstimates, [album.id_album]: secs * 30000 };
+          } catch (_) { /* sem estimativa para este álbum */ }
+        }
+      };
+      await Promise.all(Array.from({ length: 6 }, worker));
+    },
+    hmsSeconds(hms) {
+      const [h = 0, m = 0, sec = 0] = String(hms || '').split(':').map(Number);
+      return h * 3600 + m * 60 + sec;
+    },
     albumNameById(id) {
       for (const cat of this.categories || []) {
         const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
@@ -844,7 +877,9 @@ export default {
     },
     albumSizeLabel(album) {
       const bytes = this.folderBytes(album.folder_name || album.name);
-      return bytes ? this.fmtBytes(bytes) : '';
+      if (bytes) return this.fmtBytes(bytes);
+      const est = this.albumEstimates[album.id_album];
+      return est ? `≈ ${this.fmtBytes(est)}` : '';
     },
     // Baixa, em sequência, só as coletâneas da lista atual que ainda faltam.
     async downloadAllLibrary() {
