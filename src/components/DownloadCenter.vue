@@ -18,7 +18,7 @@
           <span>{{ $t('components.download_center.nav_collections') }}</span>
         </button>
         <button class="ah-nav" :class="{ active: section === 'hymnals' }" @click="goTo('hymnals')">
-          <v-icon size="18">mdi-music-note</v-icon>
+          <span class="ah-mark" v-html="hymnalMark" />
           <span>{{ $t('components.download_center.nav_hymnals') }}</span>
         </button>
         <button class="ah-nav" :class="{ active: section === 'bibles' }" @click="goTo('bibles')">
@@ -148,7 +148,7 @@
 
           <!-- HINÁRIOS -->
           <section v-else-if="section === 'hymnals'">
-            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-music-note</v-icon>{{ $t('components.download_center.nav_hymnals') }}</div>
+            <div class="ah-heading"><span class="ah-mark ah-mark--lg mr-2" v-html="hymnalMark" />{{ $t('components.download_center.nav_hymnals') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="h in hymnalItems" :key="h.file" class="ah-album">
                 <div class="ah-cover ah-cover--logo" :style="{ background: h.coverBg || undefined }">
@@ -442,6 +442,7 @@ export default {
     albumSort:     'recent',
     albumStatus:   'all',
     albumEstimates: {},
+    hymnalMark: hymnalLogoSvg,
     albumSongs: {},
     deleteDialog: false,
     deleteTarget: null,
@@ -1523,5 +1524,9 @@ export default {
 .ah-cat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ah-cat-count { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1c3550; }
 .ah-dl-all { border-radius: 10px; }
+.ah-mark { display: inline-flex; width: 18px; height: 18px; flex-shrink: 0; color: inherit; }
+.ah-mark--lg { width: 24px; height: 24px; }
+.ah-mark :deep(svg) { width: 100%; height: 100%; display: block; }
+.ah-mark :deep(path) { fill: currentColor !important; }
 .ah-empty { text-align: center; padding: 26px 16px; color: var(--muted); }
 </style>
