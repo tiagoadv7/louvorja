@@ -357,6 +357,9 @@ function createMainWindow() {
   });
 
   mainWindow.loadURL(getAppUrl());
+  // Título fixo: em dev o Electron trocava pelo nome do binário na barra de tarefas.
+  mainWindow.setTitle('Louvor JA');
+  mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 
   mainWindow.once('ready-to-show', () => {
     // setOpacity(0) ANTES do maximize: o maximize() chama show() internamente,

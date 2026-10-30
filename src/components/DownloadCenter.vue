@@ -655,11 +655,9 @@ export default {
 
     async goTo(s) {
       this.section = s;
-      this.loadStorage();
       if (s === 'collections') {
         if (this.categories.length === 0) {
           await this.loadCategories();
-          this.loadStorage();
         }
         await this.loadDownloadedAlbumInfos();
         this.loadCollectionsCompleteStatus();
@@ -795,7 +793,8 @@ export default {
     // bloqueia a renderização da grade de álbuns.
     async loadCollectionsCompleteStatus() {
       if (!this.isElectron) return;
-      const ids = this.filteredAlbums.map(a => a.id_album);
+      const downloaded = new Set(this.localFiles.filter(f => f.name.startsWith('album_')).map(f => f.name.replace('album_', '')));
+      const ids = this.filteredAlbums.map(a => a.id_album).filter(id => downloaded.has(String(id)));
       if (!ids.length) return;
       try {
         const result = await this.$electron.checkAlbumsComplete(ids);

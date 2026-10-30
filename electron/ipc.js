@@ -2595,11 +2595,14 @@ document.getElementById('f').onsubmit=async(e)=>{
   const sumDirBytes = async (dir) => {
     let total = 0;
     try {
-      for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      const parts = await Promise.all(entries.map(async (entry) => {
         const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) total += await sumDirBytes(full);
-        else if (entry.isFile()) total += (await fs.promises.stat(full)).size;
-      }
+        if (entry.isDirectory()) return sumDirBytes(full);
+        if (entry.isFile()) return (await fs.promises.stat(full)).size;
+        return 0;
+      }));
+      total = parts.reduce((x, y) => x + y, 0);
     } catch (_) { /* pasta inexistente = 0 bytes */ }
     return total;
   };
@@ -3051,6 +3054,27 @@ document.getElementById('f').onsubmit=async(e)=>{
     const result = {};
     if (!Array.isArray(albumIds) || !albumIds.length) return result;
 
+    // Nomes de arquivo de cada pasta de álbum, lidos uma vez por chamada. Antes cada
+    // áudio ausente percorria a árvore inteira de músicas, o que deixava a tela lenta.
+    const folderIndex = new Map();
+    const namesIn = (dir) => {
+      if (!folderIndex.has(dir)) {
+        const names = new Set();
+        const walk = (d, depth = 0) => {
+          if (depth > 3 || !fs.existsSync(d)) return;
+          try {
+            for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+              if (e.isDirectory()) walk(path.join(d, e.name), depth + 1);
+              else names.add(e.name.toLowerCase());
+            }
+          } catch (_) { /* pasta sem leitura */ }
+        };
+        walk(dir);
+        folderIndex.set(dir, names);
+      }
+      return folderIndex.get(dir);
+    };
+
     const dbDir = getDbDir();
 
     const capasR = getAutoCapasDir();
@@ -3076,7 +3100,7 @@ document.getElementById('f').onsubmit=async(e)=>{
         if (!name) { missing++; return; }
         let exists = fs.existsSync(path.join(dirW, name));
         if (!exists && dirR) exists = fs.existsSync(path.join(dirR, name));
-        if (!exists && type === 'audio') exists = !!findFileInTree(audioR, name) || !!findFileInTree(audioW, name);
+        if (!exists && type === 'audio') exists = namesIn(dirR).has(name.toLowerCase()) || namesIn(dirW).has(name.toLowerCase());
         if (exists) foundFiles++; else missing++;
       };
 
