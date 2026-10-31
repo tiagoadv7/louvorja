@@ -152,6 +152,9 @@ if (!gotLock) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const FADE_DURATION_MS = 450;
+// Tempo que a principal tem para enviar app:loaded depois de carregar a página
+// (ver createLoadingWindow). Passou disso, revela mesmo sem o aviso.
+const APP_LOADED_TIMEOUT_MS = 30000;
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -305,14 +308,22 @@ function createLoadingWindow() {
     }
 
     // Segurança: se app:loaded nunca chegar (falha silenciosa no renderer),
-    // fecha a loading window após 15s para o app não ficar travado.
-    setTimeout(() => {
-      if (loadingWindow && !loadingWindow.isDestroyed()) {
-        console.warn('[Main] Timeout: app:loaded não recebido — forçando fechamento da loading window');
-        loadingWindow.destroy();
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(1);
-      }
-    }, 15000);
+    // revela a janela principal pelo mesmo caminho normal (fade-in + fecha a
+    // loading). O prazo começa só quando a página principal terminou de
+    // carregar -- antes disso o renderer nem tem como enviar app:loaded, e um
+    // prazo fixo desde a loading (15s) estourava em boots lentos (dev, PC
+    // fraco), fechava a loading com a principal ainda invisível.
+    const revealWithoutAck = () => {
+      if (!loadingWindow || loadingWindow.isDestroyed()) return;
+      console.warn('[Main] app:loaded não recebido — revelando a janela principal mesmo assim');
+      ipcMain.emit('app:loaded');
+    };
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(revealWithoutAck, APP_LOADED_TIMEOUT_MS);
+    });
+    mainWindow.webContents.once('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => {
+      if (isMainFrame) revealWithoutAck();
+    });
   });
 
   loadingWindow.once('closed', () => { loadingWindow = null; });

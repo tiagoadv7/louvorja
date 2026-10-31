@@ -111,7 +111,13 @@
             </div>
 
             <div :class="albumView === 'grid' ? 'ah-grid' : 'ah-rows'">
-              <article v-for="album in libraryAlbums" :key="album.id_album" class="ah-album">
+              <article
+                v-for="album in libraryAlbums"
+                :key="album.id_album"
+                class="ah-album"
+                :class="{ 'ah-album--link': isAlbumComplete(album) }"
+                @click="isAlbumComplete(album) && goTo('downloads')"
+              >
                 <div class="ah-cover">
                   <img v-if="albumImageUrl(album)" :src="resolveUrl(albumImageUrl(album))" loading="lazy" />
                   <span v-else class="ah-cover-fallback">{{ (album.name || '').slice(0, 14) }}</span>
@@ -125,14 +131,20 @@
                   </div>
                   <div class="ah-action">
                     <button
-                      class="ah-btn-main"
+                      class="ah-btn-main ah-btn-block"
                       :disabled="!!albumProgress[album.id_album]"
-                      @click="downloadAlbumAny(album)"
+                      @click.stop="downloadAlbumAny(album)"
                     >
                       <template v-if="albumProgress[album.id_album]">{{ albumProgress[album.id_album].percent }}%</template>
-                      <template v-else>{{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}</template>
+                      <template v-else>
+                        <v-icon size="15">{{ isAlbumComplete(album) ? 'mdi-refresh' : 'mdi-cloud-download-outline' }}</v-icon>
+                        {{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}
+                      </template>
                     </button>
-                    <span class="ah-size">{{ albumSongsHint(album) }}<template v-if="albumSizeLabel(album)"> · {{ albumSizeLabel(album) }}</template></span>
+                    <span class="ah-size">
+                      <span class="ah-size-line"><v-icon size="12">mdi-music-note-outline</v-icon>{{ albumSongsHint(album) }}</span>
+                      <span v-if="albumSizeLabel(album)" class="ah-size-line"><v-icon size="12">mdi-harddisk</v-icon>{{ albumSizeLabel(album) }}</span>
+                    </span>
                   </div>
                 </div>
               </article>
@@ -165,7 +177,7 @@
                     class="ah-btn-main ah-btn-block"
                     :disabled="!!downloading[h.file]"
                     @click="downloadFile(h.file)"
-                  >{{ isDownloaded(h.file) ? $t('components.download_center.update') : $t('components.download_center.download') }}</button>
+                  ><v-icon size="15">{{ isDownloaded(h.file) ? 'mdi-refresh' : 'mdi-cloud-download-outline' }}</v-icon>{{ isDownloaded(h.file) ? $t('components.download_center.update') : $t('components.download_center.download') }}</button>
                 </div>
               </article>
             </div>
@@ -176,7 +188,7 @@
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-book-open-variant</v-icon>{{ $t('components.download_center.nav_bibles') }}</div>
             <div class="ah-grid mt-3">
               <article v-for="b in bibleItems" :key="b.id" class="ah-album">
-                <div class="ah-cover ah-cover--logo" :style="{ background: h.coverBg || undefined }">
+                <div class="ah-cover ah-cover--logo">
                   <v-icon size="64" :color="b.color">mdi-book-open-variant</v-icon>
                   <div v-if="allDownloaded(b.files)" class="ah-badge-ok"><v-icon size="14">mdi-check</v-icon></div>
                 </div>
@@ -184,6 +196,7 @@
                   <div class="ah-album-title">{{ b.name }}</div>
                   <div class="ah-muted ah-clamp">{{ b.files.join(' + ') }}</div>
                   <button class="ah-btn-main ah-btn-block" :disabled="!!downloading[b.id]" @click="downloadMulti(b.id, b.files)">
+                    <v-icon size="15">{{ allDownloaded(b.files) ? 'mdi-refresh' : 'mdi-cloud-download-outline' }}</v-icon>
                     {{ allDownloaded(b.files) ? $t('components.download_center.update') : $t('components.download_center.download') }}
                   </button>
                 </div>
@@ -195,15 +208,24 @@
           <section v-else-if="section === 'downloads'">
             <div class="ah-stats">
               <div class="ah-stat">
-                <span class="ah-muted">{{ $t('components.download_center.stat_done') }}</span>
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_done') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-check-circle-outline</v-icon>
+                </div>
                 <strong>{{ downloadedAlbums.length + downloadedHymnals.length + downloadedBibleSets.length }}</strong>
               </div>
               <div class="ah-stat">
-                <span class="ah-muted">{{ $t('components.download_center.stat_queue') }}</span>
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_queue') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-progress-download</v-icon>
+                </div>
                 <strong>{{ activeDownloads.length }}</strong>
               </div>
               <div class="ah-stat">
-                <span class="ah-muted">{{ $t('components.download_center.stat_used') }}</span>
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_used') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-harddisk</v-icon>
+                </div>
                 <strong>{{ totalSize }}</strong>
               </div>
             </div>
@@ -277,14 +299,14 @@
                   <div class="ah-album-title">{{ $t('components.download_center.folder_db') }}</div>
                   <div class="ah-muted ah-path" :title="dbFolder">{{ dbFolder }}</div>
                 </div>
-                <button class="ah-btn-ghost" @click="$electron.shellOpenFolder(dbFolder)">{{ $t('components.download_center.open_folder') }}</button>
+                <button class="ah-btn-ghost" @click="$electron.shellOpenFolder(dbFolder)"><v-icon size="15">mdi-folder-open-outline</v-icon>{{ $t('components.download_center.open_folder') }}</button>
               </div>
               <div v-if="configFolder" class="ah-item">
                 <div class="ah-row-info">
                   <div class="ah-album-title">{{ $t('components.download_center.folder_media') }}</div>
                   <div class="ah-muted ah-path" :title="configFolder">{{ configFolder }}</div>
                 </div>
-                <button class="ah-btn-ghost" @click="$electron.shellOpenFolder(configFolder)">{{ $t('components.download_center.open_folder') }}</button>
+                <button class="ah-btn-ghost" @click="$electron.shellOpenFolder(configFolder)"><v-icon size="15">mdi-folder-open-outline</v-icon>{{ $t('components.download_center.open_folder') }}</button>
               </div>
             </div>
 
@@ -293,13 +315,14 @@
               <div class="ah-muted">{{ $t('components.download_center.verify_desc') }}</div>
               <div class="ah-actions mt-3">
                 <button class="ah-btn-ghost" :disabled="scanning || downloadingMissing" @click="runScanMissing">
+                  <v-icon size="15">mdi-file-search-outline</v-icon>
                   {{ $t('components.download_center.verify_btn') }}
                 </button>
                 <button
                   v-if="scanResult && scanResult.total > 0 && !downloadingMissing"
                   class="ah-btn-main"
                   @click="confirmDialog = true"
-                >{{ $t('components.download_center.download_missing_btn') }} ({{ scanResult.total }})</button>
+                ><v-icon size="15">mdi-cloud-download-outline</v-icon>{{ $t('components.download_center.download_missing_btn') }} ({{ scanResult.total }})</button>
               </div>
               <div v-if="scanResult && scanResult.total === 0" class="ah-muted mt-2">
                 {{ $t('components.download_center.all_present') }}
@@ -664,6 +687,8 @@ export default {
         this.loadCollectionsCompleteStatus();
       }
       if (s === 'downloads') {
+        // Mostra os downloads locais já, sem esperar o catálogo online
+        if (!this.categories.length) this.loadCategories().then(() => this.loadDownloadedAlbumInfos());
         await this.loadLocalFiles();
         await this.loadDownloadedAlbumInfos();
         this.loadDownloadedAlbumsStatus();
@@ -678,7 +703,8 @@ export default {
       this.loading = true;
       const locale = this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
       this.categories = await this.fetchCatalog(`${locale}_categories`) || [];
-      setTimeout(() => this.loadAlbumEstimates(), 1500);
+      // Adiado: a grade e as capas carregam primeiro; o tamanho/contagem chega depois
+      setTimeout(() => this.loadAlbumEstimates(), 3000);
       this.loading = false;
     },
 
@@ -725,39 +751,41 @@ export default {
       const albumFiles = this.localFiles.filter(f => f.name.startsWith('album_'));
       if (!albumFiles.length) { this.downloadedAlbumInfos = {}; return; }
 
-      // Garante que as categories estão carregadas para complementar dados ausentes
-      if (!this.categories.length) await this.loadCategories();
-
-      const infos = {};
-      for (const f of albumFiles) {
-        const id = f.name.replace('album_', '');
-        let found = null;
-
-        // 1. Lê do JSON local primeiro — após o download, a capa já foi convertida
-        //    para app-local://, funcionando sem internet. Usar a categoria (URL
-        //    online) aqui faria a capa sumir no Modo Offline sem conexão real.
+      // 1. Lê os JSONs locais em paralelo — após o download a capa já é app-local://,
+      //    então não depende de rede (usar a categoria online faria a capa sumir offline).
+      const found = await Promise.all(albumFiles.map(async f => {
         try {
           const data = await this.$electron.dbLocalGet(f.name);
-          if (data) found = { name: data.name || '', url_image: data.url_image || '' };
+          if (data) return { name: data.name || '', url_image: data.url_image || '' };
         } catch { /* segue para o fallback abaixo */ }
+        return null;
+      }));
 
-        // 2. Complementa com as categories (fonte online) só o que faltar
-        if (!found?.name || !found?.url_image) {
-          for (const cat of this.categories) {
-            const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
-            if (album) {
-              found = {
-                name:      found?.name      || album.name,
-                url_image: found?.url_image || album.url_image || '',
-              };
-              break;
-            }
+      // 2. Complementa com as categories (se já carregadas) só o que faltar — sem esperar a rede
+      const infos = {};
+      albumFiles.forEach((f, i) => {
+        const id = f.name.replace('album_', '');
+        let info = found[i];
+        if (!info?.name || !info?.url_image) {
+          const album = this.catalogAlbum(id);
+          if (album) {
+            info = {
+              name:      info?.name      || album.name,
+              url_image: info?.url_image || album.url_image || '',
+            };
           }
         }
-
-        infos[id] = found?.name ? found : { name: f.name, url_image: found?.url_image || '' };
-      }
+        infos[id] = info?.name ? info : { name: f.name, url_image: info?.url_image || '' };
+      });
       this.downloadedAlbumInfos = infos;
+    },
+
+    catalogAlbum(id) {
+      for (const cat of this.categories) {
+        const album = (cat.albums || []).find(a => String(a.id_album) === String(id));
+        if (album) return album;
+      }
+      return null;
     },
 
     // Verifica no disco se os álbuns baixados estão realmente completos (áudio,
@@ -844,22 +872,46 @@ export default {
       });
       const origin = new URL(import.meta.env.VITE_URL_DATABASE).origin;
       const headers = import.meta.env.VITE_API_TOKEN ? { 'Api-Token': import.meta.env.VITE_API_TOKEN } : {};
+      // Os resultados são acumulados e publicados em lote: atribuir a cada álbum refazia
+      // a grade inteira centenas de vezes e travava a tela.
+      const est = {};
+      const songs = {};
+      let timer = null;
+      const publish = () => {
+        timer = null;
+        this.albumEstimates = { ...this.albumEstimates, ...est };
+        this.albumSongs = { ...this.albumSongs, ...songs };
+      };
+      const schedule = () => { if (!timer) timer = setTimeout(publish, 500); };
       let next = 0;
       const worker = async () => {
         while (next < todo.length) {
           const album = todo[next++];
+          // Já medido nesta sessão: não baixa de novo ao reabrir o centro
+          const cached = $storage.get(`album_meta:${album.id_album}`, null, 'session');
+          if (cached) {
+            est[album.id_album] = cached.estimate;
+            songs[album.id_album] = cached.songs;
+            schedule();
+            continue;
+          }
           try {
             const resp = await fetch(`${origin}/db/album_${album.id_album}`, { headers });
             if (!resp.ok) continue;
             const body = await resp.json();
             const musics = (body.data || body).musics || [];
             const secs = musics.reduce((sum, m) => sum + this.hmsSeconds(m.duration), 0);
-            this.albumEstimates = { ...this.albumEstimates, [album.id_album]: secs * 35000 };
-            this.albumSongs = { ...this.albumSongs, [album.id_album]: musics.length };
+            est[album.id_album] = secs * 35000;
+            songs[album.id_album] = musics.length;
+            $storage.set(`album_meta:${album.id_album}`, { estimate: est[album.id_album], songs: musics.length }, 'session');
+            schedule();
           } catch (_) { /* sem estimativa para este álbum */ }
         }
       };
-      await Promise.all(Array.from({ length: 6 }, worker));
+      // Duas conexões por vez: a capa e o status (IPC local) não podem ficar esperando esta fila
+      await Promise.all(Array.from({ length: 2 }, worker));
+      clearTimeout(timer);
+      publish();
     },
     hmsSeconds(hms) {
       const [h = 0, m = 0, sec = 0] = String(hms || '').split(':').map(Number);
@@ -1331,9 +1383,15 @@ export default {
   padding: 9px 11px;
 }
 .ah-storage-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.ah-action { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
-.ah-action .ah-btn-main { flex-shrink: 0; }
-.ah-size { font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* Cartão da grade: botão em largura total e, embaixo, músicas e tamanho em linhas próprias */
+.ah-action { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; min-width: 0; }
+.ah-size { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.ah-size-line { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ah-size-line .v-icon { opacity: 0.8; }
+/* Lista: botão e textos lado a lado */
+.ah-rows .ah-action { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
+.ah-rows .ah-action .ah-btn-block { width: auto; }
+.ah-rows .ah-size { flex-direction: row; gap: 14px; }
 .ah-storage strong { display: block; font-size: 14px; margin: 4px 0 0; }
 .ah-muted { color: var(--muted); font-size: 12px; }
 .ah-progress { height: 7px; background: #243b55; border-radius: 10px; overflow: hidden; margin: 10px 0; }
@@ -1413,6 +1471,9 @@ export default {
 .ah-dl-all:hover { background: #33b5ea !important; }
 .ah-btn-main:disabled { opacity: 0.45; cursor: default; }
 .ah-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 12px;
   border-radius: 8px;
   background: #10253e;
@@ -1425,6 +1486,9 @@ export default {
 .ah-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .ah-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+/* Álbum já baixado: o card inteiro leva para "Meus downloads" */
+.ah-album--link { cursor: pointer; }
+.ah-album--link:hover { border-color: var(--accent); }
 .ah-album {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -1492,6 +1556,7 @@ export default {
   flex-direction: column;
   gap: 5px;
 }
+.ah-stat-head { display: flex; align-items: center; justify-content: space-between; }
 .ah-stat strong { font-size: 22px; color: #33b5ea; }
 .ah-panel {
   background: var(--card);
