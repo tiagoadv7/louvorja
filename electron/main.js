@@ -1392,7 +1392,9 @@ app.on('before-quit', (event) => {
   // plano (beta ou final, ver Updater.hasPendingNativeInstall), troca o
   // fechamento normal por quitAndInstall(): instala e reabre já na versão
   // nova, sem esperar o operador clicar em "Instalar".
-  if (!_quittingForUpdate && Updater.getOptions().autoDownload && Updater.hasPendingNativeInstall()) {
+  // Não entra quando o próprio usuário já clicou em "Instalar e reiniciar"
+  // (Updater.isInstalling): o fechamento já está em curso e não pode ser cancelado.
+  if (!_quittingForUpdate && !Updater.isInstalling() && Updater.getOptions().autoDownload && Updater.hasPendingNativeInstall()) {
     event.preventDefault();
     _quittingForUpdate = true;
     Updater.quitAndInstall();

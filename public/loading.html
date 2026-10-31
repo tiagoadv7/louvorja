@@ -314,6 +314,11 @@
     if (window.loadingBridge && window.loadingBridge.onShown) {
       window.loadingBridge.onShown(restartAnimations);
     }
+    // Reserva: se o sinal se perder, a janela que passa a ficar visível ainda
+    // recomeça a entrada (só mudanças de visibilidade depois do carregamento).
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') restartAnimations();
+    });
   </script>
 </body>
 </html>

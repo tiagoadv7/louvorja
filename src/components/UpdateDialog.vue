@@ -37,8 +37,8 @@
         </v-btn>
       </template>
       <template v-else-if="step === 'downloaded'">
-        <v-btn size="small" variant="flat" color="white" class="text-primary px-3" @click="install">
-          {{ $t('components.app_update.action_install') }}
+        <v-btn size="small" variant="flat" color="white" class="text-primary px-3" prepend-icon="mdi-restart" @click="install">
+          {{ $t('components.app_update.action_install_restart') }}
         </v-btn>
       </template>
     </div>

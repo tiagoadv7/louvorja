@@ -84,6 +84,9 @@ let _state = {
 let _useBeta      = false;
 let _autoCheck    = true;
 let _autoDownload = false;
+// true enquanto o usuário escolheu "Instalar e reiniciar" — o before-quit de
+// main.js não deve cancelar esse fechamento para instalar de novo.
+let _installing   = false;
 
 // Candidata mais recente encontrada via GitHub API — guardada pro download
 // manual não precisar refazer o check.
@@ -744,7 +747,14 @@ function quitAndInstall() {
   if (_checkedViaGithub || !autoUpdater || !autoUpdater.isUpdaterActive()) {
     return openPackage();
   }
-  autoUpdater.quitAndInstall();
+  // (isSilent=false: mostra o instalador; isForceRunAfter=true: reabre o app ao terminar)
+  _installing = true;
+  autoUpdater.quitAndInstall(false, true);
+}
+
+/** O usuário já pediu "Instalar e reiniciar" — o app está fechando para instalar. */
+function isInstalling() {
+  return _installing;
 }
 
 /** Snapshot do estado atual (não reativo). */
@@ -759,6 +769,7 @@ module.exports = {
   downloadUpdate,
   downloadPackage,
   quitAndInstall,
+  isInstalling,
   openPackage,
   openReleasePage,
   status,

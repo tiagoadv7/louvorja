@@ -46,14 +46,14 @@
           rounded="lg"
           class="__qs-item"
           @mouseenter="selectedIdx = idx"
-          @click.stop="openItem(idx)"
         >
           <template v-slot:prepend>
             <v-icon size="16" class="me-1 opacity-60">mdi-music-note</v-icon>
           </template>
 
+          <!-- Igual à liturgia e às coletâneas: clicar no NOME da música executa direto -->
           <v-list-item-title class="font-weight-medium text-body-2">
-            {{ item.name }}
+            <span class="__qs-name" @click.stop="openItem(idx)">{{ item.name }}</span>
           </v-list-item-title>
           <v-list-item-subtitle>
             <template v-if="item.albums?.length">
@@ -116,11 +116,13 @@
               <v-list-item
                 v-for="s in h.songs"
                 :key="s.id_music"
-                :title="s.name"
                 rounded="lg"
               >
                 <template v-slot:prepend>
                   <v-chip size="small" class="mr-2" :color="$theme.primary()">{{ s.track }}</v-chip>
+                </template>
+                <template v-slot:title>
+                  <span class="__qs-name" @click.stop="playSong(s)">{{ s.name }}</span>
                 </template>
                 <template v-slot:append>
                   <div @click.stop>
@@ -282,6 +284,11 @@ export default {
       this.openSelected();
     },
 
+    playSong(song) {
+      this.$media.open({ id_music: song.id_music, mode: 'audio' });
+      this.dialog = false;
+    },
+
     openSelected() {
       const item = this.results[this.selectedIdx];
       if (!item) return;
@@ -300,5 +307,11 @@ export default {
 }
 .__qs-item {
   transition: background 0.1s;
+}
+.__qs-name {
+  cursor: pointer;
+}
+.__qs-name:hover {
+  text-decoration: underline;
 }
 </style>
