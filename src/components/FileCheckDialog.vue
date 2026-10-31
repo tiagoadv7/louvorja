@@ -13,7 +13,7 @@
       <div class="fcd-header">
         <div class="d-flex align-center ga-3">
           <v-avatar color="primary" variant="tonal" size="40">
-            <v-icon size="20">mdi-folder-sync-outline</v-icon>
+            <v-icon size="20" color="primary">mdi-folder-sync-outline</v-icon>
           </v-avatar>
           <div>
             <div class="text-subtitle-2 font-weight-bold">{{ $t('components.file_check.title') }}</div>

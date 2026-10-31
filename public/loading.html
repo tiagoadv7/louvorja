@@ -296,29 +296,9 @@
     // num navegador, pra testar/ajustar o visual) não existe
     // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
     // nenhum.
-    // As animações rodam desde o carregamento. Quando a janela aparece de verdade
-    // (sinal do processo main, via loading-preload.js), recomeçam do zero: se ela
-    // ficou escondida um tempo, o relógio delas já andou e a entrada (letras,
-    // barra) aparecia pronta. Só age na primeira vez, para o reenvio do
-    // did-finish-load não reiniciar a entrada no meio. Se o sinal se perder, o
-    // nome continua animando normalmente.
-    var restarted = false;
-    function restartAnimations() {
-      if (restarted) return;
-      restarted = true;
-      document.getAnimations().forEach(function (a) {
-        a.currentTime = 0;
-        a.play();
-      });
-    }
-    if (window.loadingBridge && window.loadingBridge.onShown) {
-      window.loadingBridge.onShown(restartAnimations);
-    }
-    // Reserva: se o sinal se perder, a janela que passa a ficar visível ainda
-    // recomeça a entrada (só mudanças de visibilidade depois do carregamento).
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') restartAnimations();
-    });
+    // As animações (cascata das letras, barra, anel) rodam desde o carregamento.
+    // A janela de loading é criada já visível (ver electron/main.js), então a
+    // entrada aparece junto com a tela, sem precisar ser reiniciada.
   </script>
 </body>
 </html>

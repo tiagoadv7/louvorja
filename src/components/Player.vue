@@ -25,8 +25,14 @@
       title="Abrir"
       @click="maximize"
     >
+      <img
+        v-if="mini_media.kind === 'image'"
+        :src="mini_media.src"
+        class="mini-pip-media"
+        alt=""
+      />
       <video
-        v-if="mini_media.kind === 'video'"
+        v-else-if="mini_media.kind === 'video'"
         ref="miniVideo"
         :src="mini_media.src"
         class="mini-pip-media"
@@ -625,6 +631,8 @@ export default {
       if (this.source === "video") {
         const cfg = this.$videoPlayer.getConfig();
         if (!cfg.src) return null;
+        // Imagem da mídia: mostrada como figura (um <video> com imagem fica preto)
+        if (cfg.mediaType === "image") return { kind: "image", src: cfg.src };
         return { kind: "video", src: cfg.src, time: cfg.currentTime || 0, playing: !!cfg.isPlaying };
       }
       if (this.source === "web_link") {

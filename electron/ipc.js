@@ -1610,7 +1610,7 @@ function setupIpc(mainWindow) {
     // nome de OUTRO álbum. Era exatamente isso que fazia o álbum "2024 - Maranata"
     // tocar a "Maranata" de outro álbum mesmo com sqlite-reader.js já certo.
     if (filename.startsWith('file://')) {
-      return fileUrlExists(filename) ? filename : null;
+      if (fileUrlExists(filename)) return filename;
     }
 
     const name = safeBasename(filename);
@@ -1659,6 +1659,24 @@ function setupIpc(mainWindow) {
       resolveFileCache.set(filename, url);
       return url;
     };
+
+    // Caminho file:// que não existe nesta máquina (ex.: banco do instalador com o
+    // caminho de quem gerou o pacote): procura o mesmo caminho relativo a
+    // "config/musicas" da instalação atual, depois o nome dentro da pasta do álbum.
+    if (filename.startsWith('file://')) {
+      try {
+        const local = decodeURIComponent(new URL(filename).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+        const rel = local.replace(/\\/g, '/').match(/\/musicas\/(.+)$/i);
+        if (rel) {
+          const base = getAutoMediaDir(null, true);
+          const exact = path.join(base, ...rel[1].split('/'));
+          if (fs.existsSync(exact)) return cacheAndReturn(exact);
+          const found = search(path.dirname(exact), 0);
+          if (found) return cacheAndReturn(found);
+        }
+      } catch (_) { /* caminho inválido: segue sem arquivo local */ }
+      return null;
+    }
 
     // 1. Pasta configurada pelo usuário
     const userFolder = Store.get('media_base_folder');

@@ -26,11 +26,11 @@
         </v-card-text>
         <v-card-text
           class="pa-0"
-          v-if="module.manifest.dependencies.length > 0"
+          v-if="(module.manifest.dependencies || []).length > 0"
         >
           <b>Dependencies:</b>
           <v-chip
-            v-for="(dependency, key) in module.manifest.dependencies"
+            v-for="(dependency, key) in module.manifest.dependencies || []"
             :key="key"
             color="orange"
             size="small"
@@ -77,8 +77,11 @@
 export default {
   name: "ModuleList",
   computed: {
+    // Só módulos de verdade: o estado de "modules" também guarda entradas de
+    // estado (ex.: web_link) sem manifesto, que quebravam a renderização da lista.
     modules() {
-      return this.$appdata.get("modules");
+      const all = this.$appdata.get("modules") || {};
+      return Object.fromEntries(Object.entries(all).filter(([, m]) => m && m.manifest));
     },
   },
 };

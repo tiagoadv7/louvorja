@@ -17,7 +17,7 @@
 
       <v-card-text class="d-flex flex-column align-center py-8 ga-4 px-6">
         <v-avatar size="72" color="primary" variant="tonal">
-          <v-icon size="40">mdi-folder-sync-outline</v-icon>
+          <v-icon size="40" color="primary">mdi-folder-sync-outline</v-icon>
         </v-avatar>
         <div class="text-center">
           <div class="text-h6 font-weight-bold">{{ $t('components.db_update.heading') }}</div>

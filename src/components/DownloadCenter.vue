@@ -424,7 +424,6 @@ const cleanSvg = (raw) => raw
 const hasdFlameSvg = cleanSvg(hasdFlameRaw);
 const hymnalLogoSvg = cleanSvg(hymnalLogoRaw);
 const HYMNAL_2022_COLORS = { coverBg: '#000000', coverFill: '#ffffff' };
-const HYMNAL_1996_COLORS = { coverBg: '#ffffff', coverFill: '#3f8f8a' };
 
 // Capa dos hinários: símbolo da Igreja Adventista (SVG local, embutido no app),
 // substituindo o antigo /covers/hasd.bmp que dependia do CDN remoto.
@@ -522,7 +521,7 @@ export default {
       }
       return [
         { file: 'pt_hymnal',      name: t('hymnal_2022'), description: t('hymnal_2022_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, ...HYMNAL_2022_COLORS, icon: 'mdi-music-note',         color: '#1B5E43' },
-        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hasdFlameSvg, ...HYMNAL_1996_COLORS, icon: 'mdi-music-note-outline', color: '#1B5E43' },
+        { file: 'pt_hymnal_1996', name: t('hymnal_1996'), description: t('hymnal_1996_desc'), cover: hasdFlame, coverSvg: hymnalLogoSvg, coverBg: '#ffffff', coverFill: '#3f8f8a', icon: 'mdi-music-note-outline', color: '#1B5E43' },
       ];
     },
     bibleItems() {
@@ -664,7 +663,9 @@ export default {
     async init() {
       await this.loadLocalFiles();
       this.loadStorage();
-      if (this.section === 'collections') {
+      // Tela inicial (home) também é a lista de coletâneas: abrir pelo menu não passa
+      // pela navegação, então sem isso a lista ficava vazia até "Tentar de novo".
+      if (this.isExplore) {
         await this.loadCategories();
         this.loadStorage();
         await this.loadDownloadedAlbumInfos();
@@ -1557,6 +1558,16 @@ export default {
   gap: 5px;
 }
 .ah-stat-head { display: flex; align-items: center; justify-content: space-between; }
+/* Ícones de ação e de estatística: degradê azul → dourado (cores do logo), sem fundo preto */
+.ah-btn-ghost .v-icon,
+.ah-stat-head .v-icon,
+.ah-actions .v-icon {
+  background: linear-gradient(135deg, #009fe3 0%, #f6c32a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+}
 .ah-stat strong { font-size: 22px; color: #33b5ea; }
 .ah-panel {
   background: var(--card);
