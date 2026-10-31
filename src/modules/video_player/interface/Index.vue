@@ -1443,14 +1443,11 @@ export default {
     // Progresso (currentTime/duration) vindo da janela de saída — canal
     // dedicado (ver comentário em Popup.vue/onTimeUpdate). Sem isso, o painel
     // e a barra do rodapé ficavam parados em 0:00 mesmo com o vídeo tocando.
-    const hProgress = this.$electron.on('video-player:progress', ({ currentTime, duration }) => {
-      this.$videoPlayer.setConfig({ currentTime, duration });
-    });
+    // (O progresso em si é ouvido no escopo do helper VideoPlayer.js, sempre ativo.)
     this._pipHandlers = [
       ['video-pip:closed', hClosed],
       ['video-pip:toggle-play', hToggle],
       ['video-pip:stop', hStop],
-      ['video-player:progress', hProgress],
     ];
   },
 

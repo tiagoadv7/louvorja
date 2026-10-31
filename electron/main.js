@@ -29,7 +29,9 @@ const DEV_URL = 'http://localhost:5002';
 
 app.commandLine.appendSwitch(
   'js-flags',
-  '--max-old-space-size=512 --optimize-for-size --gc-interval=100 --expose-gc'
+  // --gc-interval forçava uma coleta de lixo a cada 100 alocações (custo alto de CPU);
+  // o teto de 512 MB do heap derrubava o renderer com listas grandes (liturgia, músicas).
+  '--max-old-space-size=2048 --optimize-for-size --expose-gc'
 );
 
 app.commandLine.appendSwitch('disable-features', [
@@ -257,7 +259,10 @@ function createLoadingWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'loading-preload.js'),
     },
-    show: false,
+    // Visível desde o início: a janela escondida deixava as animações do splash
+    // rodarem por baixo dos panos (o texto aparecia pronto e parado). Janela
+    // transparente não mostra nada antes da primeira pintura, então não há flash.
+    show: true,
   });
 
   const loadingPath = isDev
@@ -371,6 +376,18 @@ function createMainWindow() {
   // Título fixo: em dev o Electron trocava pelo nome do binário na barra de tarefas.
   mainWindow.setTitle('Louvor JA');
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
+
+  // Processo de renderização morreu (ex.: falta de memória depois de muito tempo
+  // aberto): sem isto a janela ficava em branco/preta, com a cor de fundo do tema,
+  // até o operador fechar o app. Recarrega a página principal no lugar.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[Main] Renderer caiu:', details.reason, details.exitCode);
+    if (details.reason === 'clean-exit' || !mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.loadURL(getAppUrl());
+  });
+  mainWindow.webContents.on('unresponsive', () => {
+    console.warn('[Main] Janela principal não responde');
+  });
 
   mainWindow.once('ready-to-show', () => {
     // setOpacity(0) ANTES do maximize: o maximize() chama show() internamente,
@@ -755,6 +772,18 @@ function resolveReturnDisplay(displayId) {
   return { target };
 }
 
+// Fecha o retorno junto com a projeção principal: mesmo fade do return:close, e
+// marca que não deve reabrir sozinho no próximo boot (só o fechamento da saída
+// faz isso; o return:close continua sendo o comando explícito do operador).
+async function closeReturnWithOutput() {
+  if (returnWindow && !returnWindow.isDestroyed()) {
+    returnWindow.webContents.send('return-closing');
+    await sleep(FADE_DURATION_MS);
+    if (returnWindow && !returnWindow.isDestroyed()) returnWindow.destroy();
+  }
+  Store.set('return_window_was_open', false);
+}
+
 // ── Janela de retorno (monitor de palco) ──────────────────────────────────────
 function createReturnWindow(displayId) {
   if (returnWindow && !returnWindow.isDestroyed()) {
@@ -1027,7 +1056,9 @@ function registerIpcHandlers() {
   // retorno transparente quando não há mais nada ativo pra mostrar — sem
   // precisar fechar a janela.
   ipcMain.handle('output:close', async () => {
-    await fadeOutAndClose(outputWindow);
+    // O retorno agora fecha junto com a projeção principal (pedido do operador):
+    // fade nos dois ao mesmo tempo e o retorno não reabre sozinho no próximo boot.
+    await Promise.all([fadeOutAndClose(outputWindow), closeReturnWithOutput()]);
     return true;
   });
   ipcMain.handle('output:is-open', () => {

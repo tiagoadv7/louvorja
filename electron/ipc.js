@@ -1622,13 +1622,13 @@ function setupIpc(mainWindow) {
     const search = (dir, depth) => {
       if (!dir || !fs.existsSync(dir)) return null;
       try {
-        for (const item of fs.readdirSync(dir)) {
-          const full = path.join(dir, item);
-          const stat = fs.statSync(full);
-          if (stat.isDirectory() && depth < 2) {
+        // withFileTypes: sem um statSync por arquivo (a pasta tem centenas de músicas)
+        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, item.name);
+          if (item.isDirectory() && depth < 2) {
             const r = search(full, depth + 1);
             if (r) return r;
-          } else if (item.toLowerCase() === name.toLowerCase()) {
+          } else if (item.name.toLowerCase() === name.toLowerCase()) {
             return full;
           }
         }

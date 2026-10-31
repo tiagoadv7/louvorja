@@ -308,10 +308,16 @@ export default {
 .__qs-item {
   transition: background 0.1s;
 }
+/* Mesmo padrão do nome clicável da liturgia e das coletâneas: bloco com fundo no hover */
 .__qs-name {
+  display: block;
   cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 6px;
+  transition: background-color 0.15s;
 }
 .__qs-name:hover {
-  text-decoration: underline;
+  background-color: rgba(255, 255, 255, 0.15);
 }
 </style>

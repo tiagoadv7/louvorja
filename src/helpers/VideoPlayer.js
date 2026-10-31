@@ -2,6 +2,7 @@ import $appdata from "@/helpers/AppData";
 import $popup from "@/helpers/Popup";
 import $modules from "@/helpers/Modules";
 import $audioBus from "@/helpers/AudioBus";
+import $electron from "@/helpers/Electron";
 
 // Lógica compartilhada do módulo Vídeo (fila/playlist + config de reprodução),
 // para que outros módulos (ex. Liturgia) possam adicionar/tocar vídeos no
@@ -104,6 +105,15 @@ function resolveMediaType(fp) {
   if (isPdfFile(fp)) return "pdf";
   return "video";
 }
+
+// Progresso (currentTime/duration) vindo da janela de saída — registrado no escopo
+// do módulo, como o do link online (ver WebLink.js). Antes ficava dentro do
+// componente do módulo Vídeo, que só existe enquanto o módulo está aberto: com o
+// vídeo minimizado e a aba fechada, o rodapé e o miniplayer ficavam em 00:00.
+$electron.on("video-player:progress", ({ currentTime, duration }) => {
+  $appdata.set("modules.video_player.config.currentTime", currentTime);
+  $appdata.set("modules.video_player.config.duration", duration);
+});
 
 export default {
   toFileUrl,

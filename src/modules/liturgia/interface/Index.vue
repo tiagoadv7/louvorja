@@ -238,7 +238,7 @@
                     title="Trocar arquivo"
                     @click="relinkItemFile(idx)"
                   >
-                    <v-icon size="13">mdi-file-replace-outline</v-icon>
+                    <v-icon size="13">mdi-swap-horizontal</v-icon>
                   </button>
                   <button class="lt-row-btn" title="Duplicar item" @click="duplicateItemBelow(idx)">
                     <v-icon size="13">mdi-content-duplicate</v-icon>

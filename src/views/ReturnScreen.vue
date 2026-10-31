@@ -1,6 +1,12 @@
 <template>
   <transition name="rs-fade" appear>
     <div v-if="visible" class="rs-root">
+      <!-- Mesmo fundo animado da saída principal (Slide.vue), só quando há slide na tela -->
+      <AnimatedBackground
+        v-if="(mediaActive || slideEditorActive) && animatedBg"
+        :variant="globalBg.animated_bg"
+        :color="globalBg.animated_bg_color || '#7aa0ff'"
+      />
       <!-- Conteúdo do slide (letra/título, barras de progresso) — aparece
            junto com uma música OU uma apresentação do Editor de Músicas
            (Coletânea Personalizada) realmente ativa; some com fade quando
@@ -121,6 +127,7 @@ import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
 import StopwatchScreen from '@/modules/cronometro_culto/components/StopwatchScreen.vue';
 import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
 import WebLinkScreen from '@/components/WebLinkScreen.vue';
+import AnimatedBackground from '@/components/AnimatedBackground.vue';
 
 const isElectron = () =>
   typeof window !== 'undefined' &&
@@ -129,7 +136,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen, AnimatedBackground },
 
   data: () => ({
     stateHandler: null,
@@ -343,6 +350,9 @@ export default {
     // transparente (ver .rs-root/.rs-main no <style>), só o texto acompanha.
     globalBg() {
       return this.$appdata.get('slide_global_bg') || null;
+    },
+    animatedBg() {
+      return !!(this.globalBg && this.globalBg.animated_bg && this.globalBg.animated_bg !== 'none');
     },
     fontFamily() {
       return this.globalBg?.font || "'DINCondensedBold', 'Roboto Condensed', 'Arial Narrow', Arial, sans-serif";
@@ -640,6 +650,11 @@ export default {
   user-select: none;
 }
 
+/* Conteúdo acima do fundo animado (que ocupa a tela toda, ver AnimatedBackground) */
+.rs-root > :not(.anim-bg) {
+  position: relative;
+  z-index: 1;
+}
 .rs-slide {
   display: flex;
   flex-direction: column;

@@ -89,5 +89,7 @@ export default {
 <style scoped>
 #footer-bar {
   flex: 0 !important;
+  /* Acima do conteúdo da tela: o miniplayer flutua sobre ele (ver Player.vue#mini-pip) */
+  z-index: 100;
 }
 </style>

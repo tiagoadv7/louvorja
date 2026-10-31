@@ -1,11 +1,52 @@
 <template>
-  <v-card theme="dark" class="w-100 pa-0 ma-0 d-flex align-center" :rounded="0">
-    <!-- Miniplayer minimizado de coletânea: a letra do slide atual flutua acima da barra -->
+  <v-card theme="dark" class="w-100 pa-0 ma-0 d-flex align-center player-root" :class="{ 'player-root--footer': location == 'footer' }" :rounded="0">
+    <!-- Miniplayer minimizado (estilo picture-in-picture): flutua acima da barra e mostra
+         o slide como vai para a projeção; clicar nele volta para a tela principal.
+         Sem slide (vídeo, link online, slides), mostra só o título do conteúdo. -->
     <div
-      v-if="location == 'footer' && source === 'media' && media.minimized && slide_text"
+      v-if="location == 'footer' && mini_slide"
+      class="mini-pip"
+      title="Abrir"
+      @click="maximize"
+    >
+      <LSlide
+        :slide_number="media.config.slide_index"
+        :cover="mini_slide.cover == true"
+        :text="mini_slide.lyric"
+        :aux_text="mini_slide.aux_lyric"
+        :image="mini_slide.url_image ? $path.file(mini_slide.url_image) : null"
+        :image_position="mini_slide.image_position"
+      />
+    </div>
+    <!-- Vídeo em reprodução e link online: o mesmo quadro, espelhando o que está na projeção -->
+    <div
+      v-else-if="location == 'footer' && mini_media"
+      class="mini-pip"
+      title="Abrir"
+      @click="maximize"
+    >
+      <video
+        v-if="mini_media.kind === 'video'"
+        ref="miniVideo"
+        :src="mini_media.src"
+        class="mini-pip-media"
+        muted
+        playsinline
+        @loadedmetadata="syncMiniVideo"
+      />
+      <iframe
+        v-else
+        :src="mini_media.src"
+        class="mini-pip-media"
+        allow="autoplay; encrypted-media"
+        frameborder="0"
+      />
+    </div>
+    <div
+      v-else-if="location == 'footer' && mini_text"
       class="mini-lyric"
     >
-      <div class="mini-lyric-text">{{ slide_text }}</div>
+      <div class="mini-lyric-text">{{ mini_text }}</div>
     </div>
     <div
       v-if="location == 'footer' && $vuetify.display.width > 800"
@@ -296,6 +337,7 @@
 
 <script>
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LSlide from "@/components/Slide.vue";
 
 export default {
   name: "PlayerComponent",
@@ -308,6 +350,7 @@ export default {
   },
   components: {
     LScreenBtn,
+    LSlide,
   },
   data: () => ({
     pipOpen: false,
@@ -572,11 +615,38 @@ export default {
           return "mdi-volume-high";
       }
     },
+    // Slide que está indo para a projeção (só música); o mesmo dado que o media/Index.vue usa
+    mini_slide: function () {
+      if (this.source !== "media") return null;
+      return this.slides[this.media.config.slide_index] || null;
+    },
+    // Vídeo local (video_player) ou link online (YouTube com videoId ou outro link) em reprodução
+    mini_media: function () {
+      if (this.source === "video") {
+        const cfg = this.$videoPlayer.getConfig();
+        if (!cfg.src) return null;
+        return { kind: "video", src: cfg.src, time: cfg.currentTime || 0, playing: !!cfg.isPlaying };
+      }
+      if (this.source === "web_link") {
+        const cfg = this.$webLink.getConfig();
+        if (cfg.videoId) {
+          return { kind: "youtube", src: `https://www.youtube.com/embed/${cfg.videoId}?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1` };
+        }
+        if (cfg.url) return { kind: "iframe", src: cfg.url };
+      }
+      return null;
+    },
+    // Texto do miniplayer: letra do slide quando é música; nos outros casos, o título do conteúdo
+    mini_text: function () {
+      // Sem letra no slide atual (ex.: música tocando sem apresentação), mostra o nome da música
+      if (this.source === "media") return this.slide_text || this.media.config?.title || "";
+      return this.media.config?.title || "";
+    },
     slide_text: function () {
-      if (!this.slides[this.media.config.slide_index]) return "";
-      if (!this.slides[this.media.config.slide_index].lyric) return "";
+      const slide = this.slides[this.media.config.slide_index];
+      if (!slide || !slide.lyric) return "";
 
-      let text = this.slides[this.media.config.slide_index].lyric;
+      let text = slide.lyric;
       text = text.replace(/<br>/gi, " / ").toUpperCase();
       return text;
     },
@@ -587,7 +657,28 @@ export default {
       return this.$vuetify.display.width <= 500;
     },
   },
+  watch: {
+    // Espelha o vídeo local do quadro: play/pause e posição acompanham a projeção
+    "mini_media.playing"(playing) {
+      const el = this.$refs.miniVideo;
+      if (!el) return;
+      if (playing) el.play().catch(() => {});
+      else el.pause();
+    },
+    "mini_media.time"(time) {
+      const el = this.$refs.miniVideo;
+      if (el && Math.abs(el.currentTime - time) > 0.8) el.currentTime = time;
+    },
+  },
   methods: {
+    // Ao carregar o quadro, posiciona no tempo atual da projeção e segue o estado de reprodução
+    syncMiniVideo() {
+      const el = this.$refs.miniVideo;
+      const m = this.mini_media;
+      if (!el || !m) return;
+      el.currentTime = m.time;
+      if (m.playing) el.play().catch(() => {});
+    },
     toggleRepeat() {
       this.$appdata.set("modules.media.config.repeat", !this.media.config.repeat);
     },
@@ -718,6 +809,35 @@ export default {
 <style scoped>
 /* Letra do slide flutuando acima da barra no miniplayer minimizado (mesmo espírito
    da miniatura do mini player de vídeo, mas com o texto da música no lugar da capa). */
+/* Vídeo/link dentro do quadro: preenche o quadro e não recebe cliques (o quadro abre a tela principal) */
+.mini-pip-media {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+/* O cartão do rodapé não pode cortar o que flutua acima dele (miniplayer). */
+.player-root--footer {
+  overflow: visible !important;
+}
+/* Picture-in-picture do slide: 16:9, cantos arredondados e sombra, flutuando sobre a barra */
+.mini-pip {
+  position: absolute;
+  left: 16px;
+  bottom: 100%;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  aspect-ratio: 16 / 9;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  z-index: 50;
+}
 .mini-lyric {
   position: absolute;
   left: 16px;
@@ -734,7 +854,7 @@ export default {
   background: #000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   overflow: hidden;
-  z-index: 2;
+  z-index: 50;
 }
 .mini-lyric-text {
   color: #f6c32a;
