@@ -328,18 +328,26 @@ FunctionEnd
   ; RestoreLegacyMerge (chamada em customInstall, depois da extração) devolve
   ; tudo pro lugar, exceto o que os arquivos novos do Electron já recriaram.
   StrCpy $legacyOrigDir "$INSTDIR"
+  ; NUNCA apaga um backup anterior: músicas e capas baixadas podem estar nele
+  ; (uma tentativa de atualização que falhou no meio). Se já existir, guarda
+  ; num nome de reserva; se nem esse estiver livre, para a instalação.
   StrCpy $legacyBackupDir "$INSTDIR.update-backup"
   ${If} ${FileExists} "$INSTDIR\*.*"
-    ClearErrors
-    RMDir /r "$legacyBackupDir" ; restos de uma tentativa anterior que falhou no meio
+    ${If} ${FileExists} "$legacyBackupDir\*.*"
+      ${If} ${FileExists} "$INSTDIR.update-backup-old\*.*"
+        MessageBox MB_OK|MB_ICONSTOP "Existem cópias de segurança de uma atualização anterior em:$\r$\n$legacyBackupDir$\r$\n$INSTDIR.update-backup-old$\r$\n$\r$\nNada foi apagado. Verifique essas pastas (músicas e capas podem estar nelas) e tente de novo."
+        Abort
+      ${EndIf}
+      Rename "$legacyBackupDir" "$INSTDIR.update-backup-old"
+    ${EndIf}
     ClearErrors
     Rename "$INSTDIR" "$legacyBackupDir"
     ${If} ${Errors}
-      ; Não foi possível renomear (raro — ex.: arquivo em uso). Segue sem
-      ; backup: melhor arriscar o comportamento padrão do que abortar a
-      ; instalação por causa de uma proteção extra.
+      ; Sem como tirar a pasta do caminho (ex.: arquivo em uso): para em vez de
+      ; seguir sem backup, porque o desinstalador antigo poderia apagar tudo.
       ClearErrors
-      StrCpy $legacyBackupDir ""
+      MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a atualização do Louvor JA: algum arquivo está em uso.$\r$\n$\r$\nFeche o Louvor JA (e qualquer programa que esteja usando a pasta de instalação) e tente de novo. Nada foi apagado."
+      Abort
     ${EndIf}
   ${Else}
     StrCpy $legacyBackupDir ""
@@ -380,8 +388,17 @@ FunctionEnd
     Push ""
     Call RestoreLegacyMerge
 
-    RMDir /r "$legacyBackupDir"
-    DetailPrint "  » LouvorJA Delphi e configurações existentes restaurados"
+    ; Só remove a pasta de backup se ela ficou VAZIA (tudo foi restaurado). Se
+    ; sobrou algo (arquivo que colidiu com um novo ou que não pôde ser movido),
+    ; a pasta fica no lugar — nada é apagado por aqui.
+    ClearErrors
+    RMDir "$legacyBackupDir"
+    ClearErrors
+    ${If} ${FileExists} "$legacyBackupDir\*.*"
+      DetailPrint "  » Alguns arquivos antigos foram mantidos em $legacyBackupDir"
+    ${Else}
+      DetailPrint "  » LouvorJA Delphi e configurações existentes restaurados"
+    ${EndIf}
   ${EndIf}
 
   DetailPrint "Configurando estrutura de pastas..."
