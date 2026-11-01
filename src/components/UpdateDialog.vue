@@ -191,6 +191,8 @@
           </v-btn>
         </template>
         <template v-else>
+          <v-btn variant="text" prepend-icon="mdi-bullhorn-outline" @click="showWhatsNew">{{ $t('components.app_update.action_whats_new') }}</v-btn>
+          <v-spacer />
           <v-btn color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="dialog = false">{{ $t('components.app_update.action_close') }}</v-btn>
         </template>
       </v-card-actions>
@@ -396,6 +398,11 @@ export default {
         // — trata como "sem atualização disponível" (ver electron/updater.js).
         this.step = 'not-available';
       }
+    },
+
+    // Abre a sequência de novidades (ReleaseNotesDialog, montado no App.vue)
+    showWhatsNew() {
+      window.dispatchEvent(new CustomEvent('open-release-notes'));
     },
 
     openDialog() {

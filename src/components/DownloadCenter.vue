@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="dialog" max-width="1180" scrollable>
+  <v-dialog v-model="dialog" max-width="1180" scrollable content-class="ah-dialog">
     <template v-slot:activator="{ props }">
       <slot :props="props" />
     </template>
@@ -25,10 +25,6 @@
           <v-icon size="18">mdi-book-open-variant</v-icon>
           <span>{{ $t('components.download_center.nav_bibles') }}</span>
         </button>
-        <button class="ah-nav" :class="{ active: section === 'downloads' }" @click="goTo('downloads')">
-          <v-icon size="18">mdi-download-circle-outline</v-icon>
-          <span>{{ $t('components.download_center.downloads') }}</span>
-        </button>
         <button class="ah-nav" :class="{ active: section === 'settings' }" @click="goTo('settings')">
           <v-icon size="18">mdi-cog-outline</v-icon>
           <span>{{ $t('components.download_center.settings') }}</span>
@@ -51,14 +47,18 @@
             : section === 'hymnals' ? $t('components.download_center.nav_hymnals')
             : section === 'bibles' ? $t('components.download_center.nav_bibles')
             : $t('components.download_center.nav_collections') }}</b>
-          <input
-            v-if="isExplore"
-            v-model="albumSearch"
-            class="ah-search"
-            :placeholder="$t('components.download_center.lib_search')"
-          />
-          <span class="ah-local">● {{ $t('components.download_center.local') }}</span>
-          <v-btn icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
+          <div v-if="isExplore" class="ah-search-wrap">
+            <v-icon class="ah-search-icon" size="18">mdi-magnify</v-icon>
+            <input
+              v-model="albumSearch"
+              class="ah-search"
+              :placeholder="$t('components.download_center.lib_search')"
+            />
+            <button v-if="albumSearch" class="ah-search-clear" :title="$t('components.download_center.clear_search')" @click="albumSearch = ''">
+              <v-icon size="16">mdi-close-circle</v-icon>
+            </button>
+          </div>
+          <v-btn class="ah-close" icon="mdi-close" variant="text" size="small" density="compact" @click="dialog = false" />
         </header>
 
         <div class="ah-content">
@@ -70,6 +70,30 @@
           <section v-if="isExplore">
             <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-view-grid-outline</v-icon>{{ $t('components.download_center.nav_collections') }}</div>
             <div class="ah-muted">{{ $t('components.download_center.nav_collections_desc') }}</div>
+
+            <div class="ah-stats">
+              <div class="ah-stat">
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_done') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-check-circle-outline</v-icon>
+                </div>
+                <strong>{{ downloadedAlbums.length + downloadedHymnals.length + downloadedBibleSets.length }}</strong>
+              </div>
+              <div class="ah-stat">
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_queue') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-progress-download</v-icon>
+                </div>
+                <strong>{{ activeDownloads.length }}</strong>
+              </div>
+              <div class="ah-stat">
+                <div class="ah-stat-head">
+                  <span class="ah-muted">{{ $t('components.download_center.stat_used') }}</span>
+                  <v-icon size="18" color="#33b5ea">mdi-harddisk</v-icon>
+                </div>
+                <strong>{{ totalSize }}</strong>
+              </div>
+            </div>
 
             <div class="ah-chips">
               <button class="ah-chip" :class="{ active: catFilter === null }" @click="catFilter = null">
@@ -115,8 +139,6 @@
                 v-for="album in libraryAlbums"
                 :key="album.id_album"
                 class="ah-album"
-                :class="{ 'ah-album--link': isAlbumComplete(album) }"
-                @click="isAlbumComplete(album) && goTo('downloads')"
               >
                 <div class="ah-cover">
                   <img v-if="albumImageUrl(album)" :src="resolveUrl(albumImageUrl(album))" loading="lazy" />
@@ -130,6 +152,7 @@
                     <span>{{ albumCategoryName(album) }}</span>
                   </div>
                   <div class="ah-action">
+                    <div class="ah-action-row">
                     <button
                       class="ah-btn-main ah-btn-block"
                       :disabled="!!albumProgress[album.id_album]"
@@ -141,9 +164,17 @@
                         {{ isAlbumComplete(album) ? $t('components.download_center.lib_redownload') : $t('components.download_center.lib_download') }}
                       </template>
                     </button>
+                    <v-menu v-if="isAlbumComplete(album)" location="bottom end">
+                      <template #activator="{ props }"><button class="ah-dots" v-bind="props" :title="$t('components.download_center.open_folder')"><v-icon size="16">mdi-dots-horizontal</v-icon></button></template>
+                      <v-list density="compact" theme="dark" bg-color="#0f2236">
+                        <v-list-item prepend-icon="mdi-folder-open-outline" :title="$t('components.download_center.open_folder')" @click="openFolder(album.folder_name || album.name)" />
+                        <v-list-item prepend-icon="mdi-delete-outline" class="text-error" :title="$t('components.download_center.delete_album')" @click="askDelete(album.name, album.folder_name || album.name, album.id_album)" />
+                      </v-list>
+                    </v-menu>
+                    </div>
                     <span class="ah-size">
-                      <span class="ah-size-line"><v-icon size="12">mdi-music-note-outline</v-icon>{{ albumSongsHint(album) }}</span>
-                      <span v-if="albumSizeLabel(album)" class="ah-size-line"><v-icon size="12">mdi-harddisk</v-icon>{{ albumSizeLabel(album) }}</span>
+                      <span v-if="isAlbumComplete(album)" class="ah-size-line">{{ albumSongsHint(album) }}</span>
+                      <span v-if="albumSizeLabel(album)" class="ah-size-line"><v-icon v-if="isAlbumComplete(album)" size="12">mdi-harddisk</v-icon>{{ albumSizeLabel(album) }}</span>
                     </span>
                   </div>
                 </div>
@@ -171,7 +202,10 @@
                 <div class="ah-album-body">
                   <div class="ah-album-title">{{ h.name }}</div>
                   <div class="ah-muted ah-clamp">{{ h.description }}</div>
-                  <div v-if="folderBytes(h.folder)" class="ah-meta"><span>{{ fmtBytes(folderBytes(h.folder)) }}</span></div>
+                  <div class="ah-meta">
+                    <span v-if="hymnalStats[h.file]">{{ $t('components.download_center.hymns_count', { count: hymnalStats[h.file].count }) }}</span>
+                    <span v-if="hymnalSize(h)">{{ fmtBytes(hymnalSize(h)) }}</span>
+                  </div>
                   <button
                     v-if="!h.localOnly"
                     class="ah-btn-main ah-btn-block"
@@ -206,30 +240,6 @@
 
           <!-- MEUS DOWNLOADS -->
           <section v-else-if="section === 'downloads'">
-            <div class="ah-stats">
-              <div class="ah-stat">
-                <div class="ah-stat-head">
-                  <span class="ah-muted">{{ $t('components.download_center.stat_done') }}</span>
-                  <v-icon size="18" color="#33b5ea">mdi-check-circle-outline</v-icon>
-                </div>
-                <strong>{{ downloadedAlbums.length + downloadedHymnals.length + downloadedBibleSets.length }}</strong>
-              </div>
-              <div class="ah-stat">
-                <div class="ah-stat-head">
-                  <span class="ah-muted">{{ $t('components.download_center.stat_queue') }}</span>
-                  <v-icon size="18" color="#33b5ea">mdi-progress-download</v-icon>
-                </div>
-                <strong>{{ activeDownloads.length }}</strong>
-              </div>
-              <div class="ah-stat">
-                <div class="ah-stat-head">
-                  <span class="ah-muted">{{ $t('components.download_center.stat_used') }}</span>
-                  <v-icon size="18" color="#33b5ea">mdi-harddisk</v-icon>
-                </div>
-                <strong>{{ totalSize }}</strong>
-              </div>
-            </div>
-
             <div class="ah-panel mt-4">
               <b class="ah-title"><v-icon size="18">mdi-folder-music-outline</v-icon>{{ $t('components.download_center.library') }}</b>
               <div v-if="localFiles.length === 0" class="ah-empty">{{ $t('components.download_center.no_downloads') }}</div>
@@ -464,6 +474,7 @@ export default {
     albumSort:     'recent',
     albumStatus:   'all',
     albumEstimates: {},
+    hymnalStats: {},
     hymnalMark: hymnalLogoSvg,
     albumSongs: {},
     deleteDialog: false,
@@ -676,6 +687,7 @@ export default {
         this.loadDownloadedAlbumsStatus();
       }
       if (this.section === 'settings') await this.loadFolderPaths();
+      if (this.section === 'hymnals') this.loadHymnalStats();
     },
 
     async goTo(s) {
@@ -694,6 +706,7 @@ export default {
         await this.loadDownloadedAlbumInfos();
         this.loadDownloadedAlbumsStatus();
       }
+      if (s === 'hymnals') this.loadHymnalStats();
       if (s === 'settings') {
         await this.loadLocalFiles();
         await this.loadFolderPaths();
@@ -1002,7 +1015,7 @@ export default {
       const bytes = this.folderBytes(album.folder_name || album.name);
       if (bytes) return this.fmtBytes(bytes);
       const est = this.albumEstimates[album.id_album];
-      return est ? `≈ ${this.fmtBytes(est)}` : '';
+      return est ? this.fmtBytes(est) : "";
     },
     // Baixa, em sequência, só as coletâneas da lista atual que ainda faltam.
     async downloadAllLibrary() {
@@ -1028,6 +1041,19 @@ export default {
     },
 
     // ── Downloads simples ────────────────────────────────────────────────────
+    // Quantidade de hinos (do catálogo) e tamanho (pasta de áudio, ou arquivo local) de cada hinário
+    async loadHymnalStats() {
+      const stats = {};
+      for (const h of this.hymnalItems) {
+        const data = await this.fetchCatalog(h.file);
+        if (data) stats[h.file] = { count: Array.isArray(data) ? data.length : Object.keys(data).length };
+      }
+      this.hymnalStats = stats;
+    },
+    hymnalSize(h) {
+      return this.folderBytes(h.folder) || (this.localFiles.find(f => f.name === h.file)?.size || 0);
+    },
+
     async downloadFile(filename) {
       this.downloading = { ...this.downloading, [filename]: true };
       try {
@@ -1337,16 +1363,33 @@ export default {
   --accent: #009fe3;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  box-sizing: border-box;
   height: 720px;
-  background: var(--bg);
+  /* Fundo da janela em degradê com desfoque (as áreas internas mantêm as cores próprias) */
+  background:
+    radial-gradient(circle at 12% 0%, rgba(0, 159, 227, 0.28), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(246, 195, 42, 0.14), transparent 50%),
+    linear-gradient(135deg, #12294a 0%, #0b1420 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
   color: #eef4ff;
   font-size: 14px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 16px;
+}
+/* Moldura da janela: cantos arredondados em todos os lados (o fundo do diálogo fica transparente) */
+:global(.ah-dialog) {
+  border-radius: 16px !important;
+  overflow: hidden;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 .ah-side {
-  background: var(--side);
-  border-right: 1px solid #1b2f48;
+  /* Sem fundo próprio: a barra lateral usa o mesmo degradê da janela, sem separação */
+  background: transparent;
+  border-radius: 0;
   padding: 20px 13px;
   display: flex;
   flex-direction: column;
@@ -1386,7 +1429,9 @@ export default {
 .ah-storage-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 /* Cartão da grade: botão em largura total e, embaixo, músicas e tamanho em linhas próprias */
 .ah-action { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; min-width: 0; }
-.ah-size { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.ah-size { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; text-align: center; }
+.ah-action-row { display: flex; align-items: center; gap: 6px; }
+.ah-action-row .ah-btn-block { flex: 1; min-width: 0; }
 .ah-size-line { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ah-size-line .v-icon { opacity: 0.8; }
 /* Lista: botão e textos lado a lado */
@@ -1398,10 +1443,10 @@ export default {
 .ah-progress { height: 7px; background: #243b55; border-radius: 10px; overflow: hidden; margin: 10px 0; }
 .ah-progress span { display: block; height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.3s; }
 
-.ah-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.ah-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ah-top {
   height: 66px;
-  border-bottom: 1px solid #1b2f48;
+  border-bottom: 0;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1409,18 +1454,30 @@ export default {
   flex-shrink: 0;
 }
 .ah-top > b { font-size: 15px; white-space: nowrap; }
+.ah-search-wrap { position: relative; flex: 1; max-width: 480px; display: flex; align-items: center; }
+.ah-search-icon { position: absolute; left: 12px; color: var(--muted); pointer-events: none; }
+.ah-search-clear { position: absolute; right: 8px; background: transparent; border: 0; color: var(--muted); cursor: pointer; display: inline-flex; padding: 4px; border-radius: 50%; }
+.ah-search-clear:hover { color: #eef4ff; }
+.ah-close { margin-left: auto; }
 .ah-search {
   flex: 1;
-  max-width: 480px;
+  width: 100%;
   background: #10253e;
   border: 1px solid #1f3550;
   border-radius: 9px;
-  padding: 10px 14px;
+  padding: 10px 34px 10px 38px;
   color: white;
   outline: none;
 }
 .ah-local { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.ah-content { padding: 22px; overflow-y: auto; flex: 1; min-height: 0; position: relative; }
+/* Painel do conteúdo com cantos arredondados (não encosta na borda da janela/sidebar) */
+.ah-content { padding: 22px; overflow-y: auto; flex: 1; min-height: 0; position: relative; background: var(--panel); border-radius: 14px; margin: 0 8px 8px 0; }
+/* Barra de rolagem discreta */
+.ah-content { scrollbar-width: thin; scrollbar-color: rgba(145, 169, 198, 0.28) transparent; }
+.ah-content::-webkit-scrollbar { width: 6px; }
+.ah-content::-webkit-scrollbar-track { background: transparent; }
+.ah-content::-webkit-scrollbar-thumb { background: rgba(145, 169, 198, 0.28); border-radius: 6px; }
+.ah-content::-webkit-scrollbar-thumb:hover { background: rgba(145, 169, 198, 0.5); }
 .ah-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(7,20,38,0.6); z-index: 2; }
 .ah-heading { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
 .ah-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }

@@ -397,6 +397,39 @@ async function getCurrentReleaseNotes(version) {
 }
 
 /**
+ * Notas de todas as releases de "fromVersion" (inclusive) até a mais nova no
+ * GitHub, da mais nova para a mais antiga — o modal de novidades mostra a
+ * sequência inteira, não só a versão instalada. Betas entram também.
+ */
+async function getReleaseHistory(fromVersion) {
+  const from = String(fromVersion || app.getVersion()).replace(/^v/, '');
+  try {
+    const releases = await _request(GITHUB_RELEASES_URL, { parseJson: true });
+    if (!Array.isArray(releases)) return [];
+    const list = releases
+      .filter((r) => r && !r.draft && /^\d+\.\d+\.\d+/.test(String(r.tag_name || '').replace(/^v/, '')))
+      .filter((r) => compareVersions(String(r.tag_name).replace(/^v/, ''), from) >= 0)
+      .sort((a, b) => compareVersions(String(b.tag_name), String(a.tag_name)))
+      .slice(0, 10);
+    const out = [];
+    for (const r of list) {
+      const body = r.body || '';
+      out.push({
+        version: String(r.tag_name).replace(/^v/, ''),
+        name: r.name || r.tag_name,
+        body,
+        bodyHtml: body ? await renderMarkdown(body) : null,
+        url: r.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/${r.tag_name}`,
+      });
+    }
+    return out;
+  } catch (e) {
+    console.warn("[updater] getReleaseHistory falhou:", e.message);
+    return [];
+  }
+}
+
+/**
  * Baixa o asset (.exe) da release direto pra pasta Downloads, com progresso e
  * retry — mesmo destino fixo do violin-app (ver nota no topo do arquivo).
  *
@@ -620,6 +653,7 @@ function init({ channel = 'latest', autoCheck = true, autoDownload = false, useB
   ipcMain.handle('updater:setOptions', (_e, opts) => setOptions(opts));
   ipcMain.handle('updater:openReleasePage', () => openReleasePage());
   ipcMain.handle('updater:getReleaseNotes', (_e, version) => getCurrentReleaseNotes(version));
+  ipcMain.handle('updater:getReleaseHistory', (_e, version) => getReleaseHistory(version));
 
   // Verifica automaticamente só em build empacotada — em dev (`npm run
   // electron:dev`, app.isPackaged=false) cada restart do processo dispararia
@@ -779,4 +813,5 @@ module.exports = {
   checkGithubRelease,
   checkGithubAndSetState,
   getCurrentReleaseNotes,
+  getReleaseHistory,
 };

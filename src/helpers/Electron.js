@@ -149,6 +149,8 @@ export default {
     isElectron() ? window.electron.updaterSetOptions(opts) : Promise.resolve(null),
   updaterOpenReleasePage: () =>
     isElectron() && window.electron.updaterOpenReleasePage(),
+  updaterGetReleaseHistory: (version) =>
+    isElectron() ? window.electron.updaterGetReleaseHistory(version) : Promise.resolve([]),
   updaterGetReleaseNotes: (version) =>
     isElectron() ? window.electron.updaterGetReleaseNotes(version) : Promise.resolve(null),
 

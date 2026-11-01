@@ -33,8 +33,10 @@
 
       <!-- ── Conteúdo ── -->
       <v-card-text v-else class="rn-body">
-        <div v-if="release?.name" class="rn-title">{{ release.name }}</div>
-        <div v-html="formatChangelog(release?.bodyHtml || release?.body)" />
+        <div v-for="(r, idx) in releases" :key="r.version" :class="{ 'rn-release': idx > 0 }">
+          <div class="rn-title">{{ r.name }}</div>
+          <div v-html="formatChangelog(r.bodyHtml || r.body)" />
+        </div>
       </v-card-text>
 
       <v-divider />
@@ -77,6 +79,7 @@ export default {
     dontShowAgain: false,
     version: '',
     release: null,
+    releases: [],
   }),
 
   methods: {
@@ -90,12 +93,19 @@ export default {
       this.loading = true;
       this.error = false;
       this.release = null;
+      this.releases = [];
       try {
-        const data = await this.$electron.updaterGetReleaseNotes(version);
-        if (!data) {
+        // Sequência de releases: da mais nova no GitHub até a versão instalada
+        let list = await this.$electron.updaterGetReleaseHistory(version);
+        if (!Array.isArray(list) || !list.length) {
+          const single = await this.$electron.updaterGetReleaseNotes(version);
+          list = single ? [single] : [];
+        }
+        if (!list.length) {
           this.error = true;
         } else {
-          this.release = data;
+          this.releases = list;
+          this.release = list[0];
         }
       } catch (_) {
         this.error = true;
@@ -149,6 +159,11 @@ export default {
   margin-bottom: 10px;
 }
 
+.rn-release {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
 .rn-body {
   max-height: 50vh;
   overflow-y: auto;

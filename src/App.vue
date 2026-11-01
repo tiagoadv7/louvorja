@@ -64,6 +64,7 @@ export default {
     _autoImportRunning:  false,
     _handlers:              [],
     _syncFilesHandler:      null,
+    _whatsNewHandler:       null,
     _checkUpdatesHandler:   null,
     _openUpdateDialogHandler: null,
     _beforeUnloadHandler:   null,
@@ -171,6 +172,12 @@ export default {
     // 5. Ouve evento global para abrir o verificador de arquivos (disparado pelo Menu)
     this._syncFilesHandler = () => this.$refs.fileCheck?.open(true);
     window.addEventListener('sync-files', this._syncFilesHandler);
+    // Botão "Novidades" do verificador de atualizações
+    this._whatsNewHandler = async () => {
+      const version = await this.$electron.getVersion().catch(() => null);
+      if (version) this.$refs.releaseNotes?.open(version);
+    };
+    window.addEventListener('open-release-notes', this._whatsNewHandler);
 
     // 5b. Ouve evento global de verificar atualizações (disparado pelo Menu lateral)
     // -- verifica app E banco de dados juntos (mesmo comportamento do
@@ -229,6 +236,7 @@ export default {
   beforeUnmount() {
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
+    window.removeEventListener('open-release-notes', this._whatsNewHandler);
     window.removeEventListener('check-updates', this._checkUpdatesHandler);
     window.removeEventListener('open-update-dialog', this._openUpdateDialogHandler);
     window.removeEventListener('beforeunload', this._beforeUnloadHandler);
