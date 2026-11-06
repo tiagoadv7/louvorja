@@ -7,13 +7,13 @@
     :persistent="step === 'downloading'"
     @update:modelValue="v => { if (!v) close(); }"
   >
-    <v-card theme="dark" rounded="lg" elevation="8" style="overflow:hidden">
+    <v-card theme="dark" rounded="lg" elevation="8" class="fcd-card" style="overflow:hidden">
 
       <!-- Cabeçalho -->
       <div class="fcd-header">
         <div class="d-flex align-center ga-3">
           <v-avatar color="primary" variant="tonal" size="40">
-            <v-icon size="20" color="primary">mdi-folder-sync-outline</v-icon>
+            <v-icon size="20" class="fc-icon">mdi-folder-sync-outline</v-icon>
           </v-avatar>
           <div>
             <div class="text-subtitle-2 font-weight-bold">{{ $t('components.file_check.title') }}</div>
@@ -59,7 +59,7 @@
           <!-- ── Escaneando ── -->
           <v-card-text v-if="step === 'scanning'" class="d-flex flex-column align-center justify-center py-12">
             <div class="fcd-scan-ring mb-5">
-              <v-icon size="40" color="primary">mdi-folder-search-outline</v-icon>
+              <v-icon size="40" class="fc-icon">mdi-folder-search-outline</v-icon>
             </div>
             <div class="text-body-1 font-weight-semibold mb-1">{{ $t('components.file_check.scanning') }}</div>
             <div v-if="scanAlbum.total > 0" class="text-caption text-medium-emphasis mb-2 text-center" style="max-width:320px">
@@ -703,6 +703,40 @@ export default {
 </script>
 
 <style scoped>
+/* Mesmas cores azuis do app (coletâneas e centro de downloads), no lugar do cinza padrão do tema escuro */
+/* Listas (álbuns e arquivos) com a mesma cor dos cartões do centro de downloads */
+.fcd-card .v-expansion-panel,
+.fcd-card .v-expansion-panel-text,
+.fcd-card .v-expansion-panel-text__wrapper {
+  background: transparent !important;
+  color: #eef4ff;
+}
+.fcd-card .v-expansion-panel {
+  border-bottom: 1px solid #1b2f48;
+  box-shadow: none !important;
+}
+.fcd-card .v-expansion-panel-title {
+  background: #13213a !important;
+  color: #eef4ff;
+}
+.fcd-card .v-expansion-panel-title:hover {
+  background: #182a4a !important;
+}
+.fcd-card .fcd-list-row {
+  border-bottom: 1px solid #1b2f48;
+}
+/* Mesma paleta do centro de downloads: janela em degradê azul, cartões em #13213a */
+.fcd-card {
+  --v-theme-surface: 19, 33, 58;
+  --v-theme-background: 11, 20, 32;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(0, 159, 227, 0.28), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(246, 195, 42, 0.14), transparent 50%),
+    linear-gradient(135deg, #12294a 0%, #0b1420 100%) !important;
+}
+.fc-icon {
+  color: #ffffff !important;
+}
 .fcd-pill {
   position: fixed;
   right: 16px;
