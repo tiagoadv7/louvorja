@@ -124,27 +124,40 @@
         <!-- Lista sempre visível — sem v-if="returnOpen", igual ao menu antigo.
              sortedScreens (não "screens" puro): ordem esquerda-pra-direita
              igual ao arranjo lá em cima, ver comentário no computed. -->
-        <div v-if="!loading && screens.length" class="d-flex flex-wrap justify-center ga-3">
+        <div
+          v-if="!loading && screens.length"
+          class="marr-stage marr-stage--return"
+        >
           <div
-            v-for="s in sortedScreens"
-            :key="'ret-' + s.id"
-            class="monitor-tile"
-            :class="{ 'monitor-tile--primary': s.primary, 'monitor-tile--active-return': returnSelectedId === s.id }"
-            :title="s.deviceName || undefined"
-            @click="lockReturn(s.id)"
+            v-for="tile in returnTiles"
+            :key="'ret-' + tile.id"
+            class="marr-tile marr-tile--return"
+            :class="{
+              'marr-tile--primary': tile.isPrimary,
+              'marr-tile--active-return': returnSelectedId === tile.id,
+            }"
+            :style="{
+              width: `${tile.width}px`,
+              height: `${tile.height + 22}px`,
+              transform: `translate(${tile.left}px, ${tile.top}px)`,
+            }"
+            :title="tile.deviceName || undefined"
+            @click="lockReturn(tile.id)"
           >
-            <div class="monitor-tile__screen">
-              <v-icon v-if="s.primary" size="12" class="monitor-tile__star">mdi-star</v-icon>
-              <span class="monitor-tile__num">{{ indexById[s.id] ?? '' }}</span>
-              <span class="monitor-tile__res">{{ s.bounds.width }}×{{ s.bounds.height }}</span>
-              <span class="monitor-tile__badge" :class="{ 'monitor-tile__badge--primary': s.primary }">
-                {{ s.primary ? $t('components.monitor_arrangement.primary') : $t('components.monitor_arrangement.extended') }}
+            <div class="marr-tile__screen" :style="{ height: `${tile.height}px` }">
+              <v-icon v-if="tile.isPrimary" size="12" class="marr-tile__star">mdi-star</v-icon>
+              <span class="marr-tile__index">{{ tile.index }}</span>
+              <span class="marr-tile__res">{{ tile.resolutionLabel }}</span>
+              <span class="marr-tile__badge" :class="{ 'marr-tile__badge--primary': tile.isPrimary }">
+                {{ tile.isPrimary ? $t('components.monitor_arrangement.primary') : $t('components.monitor_arrangement.extended') }}
               </span>
-              <span v-if="s.id === selectedId" class="monitor-tile__out">{{ $t('components.monitor_arrangement.output') }}</span>
+              <div class="marr-tile__out-row">
+                <span v-if="tile.id === selectedId" class="marr-tile__out marr-tile__out--output">{{ $t('components.monitor_arrangement.output') }}</span>
+              </div>
             </div>
-            <div class="monitor-tile__stand" />
-            <div class="monitor-tile__base" />
-            <div v-if="s.deviceName" class="monitor-tile__device" :title="s.deviceName">{{ s.deviceName }}</div>
+            <div class="marr-tile__stand" />
+            <div class="marr-tile__base" />
+            <div v-if="tile.deviceName" class="marr-tile__device" :title="tile.deviceName">{{ tile.deviceName }}</div>
           </div>
         </div>
         <div v-else-if="!loading" class="text-center text-caption text-medium-emphasis mb-3">
@@ -171,6 +184,7 @@
 // Margem de folga em torno do bounding-box dos monitores (0.68 = ocupa 68%
 // do canvas, deixando espaço pro usuário arrastar além do "encaixe" natural).
 const FIT_FACTOR = 0.68;
+const RETURN_STAGE_H = 170;
 const MIN_TILE_W = 64;
 const MIN_TILE_H = 40;
 const PRIMARY_SCALE_BOOST = 1.04;
@@ -261,32 +275,12 @@ export default {
       );
     },
     tiles() {
-      const box = this.worldBox;
-      if (!box) return [];
-      const scale = this.scale;
-      const scaledW = box.width * scale;
-      const scaledH = box.height * scale;
-      const offsetX = (this.stageW - scaledW) / 2 - box.minX * scale;
-      const offsetY = (this.stageH - scaledH) / 2 - box.minY * scale;
-
-      let extIdx = 0;
-      return this.virtualDisplays.map((v) => {
-        const boost = v.isPrimary ? PRIMARY_SCALE_BOOST : 1;
-        const isDragging = this.draggingId === v.id;
-        const dx = isDragging ? this.dragOffset.x : 0;
-        const dy = isDragging ? this.dragOffset.y : 0;
-        return {
-          id: v.id,
-          left: v.x * scale + offsetX + dx,
-          top: v.y * scale + offsetY + dy,
-          width: Math.max(MIN_TILE_W, v.width * scale * boost),
-          height: Math.max(MIN_TILE_H, v.height * scale * boost),
-          isPrimary: v.isPrimary,
-          index: v.isPrimary ? 0 : ++extIdx,
-          resolutionLabel: `${v.width}×${v.height}`,
-          deviceName: v.deviceName,
-        };
-      });
+      return this.layoutTiles(this.stageW, this.stageH, true);
+    },
+    // Mesmo desenho dos monitores em cima, numa faixa menor (seção de retorno):
+    // proporção e posição física iguais, só encolhido pra caber.
+    returnTiles() {
+      return this.layoutTiles(this.stageW, RETURN_STAGE_H, false);
     },
     // Mesma numeração dos cards do arranjo acima (0 = principal, 1/2/3... =
     // estendidos, na ordem em que vêm de getScreens) -- reaproveitada nos
@@ -351,6 +345,36 @@ export default {
     if (this._displayNotFoundHandler) this.$electron.off('output-display-not-found', this._displayNotFoundHandler);
   },
   methods: {
+    // Geometria dos monitores para um palco de tamanho dado (usada pelo arranjo
+    // de cima e pela faixa do monitor de retorno, que é só menor).
+    layoutTiles(stageW, stageH, withDrag) {
+      const box = this.worldBox;
+      if (!box || !stageW || !stageH) return [];
+      const scale = Math.min((stageW * FIT_FACTOR) / box.width, (stageH * FIT_FACTOR) / box.height);
+      const scaledW = box.width * scale;
+      const scaledH = box.height * scale;
+      const offsetX = (stageW - scaledW) / 2 - box.minX * scale;
+      const offsetY = (stageH - scaledH) / 2 - box.minY * scale;
+
+      let extIdx = 0;
+      return this.virtualDisplays.map((v) => {
+        const boost = v.isPrimary ? PRIMARY_SCALE_BOOST : 1;
+        const isDragging = withDrag && this.draggingId === v.id;
+        const dx = isDragging ? this.dragOffset.x : 0;
+        const dy = isDragging ? this.dragOffset.y : 0;
+        return {
+          id: v.id,
+          left: v.x * scale + offsetX + dx,
+          top: v.y * scale + offsetY + dy,
+          width: Math.max(MIN_TILE_W, v.width * scale * boost),
+          height: Math.max(MIN_TILE_H, v.height * scale * boost),
+          isPrimary: v.isPrimary,
+          index: v.isPrimary ? 0 : ++extIdx,
+          resolutionLabel: `${v.width}×${v.height}`,
+          deviceName: v.deviceName,
+        };
+      });
+    },
     async refresh() {
       const saved = await this.$electron.storeGet("monitor_arrangement");
       this.arrangement = Array.isArray(saved) ? saved : [];
@@ -587,6 +611,24 @@ export default {
     rgba(128, 128, 128, 0.06);
   touch-action: none;
   user-select: none;
+}
+.marr-stage--return {
+  height: 170px;
+  min-height: 170px;
+  cursor: pointer;
+}
+.marr-tile--return {
+  cursor: pointer;
+}
+.marr-tile--active-return .marr-tile__screen {
+  border-color: #009fe3;
+  box-shadow: 0 0 0 2px rgba(0, 159, 227, 0.45), 0 0 20px rgba(0, 159, 227, 0.3);
+}
+.marr-tile--active-return .marr-tile__stand {
+  background: rgba(0, 159, 227, 0.85);
+}
+.marr-tile--active-return .marr-tile__base {
+  background: #009fe3;
 }
 .marr-stage--dragging {
   cursor: grabbing;

@@ -26,6 +26,14 @@
         }
     },
     "components": {
+        "youtube": {
+            "key_button": "Clave YouTube",
+            "key_title": "Clave de la YouTube Data API",
+            "key_hint": "Opcional. Con la clave, la app verifica el video antes de reproducirlo y avisa el motivo cuando YouTube no permite la reproducción.",
+            "key_label": "Clave de la API",
+            "key_cancel": "Cancelar",
+            "key_save": "Guardar"
+        },
         "letterpagination": {
             "all": "Todas"
         },
@@ -189,7 +197,7 @@
             "lib_sort_recent": "Más recientes",
             "lib_sort_name": "Nombre (A-Z)",
             "lib_download": "Descargar",
-            "lib_redownload": "Descargar de nuevo",
+            "lib_redownload": "Actualizar",
             "lib_download_all": "Descargar todas",
             "lib_downloaded": "Descargada",
             "lib_not_downloaded": "No descargada",

@@ -76,3 +76,35 @@ body {
     -moz-user-select: none;
     -ms-user-select: none;
 }
+/* SCROLL DISCRETO em todas as páginas (mesmo visual do centro de downloads):
+   barra fina, fundo transparente e alça suave que só fica mais forte ao passar o mouse. */
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track:hover,
+*::-webkit-scrollbar-track:active,
+.v-theme--dark *::-webkit-scrollbar-track,
+.v-theme--dark *::-webkit-scrollbar-track:hover,
+.v-theme--dark *::-webkit-scrollbar-track:active {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.18);
+}
+
+.v-theme--dark *::-webkit-scrollbar-thumb,
+.v-theme--dark *::-webkit-scrollbar-thumb:hover,
+.v-theme--dark *::-webkit-scrollbar-thumb:active {
+    background-color: rgba(145, 169, 198, 0.28);
+}
+
+.v-theme--dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(145, 169, 198, 0.5);
+}

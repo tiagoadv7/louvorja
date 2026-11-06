@@ -210,9 +210,14 @@ export default {
   },
   mounted() {
     this._setup();
+    this._onVisibility = () => {
+      this.$refs.root?.classList.toggle("anim-bg-host--paused", document.hidden);
+    };
+    document.addEventListener("visibilitychange", this._onVisibility);
   },
   beforeUnmount() {
     if (this._switchFade) this._switchFade.cancel();
+    document.removeEventListener("visibilitychange", this._onVisibility);
     this._teardown();
   },
   methods: {
@@ -279,7 +284,7 @@ export default {
       camera.position.z = 30;
 
       const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 
       const count = 220;
       const positions = new Float32Array(count * 3);
@@ -319,11 +324,15 @@ export default {
       window.addEventListener("resize", resize);
 
       let frameId;
-      const tick = () => {
+      // ~30 fps e sem renderizar com a janela oculta/minimizada (economiza CPU/GPU)
+      let lastFrame = 0;
+      const tick = (now = 0) => {
+        frameId = requestAnimationFrame(tick);
+        if (document.hidden || now - lastFrame < 33) return;
+        lastFrame = now;
         points.rotation.y += 0.0006;
         points.rotation.x += 0.0002;
         renderer.render(scene, camera);
-        frameId = requestAnimationFrame(tick);
       };
       tick();
 
@@ -895,5 +904,16 @@ export default {
 @keyframes anim-bg-ambient-pulse {
   0%, 100% { opacity: 0.2;  transform: scale(1); }
   50%      { opacity: 0.38; transform: scale(1.08); }
+}
+/* Desempenho: camadas animadas com blur ganham a própria camada de GPU, e as
+   animações param enquanto a janela está oculta/minimizada (ver visibilitychange). */
+.anim-bg-blob,
+.anim-bg-glow,
+.anim-bg-waves {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.anim-bg-host--paused * {
+  animation-play-state: paused !important;
 }
 </style>

@@ -714,9 +714,18 @@ export default {
     },
 
     async loadCategories() {
-      this.loading = true;
       const locale = this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
-      this.categories = await this.fetchCatalog(`${locale}_categories`) || [];
+      const file = `${locale}_categories`;
+      // 1) Cópia local do catálogo aparece na hora (como os hinários), sem esperar a rede
+      if (!this.categories.length && this.isElectron) {
+        const local = await this.$electron.dbLocalGet(file).catch(() => null);
+        if (Array.isArray(local) && local.length) this.categories = local;
+      }
+      // 2) Só mostra o carregamento se ainda não há nada para exibir
+      this.loading = !this.categories.length;
+      // 3) Atualiza com o catálogo da rede (ou o cache da sessão)
+      const fresh = await this.fetchCatalog(file);
+      if (fresh) this.categories = fresh;
       // Adiado: a grade e as capas carregam primeiro; o tamanho/contagem chega depois
       setTimeout(() => this.loadAlbumEstimates(), 3000);
       this.loading = false;
