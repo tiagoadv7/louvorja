@@ -85,6 +85,9 @@ export default {
 
   watch: {
     videoId(id, oldId) {
+      // A janela principal não recebe as escritas desta janela (is_popup): avisa o
+      // vídeo atual pelo canal dedicado, pra miniplayer e rodapé acompanharem.
+      this.$electron.sendWebLinkProgress({ videoId: id || null, url: this.config.url || "" });
       if (id === oldId) return;
       // Troca de vídeo com o anterior tocando: esmaece antes de trocar, em
       // vez de cortar o áudio na hora (mesmo cuidado do video_player).
@@ -99,6 +102,9 @@ export default {
       }
     },
     'config.isPlaying'(playing) {
+      // A janela principal não recebe as escritas desta janela: avisa o estado
+      // (fim do vídeo e pausas) pelo mesmo canal, pro rodapé e o miniplayer seguirem.
+      this.$electron.sendWebLinkProgress({ isPlaying: !!playing });
       if (!this.player || !this._playerReady) return;
       if (playing) this._fadeInAndPlay();
       else this._fadeOutAndPause();
@@ -196,6 +202,8 @@ export default {
         150: "O dono do vídeo desativou a reprodução em outros sites.",
       };
       this.loadError = MESSAGES[code] || "Não foi possível carregar o vídeo.";
+      // Mensagem também na janela principal (a projeção não mostra alertas)
+      this.$electron.sendWebLinkProgress({ error: this.loadError });
       // Mesma limpeza de estado do fim natural do vídeo (_fadeOutAndStop),
       // sem fade — nesses erros normalmente não há áudio tocando ainda.
       this.$appdata.set('modules.web_link.config.isPlaying', false);

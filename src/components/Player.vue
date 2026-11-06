@@ -5,10 +5,16 @@
          Sem slide (vídeo, link online, slides), mostra só o título do conteúdo. -->
     <div
       v-if="location == 'footer' && mini_slide"
-      class="mini-pip"
-      title="Abrir"
-      @click="maximize"
+      :class="miniPipClass"
+      :style="miniPipStyle"
+      @pointerdown="onMiniPipDown"
+      @dblclick="maximize"
     >
+      <div class="mini-pip-toolbar">
+        <button class="mini-pip-btn" title="Maximizar" @pointerdown.stop @click.stop="maximize">
+          <v-icon size="16">mdi-arrow-expand-all</v-icon>
+        </button>
+      </div>
       <LSlide
         :slide_number="media.config.slide_index"
         :cover="mini_slide.cover == true"
@@ -21,10 +27,16 @@
     <!-- Vídeo em reprodução e link online: o mesmo quadro, espelhando o que está na projeção -->
     <div
       v-else-if="location == 'footer' && mini_media"
-      class="mini-pip"
-      title="Abrir"
-      @click="maximize"
+      :class="miniPipClass"
+      :style="miniPipStyle"
+      @pointerdown="onMiniPipDown"
+      @dblclick="maximize"
     >
+      <div class="mini-pip-toolbar">
+        <button class="mini-pip-btn" title="Maximizar" @pointerdown.stop @click.stop="maximize">
+          <v-icon size="16">mdi-arrow-expand-all</v-icon>
+        </button>
+      </div>
       <img
         v-if="mini_media.kind === 'image'"
         :src="mini_media.src"
@@ -35,6 +47,7 @@
         v-else-if="mini_media.kind === 'video'"
         ref="miniVideo"
         :src="mini_media.src"
+        :loop="mini_media.loop"
         class="mini-pip-media"
         muted
         playsinline
@@ -42,7 +55,9 @@
       />
       <iframe
         v-else
-        :src="mini_media.src"
+        ref="miniFrame"
+        :src="mini_media.kind === 'youtube' ? miniYtSrc : mini_media.src"
+        @load="syncMiniYoutube"
         class="mini-pip-media"
         allow="autoplay; encrypted-media"
         frameborder="0"
@@ -361,6 +376,12 @@ export default {
   data: () => ({
     pipOpen: false,
     _volumeFadeInterval: null,
+    miniYtSrc: "",
+    // Quadro flutuante (estilo do miniplayer do flute): canto salvo e arraste com encaixe
+    miniPipCorner: "bottom-left",
+    miniPipDx: 0,
+    miniPipDragging: false,
+    _miniDrag: null,
   }),
   computed: {
     // Formato compatível com $modules.get("media") — só o necessário pro
@@ -633,16 +654,32 @@ export default {
         if (!cfg.src) return null;
         // Imagem da mídia: mostrada como figura (um <video> com imagem fica preto)
         if (cfg.mediaType === "image") return { kind: "image", src: cfg.src };
-        return { kind: "video", src: cfg.src, time: cfg.currentTime || 0, playing: !!cfg.isPlaying };
+        return { kind: "video", src: cfg.src, time: cfg.currentTime || 0, playing: !!cfg.isPlaying, loop: !!cfg.loop };
       }
       if (this.source === "web_link") {
         const cfg = this.$webLink.getConfig();
         if (cfg.videoId) {
-          return { kind: "youtube", src: `https://www.youtube.com/embed/${cfg.videoId}?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1` };
+          // URL estável (sem autoplay): play/pause e posição vão por postMessage, sem recarregar o quadro
+          return {
+            kind: "youtube",
+            youtubeId: cfg.videoId,
+            src: "",
+            time: cfg.current_time || 0,
+            playing: !!cfg.isPlaying,
+          };
         }
         if (cfg.url) return { kind: "iframe", src: cfg.url };
       }
       return null;
+    },
+    miniPipClass: function () {
+      return ["mini-pip", this.miniPipCorner === "bottom-right" ? "mini-pip--right" : ""];
+    },
+    miniPipStyle: function () {
+      return {
+        transform: `translateX(${this.miniPipDx}px)`,
+        transition: this.miniPipDragging ? "none" : "transform 0.2s ease",
+      };
     },
     // Texto do miniplayer: letra do slide quando é música; nos outros casos, o título do conteúdo
     mini_text: function () {
@@ -666,19 +703,77 @@ export default {
     },
   },
   watch: {
+    "mini_media.youtubeId": {
+      handler() { this.refreshMiniYt(); },
+      immediate: true,
+    },
     // Espelha o vídeo local do quadro: play/pause e posição acompanham a projeção
     "mini_media.playing"(playing) {
+      if (this.mini_media?.kind === "youtube") {
+        this.refreshMiniYt();
+        return;
+      }
       const el = this.$refs.miniVideo;
       if (!el) return;
       if (playing) el.play().catch(() => {});
       else el.pause();
     },
     "mini_media.time"(time) {
+      if (this.mini_media?.kind === "youtube") return;
       const el = this.$refs.miniVideo;
-      if (el && Math.abs(el.currentTime - time) > 0.8) el.currentTime = time;
+      if (el && Math.abs(el.currentTime - time) > 0.4) el.currentTime = time;
     },
   },
   methods: {
+    // Arraste do quadro: segue o ponteiro e, ao soltar, encaixa no canto mais próximo
+    onMiniPipDown(e) {
+      if (e.button !== 0 || e.target.closest("button")) return;
+      this._miniDrag = { x: e.clientX, startDx: this.miniPipDx };
+      this.miniPipDragging = true;
+      window.addEventListener("pointermove", this.onMiniPipMove);
+      window.addEventListener("pointerup", this.onMiniPipUp);
+    },
+    onMiniPipMove(e) {
+      if (!this._miniDrag) return;
+      this.miniPipDx = this._miniDrag.startDx + (e.clientX - this._miniDrag.x);
+    },
+    onMiniPipUp(e) {
+      const el = e.currentTarget && this.$el ? this.$el.querySelector(".mini-pip") : null;
+      const rect = el ? el.getBoundingClientRect() : null;
+      if (rect) {
+        const center = rect.left + rect.width / 2;
+        this.miniPipCorner = center > window.innerWidth / 2 ? "bottom-right" : "bottom-left";
+        this.$userdata.set("modules.media.miniplayer_corner", this.miniPipCorner);
+      }
+      this.miniPipDx = 0;
+      this.endMiniPipDrag();
+    },
+    endMiniPipDrag() {
+      this._miniDrag = null;
+      this.miniPipDragging = false;
+      window.removeEventListener("pointermove", this.onMiniPipMove);
+      window.removeEventListener("pointerup", this.onMiniPipUp);
+    },
+    // Quadro do YouTube: a URL recarrega só quando o estado muda (play/pausa ou outro vídeo),
+    // começando do tempo atual da projeção. Assim não depende de comandos postMessage.
+    refreshMiniYt() {
+      const m = this.mini_media;
+      if (!m || m.kind !== "youtube") { this.miniYtSrc = ""; return; }
+      this.miniYtSrc = `https://www.youtube.com/embed/${m.youtubeId}?autoplay=${m.playing ? 1 : 0}&mute=1&controls=0&rel=0&modestbranding=1&start=${Math.floor(m.time || 0)}`;
+    },
+    // Comandos da API do YouTube (iframe com enablejsapi=1) — sem recarregar o quadro
+    postMiniYoutube(func, args = "") {
+      const w = this.$refs.miniFrame?.contentWindow;
+      if (w) w.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+    },
+    syncMiniYoutube() {
+      const m = this.mini_media;
+      if (!m || m.kind !== "youtube") return;
+      this._miniYtTime = m.time;
+      this.postMiniYoutube("mute");
+      this.postMiniYoutube("seekTo", [m.time, true]);
+      this.postMiniYoutube(m.playing ? "playVideo" : "pauseVideo");
+    },
     // Ao carregar o quadro, posiciona no tempo atual da projeção e segue o estado de reprodução
     syncMiniVideo() {
       const el = this.$refs.miniVideo;
@@ -807,9 +902,13 @@ export default {
     this.pipOpen = await this.$electron.pipIsOpen();
     this._pipClosedHandler = this.$electron.on('video-pip:closed', () => { this.pipOpen = false; });
   },
+  mounted() {
+    this.miniPipCorner = this.$userdata.get("modules.media.miniplayer_corner", "bottom-left");
+  },
   beforeUnmount() {
     if (this._pipClosedHandler) this.$electron.off('video-pip:closed', this._pipClosedHandler);
     clearInterval(this._volumeFadeInterval);
+    this.endMiniPipDrag();
   },
 };
 </script>
@@ -831,6 +930,33 @@ export default {
   overflow: visible !important;
 }
 /* Picture-in-picture do slide: 16:9, cantos arredondados e sombra, flutuando sobre a barra */
+.mini-pip.mini-pip--right {
+  left: auto;
+  right: 16px;
+}
+.mini-pip-toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.mini-pip:hover .mini-pip-toolbar {
+  opacity: 1;
+}
+.mini-pip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
 .mini-pip {
   position: absolute;
   left: 16px;
@@ -843,7 +969,8 @@ export default {
   overflow: hidden;
   background: #000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   z-index: 50;
 }
 .mini-lyric {

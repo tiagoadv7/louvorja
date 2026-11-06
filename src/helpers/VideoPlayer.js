@@ -114,6 +114,12 @@ $electron.on("video-player:progress", ({ currentTime, duration }) => {
   $appdata.set("modules.video_player.config.currentTime", currentTime);
   $appdata.set("modules.video_player.config.duration", duration);
 });
+// Projeção fechada: o vídeo local sai junto (sem isso, o miniplayer ficava com o quadro preto)
+$electron.on("output-window-closed", () => {
+  $appdata.set("modules.video_player.config.isPlaying", false);
+  $appdata.set("modules.video_player.config.src", "");
+  $appdata.set("modules.video_player.config.currentTime", 0);
+});
 
 export default {
   toFileUrl,

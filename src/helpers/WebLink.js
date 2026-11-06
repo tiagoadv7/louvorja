@@ -1,6 +1,8 @@
 import $appdata from "@/helpers/AppData";
 import $popup from "@/helpers/Popup";
 import $modules from "@/helpers/Modules";
+import $alert from "@/helpers/Alert";
+import { checkYoutubeEmbeddable } from "@/helpers/YoutubeCheck";
 import $electron from "@/helpers/Electron";
 
 // YouTube e Canva bloqueiam ser exibidos dentro de outra página (iframe) nos
@@ -122,9 +124,24 @@ function toPlain(v) {
 // esse evento de verdade (main.js já filtra o sender), então é seguro
 // registrar isso incondicionalmente aqui (roda também na janela de saída,
 // mas ela nunca recebe o evento).
-$electron.on("web-link:progress", ({ currentTime, duration }) => {
-  $appdata.set("modules.web_link.config.current_time", currentTime);
-  $appdata.set("modules.web_link.config.duration", duration);
+$electron.on("web-link:progress", (data) => {
+  if (data && data.error) $alert.error({ text: data.error, translate: false });
+  // Mesmo canal serve para o vídeo atual (videoId/url, enviado quando a projeção troca de vídeo)
+  if ("videoId" in data) {
+    $appdata.set("modules.web_link.config.videoId", data.videoId);
+    $appdata.set("modules.web_link.config.url", data.url || "");
+  }
+  if ("isPlaying" in data) $appdata.set("modules.web_link.config.isPlaying", data.isPlaying);
+  if ("currentTime" in data) $appdata.set("modules.web_link.config.current_time", data.currentTime);
+  if ("duration" in data) $appdata.set("modules.web_link.config.duration", data.duration);
+});
+// Projeção fechada: o vídeo online sai junto (sem isso, o miniplayer ficava com o quadro preto)
+$electron.on("output-window-closed", () => {
+  $appdata.set("modules.web_link.config.isPlaying", false);
+  $appdata.set("modules.web_link.config.videoId", null);
+  $appdata.set("modules.web_link.config.url", "");
+  $appdata.set("modules.web_link.config.current_time", 0);
+  $appdata.set("modules.web_link.config.duration", 0);
 });
 
 export default {
@@ -224,8 +241,17 @@ export default {
   // addToPlaylist:false (padrão true) carrega o link sem gravá-lo na fila —
   // usado por quem só quer tocar um link avulso (ex.: item "link" da
   // Liturgia, que já tem seu próprio nome/URL persistidos ali).
-  open(rawUrl, name, { addToPlaylist = true } = {}) {
+  async open(rawUrl, name, { addToPlaylist = true } = {}) {
     if (!rawUrl) return;
+    const probe = extractYoutubeVideoId(toEmbeddableUrl(rawUrl));
+    const check = await checkYoutubeEmbeddable(probe);
+    if (!check.ok) {
+      const text = check.reason === "video_not_found"
+        ? "Vídeo não encontrado ou privado no YouTube."
+        : "O dono deste vídeo não permite reproduzi-lo fora do YouTube.";
+      $alert.error({ text, translate: false });
+      return;
+    }
     const item = addToPlaylist
       ? this.addToPlaylist(rawUrl, name)
       : { id: null, url: toEmbeddableUrl(rawUrl), videoId: extractYoutubeVideoId(toEmbeddableUrl(rawUrl)) };
@@ -260,7 +286,9 @@ export default {
     return !liturgiaOpen && !videoPlayerOpen && !!this.getConfig().videoId;
   },
   maximize() {
-    $modules.open("liturgia");
+    // Abre a Mídia na aba Online (onde o link é tocado), não a Liturgia
+    $appdata.set("modules.video_player.active_tab", "online");
+    $modules.open("video_player");
   },
 
   setVolume(vol) {
