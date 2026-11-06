@@ -408,7 +408,8 @@ async function getReleaseHistory(fromVersion) {
     if (!Array.isArray(releases)) return [];
     const list = releases
       .filter((r) => r && !r.draft && /^\d+\.\d+\.\d+/.test(String(r.tag_name || '').replace(/^v/, '')))
-      .filter((r) => compareVersions(String(r.tag_name).replace(/^v/, ''), from) >= 0)
+      // Mostra o histórico recente inteiro (não só a versão instalada), para o operador
+      // ver o que foi feito nas versões anteriores também.
       .sort((a, b) => compareVersions(String(b.tag_name), String(a.tag_name)))
       .slice(0, 10);
     const out = [];
