@@ -199,9 +199,13 @@ async function buildChangelog(repoInfo) {
     return null;
   }
 
-  const previous = releases
-    .filter((r) => r && !r.draft && /^v\d+\.\d+\.\d+(-[\w.]+)?$/.test(r.tag_name) && r.tag_name !== tag)
-    .sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
+  // CHANGELOG_SINCE=v1.28.9-beta.13 monta o changelog desde essa tag (todas as mudanças
+  // desde ela), em vez de só desde a última release.
+  const previous = process.env.CHANGELOG_SINCE
+    ? { tag_name: process.env.CHANGELOG_SINCE }
+    : releases
+        .filter((r) => r && !r.draft && /^v\d+\.\d+\.\d+(-[\w.]+)?$/.test(r.tag_name) && r.tag_name !== tag)
+        .sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
   if (!previous) {
     console.warn('[publish] Nenhuma release anterior encontrada — changelog não gerado.');
     return null;
