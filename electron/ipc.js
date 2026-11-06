@@ -1,7 +1,12 @@
 const { ipcMain, dialog, shell, app, screen, desktopCapturer } = require('electron');
+
+// Identifica esta execução do app: muda a cada abertura, mas não ao recarregar a janela.
+const APP_SESSION_ID = `${Date.now()}-${process.pid}`;
 const fs = require('fs');
 const path = require('path');
-const { pathToFileURL } = require('url');
+const { pathToFileURL, fileURLToPath } = require('url');
+const { execFile, spawnSync } = require('child_process');
+const crypto = require('crypto');
 const Store = require('./store');
 const sqliteReader = require('./sqlite-reader');
 const { refreshHymnalEs } = require('./hymnal-es-sync');
@@ -95,6 +100,7 @@ function setupIpc(mainWindow) {
 
   ipcMain.handle('app:get-user-data-path', () => app.getPath('userData'));
 
+  ipcMain.handle('app:session-id', () => APP_SESSION_ID);
   ipcMain.handle('app:open-external', (_, url) => {
     if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
       shell.openExternal(url);
@@ -1740,6 +1746,42 @@ function setupIpc(mainWindow) {
   // foi encontrado e o operador escolheu "Ouvir Online" (ver Media.js). Uma URL
   // já http(s):// volta inalterada (resolveFileUrl já trata esse caso).
   ipcMain.handle('media:resolve-remote-url', (_, url, filesBaseUrl) => resolveFileUrl(url, filesBaseUrl));
+
+  // Áudio que o player do app não lê (ex.: AAC/WMA/ALAC): converte com o ffmpeg
+  // instalado no computador (PATH ou o do WinGet) e guarda o resultado em cache.
+  // Sem ffmpeg, devolve null e o SoundMaster mostra o aviso de formato.
+  let ffmpegBin;
+  const findFfmpeg = () => {
+    if (ffmpegBin !== undefined) return ffmpegBin;
+    const candidates = ['ffmpeg',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe') : null,
+      'C:\\ffmpeg\\bin\\ffmpeg.exe'].filter(Boolean);
+    ffmpegBin = null;
+    for (const c of candidates) {
+      try {
+        if (spawnSync(c, ['-version'], { timeout: 5000, windowsHide: true }).status === 0) { ffmpegBin = c; break; }
+      } catch (_) { /* tenta o próximo */ }
+    }
+    return ffmpegBin;
+  };
+  ipcMain.handle('audio:transcode', async (_e, filePath) => {
+    const ff = findFfmpeg();
+    if (!ff || !filePath) return null;
+    let src = filePath;
+    if (src.startsWith('file://')) { try { src = fileURLToPath(src); } catch (_) { return null; } }
+    if (!fs.existsSync(src)) return null;
+    const dir = path.join(app.getPath('userData'), 'cache', 'audio');
+    fs.mkdirSync(dir, { recursive: true });
+    const key = crypto.createHash('sha1').update(src + '|' + fs.statSync(src).mtimeMs).digest('hex');
+    const out = path.join(dir, key + '.ogg');
+    if (fs.existsSync(out)) return pathToFileURL(out).href;
+    const ok = await new Promise((resolve) => {
+      execFile(ff, ['-y', '-v', 'error', '-i', src, '-vn', '-c:a', 'libopus', '-b:a', '192k', out],
+        { timeout: 180000, windowsHide: true }, (err) => resolve(!err));
+    });
+    if (!ok) { try { fs.unlinkSync(out); } catch (_) { /* */ } return null; }
+    return pathToFileURL(out).href;
+  });
 
   // ── Pasta de imagens locais ───────────────────────────────────────────────
   ipcMain.handle('media:get-images-folder', () => Store.get('media_images_folder', null));

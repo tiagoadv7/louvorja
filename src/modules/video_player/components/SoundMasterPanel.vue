@@ -734,15 +734,27 @@ export default {
       });
 
       const fadeInDuration = isCrossfade && this.crossFadeMs > 0 ? this.crossFadeMs : this.fadeInMs;
-      audio.play().then(() => {
+      const startMain = () => {
         this.fade('main', audio, 0, this.effVol(pad.volume, true), fadeInDuration);
         clearInterval(this._ticker);
         this._ticker = setInterval(() => this.tick(), 200);
-      }).catch(() => {
+      };
+      const failMain = (err) => {
         if (this._mainAudio === audio) {
           this.activeMainId = null; this._mainAudio = null; this.isPlaying = false;
           if (this.externalPad === pad) this.externalPad = null;
         }
+        this.$alert?.error?.({ text: `Não foi possível tocar "${pad.name}": formato de áudio não suportado (${err?.name || "erro"})`, translate: false });
+      };
+      audio.play().then(startMain).catch(async (err) => {
+        // Formato que o player não lê: converte com o ffmpeg do computador e toca de novo
+        const converted = await this.$electron.audioTranscode(pad.filePath).catch(() => null);
+        if (converted && this._mainAudio === audio) {
+          audio.src = converted;
+          audio.play().then(startMain).catch((e2) => failMain(e2));
+          return;
+        }
+        failMain(err);
       });
     },
 

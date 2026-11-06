@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── Aplicação ────────────────────────────────────────────────────────────
   getVersion: () => ipcRenderer.invoke('app:get-version'),
+  getSessionId: () => ipcRenderer.invoke('app:session-id'),
   getOS: () => ipcRenderer.invoke('app:get-os'),
   getElectronVersion: () => process.versions.electron,
   getUserDataPath: () => ipcRenderer.invoke('app:get-user-data-path'),
@@ -96,6 +97,7 @@ contextBridge.exposeInMainWorld('electron', {
   mediaResolveFile: (filename) => ipcRenderer.invoke('media:resolve-file', filename),
   mediaDownloadFile: (params) => ipcRenderer.invoke('media:download-file', params),
   mediaResolveRemoteUrl: (url, filesBaseUrl) => ipcRenderer.invoke('media:resolve-remote-url', url, filesBaseUrl),
+  audioTranscode: (filePath) => ipcRenderer.invoke('audio:transcode', filePath),
   mediaGetImagesFolder: () => ipcRenderer.invoke('media:get-images-folder'),
   mediaSetImagesFolder: (folderPath) => ipcRenderer.invoke('media:set-images-folder', folderPath),
   mediaResolveImage: (filename) => ipcRenderer.invoke('media:resolve-image', filename),

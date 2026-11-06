@@ -119,6 +119,8 @@ export default {
   // ── Aplicação ──────────────────────────────────────────────────────────
   getVersion: () =>
     isElectron() ? window.electron.getVersion() : Promise.resolve(null),
+  getSessionId: () =>
+    isElectron() ? window.electron.getSessionId() : Promise.resolve(null),
   getOS: () =>
     isElectron() ? window.electron.getOS() : Promise.resolve(navigator.platform),
   getElectronVersion: () =>
@@ -165,6 +167,8 @@ export default {
     isElectron() ? window.electron.mediaResolveFile(filename) : Promise.resolve(null),
   mediaDownloadFile: (params) =>
     isElectron() ? window.electron.mediaDownloadFile(params) : Promise.resolve(null),
+  audioTranscode: (filePath) =>
+    isElectron() ? window.electron.audioTranscode(filePath) : Promise.resolve(null),
   mediaResolveRemoteUrl: (url, filesBaseUrl) =>
     isElectron() ? window.electron.mediaResolveRemoteUrl(url, filesBaseUrl) : Promise.resolve(null),
   mediaGetImagesFolder: () =>
