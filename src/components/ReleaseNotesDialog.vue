@@ -54,10 +54,8 @@
           v-if="release?.url"
           variant="text"
           size="small"
-          :href="release.url"
-          target="_blank"
-          rel="noopener noreferrer"
           prepend-icon="mdi-open-in-new"
+          @click="openGithub"
         >
           {{ $t('components.release_notes.see_github') }}
         </v-btn>
@@ -112,6 +110,11 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+
+    // Abre o link no navegador padrão (não numa nova janela do app)
+    openGithub() {
+      if (this.release?.url) this.$electron.openExternal(this.release.url);
     },
 
     // Só grava a versão como "vista" se o operador marcar a caixa — do
