@@ -229,8 +229,15 @@ export default {
     // roda mesmo se a janela da Liturgia não estiver aberta/montada no
     // momento (ex.: usuário fechou o app com a Liturgia minimizada) — atua
     // direto no $userdata, sem depender da instância do componente.
-    this._beforeUnloadHandler = () => this.clearLiturgiaSelections();
-    window.addEventListener('beforeunload', this._beforeUnloadHandler);
+    // Ao abrir, a lista vem limpa (sem seleção nem concluídos de uma sessão anterior),
+    // mesmo que o app tenha sido encerrado à força e o beforeunload não tenha rodado
+    // Limpa a Liturgia só quando o app é aberto de novo (outra execução), não ao minimizar
+    // nem ao recarregar a janela: a execução atual fica guardada e só muda ao reabrir.
+    this.$electron.getSessionId?.().then((sid) => {
+      if (!sid || this.$userdata.get('modules.liturgia.clearedSession') === sid) return;
+      this.clearLiturgiaSelections();
+      this.$userdata.set('modules.liturgia.clearedSession', sid);
+    }).catch(() => {});
   },
 
   beforeUnmount() {
@@ -239,7 +246,6 @@ export default {
     window.removeEventListener('open-release-notes', this._whatsNewHandler);
     window.removeEventListener('check-updates', this._checkUpdatesHandler);
     window.removeEventListener('open-update-dialog', this._openUpdateDialogHandler);
-    window.removeEventListener('beforeunload', this._beforeUnloadHandler);
   },
 
   methods: {
@@ -255,10 +261,10 @@ export default {
       const days = this.$userdata.get('modules.liturgia.days') || {};
       for (const key of Object.keys(days)) {
         const items = days[key]?.items;
-        if (!Array.isArray(items) || !items.some(i => i.selected)) continue;
+        if (!Array.isArray(items) || !items.some(i => i.selected || i.done)) continue;
         this.$userdata.set(
           `modules.liturgia.days.${key}.items`,
-          items.map(i => (i.selected ? { ...i, selected: false } : i)),
+          items.map(i => (i.selected || i.done ? { ...i, selected: false, done: false } : i)),
         );
       }
     },

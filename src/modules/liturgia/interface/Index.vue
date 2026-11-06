@@ -1373,10 +1373,10 @@ export default {
       const days = this.$userdata.get('modules.liturgia.days') || {};
       for (const key of Object.keys(days)) {
         const items = days[key]?.items;
-        if (!Array.isArray(items) || !items.some(i => i.selected)) continue;
+        if (!Array.isArray(items) || !items.some(i => i.selected || i.done)) continue;
         this.$userdata.set(
           `modules.liturgia.days.${key}.items`,
-          items.map(i => (i.selected ? { ...i, selected: false } : i)),
+          items.map(i => (i.selected || i.done ? { ...i, selected: false, done: false } : i)),
         );
       }
     },
