@@ -450,6 +450,20 @@ export default {
   emits: ['update:modelValue'],
 
   watch: {
+    // Trocou a bandeira (pt/es): a lista de coletâneas é de outro idioma —
+    // limpa e recarrega já (antes ela ficava com a do idioma anterior e só
+    // mudava depois de reabrir/tentar a rede).
+    catalogLocale(now, before) {
+      if (!before || now === before) return;
+      this.categories = [];
+      this.albumEstimates = {};
+      if (this.dialog) {
+        this.loadCategories().then(() => {
+          this.loadDownloadedAlbumInfos();
+          this.loadCollectionsCompleteStatus?.();
+        });
+      }
+    },
     modelValue(v) { this.dialog = v; },
     dialog(v) {
       this.$emit('update:modelValue', v);
@@ -513,6 +527,9 @@ export default {
   }),
 
   computed: {
+    catalogLocale() {
+      return this.$i18n?.locale?.value ?? this.$i18n?.locale ?? 'pt';
+    },
     navItems() {
       const t = (k) => this.$t(DC + k);
       return [
@@ -736,6 +753,13 @@ export default {
     // (mesmo o que ainda não foi baixado) para o usuário escolher o que baixar. Se não
     // houver conexão, cai para o índice salvo localmente em downloads anteriores.
     async fetchCatalog(file) {
+      // Catálogo em espanhol só existe no disco (a API não tem — mesma regra de
+      // $database.get / ipc.js#isSpanishContentFile). Antes tentava a rede
+      // primeiro e só usava o arquivo local depois da falha: era o atraso para
+      // as coletâneas (CDs oficiais do ano) aparecerem ao trocar para espanhol.
+      if (file.startsWith('es_') && this.$electron.isElectron()) {
+        return (await this.$electron.dbLocalGet(file).catch(() => null)) || null;
+      }
       const cache_name = `db:${file}`;
       const cached = $storage.get(cache_name, null, 'session');
       if (cached) return cached;

@@ -47,7 +47,7 @@
         <v-toolbar-title
           v-else
           class="text-h6"
-          :text="categories.find((c) => c.id_category == id_category).name"
+          :text="(categories || []).find((c) => c.id_category == id_category)?.name || ''"
         />
       </v-toolbar>
     </template>
@@ -215,6 +215,8 @@ import MusicMenuTable from "@/components/MusicMenuTable.vue";
 // real do catálogo) da categoria "Coletâneas Personalizadas" — ver
 // refreshCustomCollectionsCategory()/openAlbum() abaixo.
 const CUSTOM_COLLECTIONS_CATEGORY_ID = "custom_collections";
+// Capa da internet → arquivo local já resolvido (vale para a sessão toda, os dois idiomas)
+const COVER_CACHE = new Map();
 
 export default {
   name: manifest.id,
@@ -312,24 +314,27 @@ export default {
       this.id_category = null;
       this.categories = [];
       this.loading = true;
+      const token = (this._loadToken = (this._loadToken || 0) + 1);
 
-      this.categories = await this.$database.get(
+      const categories = await this.$database.get(
         `${this.currentLocale}_categories`,
       );
+      // Trocou de idioma de novo enquanto carregava: este resultado já não vale
+      if (token !== this._loadToken) return;
+      this.categories = categories;
 
       if (this.categories == null) {
         this.$modules.close(this.module_id);
         return;
       }
 
-      for (const category of this.categories) {
-        for (const album of (category.albums || [])) {
-          if (album.url_image) {
-            const local = await this.$electron.mediaResolveImage(album.url_image);
-            if (local) album.url_image = local;
-          }
-        }
-      }
+      // Capas: antes eram resolvidas UMA A UMA (uma chamada ao processo
+      // principal por álbum, em sequência) ANTES de mostrar a lista — com
+      // centenas de álbuns, trocar a bandeira (pt/es) deixava as coletâneas
+      // (inclusive a dos CDs oficiais do ano) demorando para aparecer. Agora a
+      // lista aparece na hora e as capas chegam em paralelo, em segundo plano
+      // (com cache: voltar a um idioma já aberto é instantâneo).
+      this._resolveCoversInBackground(token);
 
       if (this.categories.length > 0) {
         this.categories.sort((a, b) => a.order - b.order);
@@ -343,6 +348,32 @@ export default {
 
       this.lang = this.$i18n.locale.value;
       this.loading = false;
+    },
+    async _resolveCoversInBackground(token) {
+      const albums = [];
+      for (const category of this.categories || []) {
+        for (const album of category.albums || []) {
+          if (!album.url_image) continue;
+          const cached = COVER_CACHE.get(album.url_image);
+          if (cached) album.url_image = cached;
+          else albums.push(album);
+        }
+      }
+      let next = 0;
+      const worker = async () => {
+        while (next < albums.length && token === this._loadToken) {
+          const album = albums[next++];
+          const original = album.url_image;
+          try {
+            const local = await this.$electron.mediaResolveImage(original);
+            if (local) {
+              COVER_CACHE.set(original, local);
+              if (token === this._loadToken) album.url_image = local;
+            }
+          } catch { /* fica a capa da internet */ }
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
     },
     // "Coletâneas Personalizadas" (módulo custom_collections, sem álbuns/
     // categorias de verdade no catálogo) aparece aqui como mais uma
