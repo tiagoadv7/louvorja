@@ -11,6 +11,7 @@ const RECEIVE_CHANNELS = [
   'restore-output-state',
   'output-ready',
   'output-closing',
+  'output-closing-main',
   'audio-focus-request',
   'return-window-opened',
   'return-window-closed',

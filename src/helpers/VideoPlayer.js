@@ -110,16 +110,23 @@ function resolveMediaType(fp) {
 // do módulo, como o do link online (ver WebLink.js). Antes ficava dentro do
 // componente do módulo Vídeo, que só existe enquanto o módulo está aberto: com o
 // vídeo minimizado e a aba fechada, o rodapé e o miniplayer ficavam em 00:00.
-$electron.on("video-player:progress", ({ currentTime, duration }) => {
+$electron.on("video-player:progress", (data) => {
+  // Projeção começou a tocar de fato (troca de áudio sem buraco, ver VideoLocalPlayer.vue)
+  if (data?.outputPlaying) { $appdata.set("modules.video_player.output_playing", true); return; }
+  const { currentTime, duration } = data || {};
   $appdata.set("modules.video_player.config.currentTime", currentTime);
   $appdata.set("modules.video_player.config.duration", duration);
 });
-// Projeção fechada: o vídeo local sai junto (sem isso, o miniplayer ficava com o quadro preto)
-$electron.on("output-window-closed", () => {
-  $appdata.set("modules.video_player.config.isPlaying", false);
-  $appdata.set("modules.video_player.config.src", "");
-  $appdata.set("modules.video_player.config.currentTime", 0);
-});
+
+// Vídeo que o operador tirou da projeção pelo botão de tela: o play/pausa não
+// o coloca de volta sozinho (continua tocando no app e no miniplayer). Volta
+// pela própria tela (botão de projeção) ou ao escolher outro vídeo.
+let detachedSrc = "";
+// Projeção fechando (Fechar / trocar de monitor): o vídeo NÃO para — segue
+// tocando no app e no miniplayer (VideoLocalPlayer.vue assume o som já no
+// início do fade). "output_closing" vale para o YouTube também (WebLinkLocalPlayer.vue).
+$electron.on("output-closing-main", () => $appdata.set("output_closing", true));
+$electron.on("output-window-opened", () => $appdata.set("output_closing", false));
 
 export default {
   toFileUrl,
@@ -220,10 +227,18 @@ export default {
   // basta pra não abrir a principal. Pra mandar pros dois, o operador clica
   // o botão de Tela também (helpers/Popup.js#open), a qualquer momento.
   ensureOutputShowing() {
+    if (detachedSrc && detachedSrc === this.getConfig().src) return;
     const alreadyOpen = $appdata.get("popup") && $appdata.get("popup_module") === "video_player";
     if (alreadyOpen) return;
     if ($appdata.get("return_popup_module") === "video_player") return;
     $popup.open("video_player");
+  },
+  // Chamado pelo botão de tela ao tirar o vídeo da projeção / ao projetar de novo
+  detachFromOutput() {
+    detachedSrc = this.getConfig().src || "";
+  },
+  attachToOutput() {
+    detachedSrc = "";
   },
 
   isMinimized() {
@@ -269,7 +284,12 @@ export default {
   // 'config.currentTime' lá; aqui só validamos os limites antes de gravar.
   seekTo(time) {
     const config = this.getConfig();
-    this.setConfig({ currentTime: Math.max(0, Math.min(config.duration || 0, time)) });
+    // Duração ainda desconhecida (0): não limita por cima, senão todo seek virava 0
+    const max = config.duration > 0 ? config.duration : Infinity;
+    // seekStamp: marca que foi um seek do operador (e não só o tempo andando),
+    // para o player de áudio da janela principal não "corrigir" o próprio tempo
+    // a cada atualização — isso fazia o som pular, igual CD arranhado.
+    this.setConfig({ currentTime: Math.max(0, Math.min(max, time)), seekStamp: Date.now() });
   },
   seekBy(delta) {
     this.seekTo((this.getConfig().currentTime || 0) + delta);
@@ -321,6 +341,7 @@ export default {
   // módulo Vídeo — reprodução avulsa, ex. item da Liturgia.
   async open(fp, name, { addToPlaylist = true } = {}) {
     if (!fp) return;
+    detachedSrc = ""; // escolher um vídeo de novo volta a projetar normalmente
     const item = addToPlaylist ? this.addToPlaylist(fp, name) : this._buildTransientItem(fp, name);
     // Sem isso, "modules.video_player.show" nunca vira true e o Popup.vue da
     // tela de saída nunca considera o módulo ativo (fica sem renderizar nada).

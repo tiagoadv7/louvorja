@@ -28,6 +28,7 @@
       :style="{ transitionDuration: videoFadeMs + 'ms' }"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"
+      @playing="onPlaying"
       @ended="onEnded"
     />
   </div>
@@ -80,6 +81,11 @@ export default {
     config() {
       return this.$appdata.get('modules.video_player.config', {}) || {};
     },
+    // Falso quando o operador tira o vídeo da projeção (botão de tela): o
+    // vídeo segue tocando na janela principal (components/VideoLocalPlayer.vue)
+    projecting() {
+      return this.$appdata.get('popup_module') === 'video_player';
+    },
     // Minimizar o painel do operador (Index.vue) nunca encerra a projeção —
     // só "Fechar" (que chama stop() antes, ver Index.vue#close), o botão
     // "Fechar" da tela de saída (Screen.vue), ou os controles do próprio
@@ -103,11 +109,16 @@ export default {
   },
 
   watch: {
+    projecting(on) {
+      if (!on) this._leaveProjection();
+    },
     'config.isPlaying'(playing) {
+      if (this._left) return;
       if (playing) this._play();
       else this._pauseWithFade();
     },
     'config.stopToken'() {
+      if (this._left) return;
       if (this.config.mediaType === 'image') { this._closeImageWithFade(true); return; }
       if (this.config.mediaType === 'pdf') { this._closePdfWithFade(true); return; }
       this._stopWithFade();
@@ -125,6 +136,9 @@ export default {
       if (this.config.talkover) this._applyTalkover(true, level);
     },
     'config.src'(src) {
+      if (this._left) return;
+      this._hasPlayed = false;
+      this._metaLoaded = false;
       if (this.config.mediaType === 'image') {
         if (src) this._fadeImageIn();
         return;
@@ -165,6 +179,7 @@ export default {
     'config.currentTime'(t) {
       // Seek vindo do controle remoto (Index.vue) — só aplica se a diferença for
       // grande o bastante para não entrar em loop com o próprio timeupdate.
+      if (this._left) return;
       const el = this.$refs.video;
       if (el && Math.abs(el.currentTime - t) > 0.75) el.currentTime = t;
     },
@@ -176,28 +191,68 @@ export default {
       if (!el) return;
       this.$appdata.set('modules.video_player.config.duration', el.duration || 0);
       el.volume = (this.config.volume ?? 100) / 100;
+      // Voltando para a projeção: continua do ponto em que o áudio da janela
+      // principal estava (vídeo novo chega com currentTime 0)
+      const resumeAt = this.config.currentTime || 0;
+      if (resumeAt > 0.5 && resumeAt < (el.duration || Infinity)) el.currentTime = resumeAt;
+      this._metaLoaded = true;
       if (this.config.isPlaying) this._play();
       this._lastProgressSent = Date.now();
       this.$electron.sendVideoProgress({ currentTime: el.currentTime || 0, duration: el.duration || 0 });
     },
     onTimeUpdate() {
       const el = this.$refs.video;
-      if (!el) return;
+      // Antes do loadedmetadata o <video> ainda está em 0 (recarregando): gravar
+      // esse 0 apagava o ponto em que o áudio da janela principal estava, e a
+      // volta para a projeção recomeçava o vídeo do início.
+      if (!el || this._left || !this._metaLoaded) return;
       this.$appdata.set('modules.video_player.config.currentTime', el.currentTime || 0);
       // Escritas feitas por esta janela (is_popup=true) nunca voltam pra
       // janela principal (ver AppData.js) — sem isso, o painel/barra do
       // rodapé nunca sabiam o tempo real de reprodução e ficavam parados em
-      // 0:00. Canal dedicado, throttle de 1s (timeupdate dispara bem mais
-      // vezes por segundo — não precisa desse detalhe pra atualizar uma
-      // barra de progresso).
+      // 0:00. Canal dedicado, a cada 0,25 s: o áudio mudo da janela principal
+      // (VideoLocalPlayer.vue) se alinha por esse tempo, e com 1 s ele ficava
+      // até ~0,7 s adiantado — ao tirar da projeção, o som "pulava".
       const now = Date.now();
-      if (!this._lastProgressSent || now - this._lastProgressSent >= 1000) {
+      if (!this._lastProgressSent || now - this._lastProgressSent >= 250) {
         this._lastProgressSent = now;
         this.$electron.sendVideoProgress({
           currentTime: el.currentTime || 0,
           duration: el.duration || 0,
         });
       }
+    },
+    // 1º quadro tocando de fato: alinha com o tempo atual (o áudio da janela
+    // principal seguiu enquanto este carregava) e avisa a principal, que só
+    // então abaixa o som dela — troca cruzada, sem buraco nem repetição.
+    onPlaying() {
+      const el = this.$refs.video;
+      if (!el || this._hasPlayed || this._left) return;
+      this._hasPlayed = true;
+      const target = this.config.currentTime || 0;
+      if (target > 0.5 && Math.abs(target - el.currentTime) > 0.5) el.currentTime = target + 0.15;
+      this.$electron.sendVideoProgress({ outputPlaying: true });
+    },
+    // Vídeo tirado da projeção (botão de tela): esmaece o áudio rápido e pausa,
+    // SEM limpar o estado — a imagem sai pelo crossfade da janela de saída
+    // (views/Popup.vue) e o som continua na janela principal.
+    _leaveProjection() {
+      this._left = true;
+      const el = this.$refs.video;
+      if (!el || el.paused) return;
+      clearInterval(this._fadeInterval);
+      const startVol = el.volume;
+      const steps = 10;
+      let n = 0;
+      this._fadeInterval = setInterval(() => {
+        n++;
+        el.volume = Math.max(0, startVol * (1 - n / steps));
+        if (n >= steps) {
+          clearInterval(this._fadeInterval);
+          this._fadeInterval = null;
+          el.pause();
+        }
+      }, 40);
     },
     onEnded() {
       if (this.config.loop) return;

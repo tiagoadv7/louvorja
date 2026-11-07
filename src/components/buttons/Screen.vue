@@ -73,16 +73,16 @@ export default {
     // era desmontado, em vez de esmaecer junto com a imagem. Outros módulos
     // (Bíblia, Relógio, Sorteio...) não têm áudio próprio — não precisam
     // disso.
-    _stopModuleAudioSmoothly() {
-      if (this.module === "video_player") this.$videoPlayer.stop();
-      else if (this.module === "web_link") this.$webLink.stop();
-    },
+    // Vídeo local e link do YouTube NÃO param ao sair da projeção: seguem
+    // tocando na janela principal (VideoLocalPlayer.vue / WebLinkLocalPlayer.vue)
+    // e no miniplayer, e a projeção esmaece sozinha (Popup.vue / WebLinkFrame.vue).
     popup() {
       if (this.is_selected) {
-        this._stopModuleAudioSmoothly();
+        if (this.module === "video_player") this.$videoPlayer.detachFromOutput();
         this.$popup.close();
         return;
       }
+      if (this.module === "video_player") this.$videoPlayer.attachToOutput();
       // Já tem outra coisa sendo exibida na projeção e o módulo pra onde
       // estamos indo é auxiliar (Bíblia/Relógio/Cronômetro/Sorteio) — confirma
       // antes de substituir, em vez de trocar na hora sem aviso.

@@ -165,6 +165,12 @@ function sleep(ms) {
 async function fadeOutAndClose(win) {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('output-closing');
+  // Avisa também a janela principal JÁ no início do fade: o vídeo/YouTube que
+  // estava na projeção continua tocando no app (miniplayer), assumindo o som
+  // enquanto a projeção esmaece, em vez de só depois que ela some.
+  if (win === outputWindow && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('output-closing-main');
+  }
   await sleep(FADE_DURATION_MS);
   if (!win.isDestroyed()) win.destroy();
 }
