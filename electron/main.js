@@ -238,6 +238,32 @@ function tryGC() {
   try { if (global.gc) global.gc(); } catch { /* */ }
 }
 
+// Registro de falhas em <userData>/logs/falhas.log — para descobrir por que uma
+// janela ficou vazia (processo caiu, GPU caiu, travou...). Guarda ~200 KB.
+function logCrash(msg) {
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'falhas.log');
+    try { if (fs.statSync(file).size > 200 * 1024) fs.renameSync(file, file + '.old'); } catch (_) { /* novo */ }
+    const mem = process.getSystemMemoryInfo?.() || {};
+    fs.appendFileSync(file, `${new Date().toISOString()} v${app.getVersion()} livre=${Math.round((mem.free || 0) / 1024)}MB ${msg}${'\n'}`);
+  } catch (_) { /* sem registro */ }
+}
+
+// Processo de renderização de uma janela secundária morreu (falta de memória
+// depois de horas aberto, falha de GPU/iframe): sem isto a janela ficava em
+// branco — projeção, retorno, PiP ou utilitário "perdiam tudo" até reabrir.
+// Recarrega a mesma tela; ao subir ela avisa que está pronta e recebe o estado.
+function reloadOnCrash(win, url, label) {
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[Main] Renderer da janela ${label} caiu:`, details.reason, details.exitCode);
+    logCrash(`janela ${label}: renderer caiu (${details.reason}, código ${details.exitCode})`);
+    if (details.reason === 'clean-exit' || win.isDestroyed()) return;
+    setTimeout(() => { if (!win.isDestroyed()) win.loadURL(url); }, 300);
+  });
+}
+
 function getAppUrl(hash = '') {
   if (isDev) return `${DEV_URL}/${hash}`;
   return `file://${path.join(__dirname, '../dist/index.html')}${hash}`;
@@ -388,12 +414,15 @@ function createMainWindow() {
   // até o operador fechar o app. Recarrega a página principal no lugar.
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
     console.error('[Main] Renderer caiu:', details.reason, details.exitCode);
+    logCrash(`janela principal: renderer caiu (${details.reason}, código ${details.exitCode})`);
     if (details.reason === 'clean-exit' || !mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.loadURL(getAppUrl());
   });
   mainWindow.webContents.on('unresponsive', () => {
     console.warn('[Main] Janela principal não responde');
+    logCrash('janela principal: não responde');
   });
+  mainWindow.webContents.on('responsive', () => logCrash('janela principal: voltou a responder'));
 
   mainWindow.once('ready-to-show', () => {
     // setOpacity(0) ANTES do maximize: o maximize() chama show() internamente,
@@ -464,6 +493,7 @@ function createUtilityWindow(moduleId) {
   });
 
   win.loadURL(getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`));
+  reloadOnCrash(win, getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`), `utilitário ${moduleId}`);
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => utilityWindows.delete(moduleId));
   utilityWindows.set(moduleId, win);
@@ -690,6 +720,7 @@ function createOutputWindow(moduleId, displayId) {
 
   const hash = moduleId ? `#/popup?module=${moduleId}` : '#/popup';
   outputWindow.loadURL(getAppUrl(hash));
+  reloadOnCrash(outputWindow, getAppUrl(hash), 'de projeção');
 
   outputWindow.once('ready-to-show', () => {
     // Reforça bounds (+ fullscreen quando externo) antes de exibir — mesmo
@@ -835,6 +866,7 @@ function createReturnWindow(displayId) {
   });
 
   returnWindow.loadURL(getAppUrl('#/return-screen'));
+  reloadOnCrash(returnWindow, getAppUrl('#/return-screen'), 'de retorno');
 
   returnWindow.once('ready-to-show', () => {
     // Reforça bounds + fullscreen antes de exibir — em alguns casos no Windows
@@ -988,6 +1020,7 @@ function createPipWindow() {
   pipWindow.setAlwaysOnTop(true, 'floating');
 
   pipWindow.loadURL(getAppUrl('#/video-pip'));
+  reloadOnCrash(pipWindow, getAppUrl('#/video-pip'), 'PiP');
 
   pipWindow.once('ready-to-show', () => {
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.show();
@@ -1387,6 +1420,20 @@ function registerIpcHandlers() {
 }
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
+// GPU (ou outro processo auxiliar) caiu: o Chromium sobe outro, mas as janelas
+// podem continuar sem desenhar nada até algo mudar na tela — a janela principal
+// "some tudo". Força todas a se redesenharem logo depois.
+app.on('child-process-gone', (_e, details) => {
+  if (details.reason === 'clean-exit') return;
+  logCrash(`processo ${details.type}${details.name ? ' (' + details.name + ')' : ''} caiu: ${details.reason}, código ${details.exitCode}`);
+  if (details.type !== 'GPU') return;
+  setTimeout(() => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { if (!w.isDestroyed()) w.webContents.invalidate(); } catch (_) { /* */ }
+    }
+  }, 800);
+});
+
 app.whenReady().then(() => {
   Store.init();
 
@@ -1394,6 +1441,18 @@ app.whenReady().then(() => {
   session.defaultSession.clearStorageData({
     storages: ['appcache', 'serviceworkers', 'cachestorage'],
   });
+
+  // YouTube: no app instalado as páginas vêm de file://, e o embed do YouTube
+  // recusa tocar sem um Referer (erro 153 — "configuração do player"). Em dev
+  // (http://localhost) o navegador já mandava um, por isso só quebrava no build.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube.com/*', 'https://www.youtube-nocookie.com/*', 'https://*.youtube.com/*'] },
+    (details, callback) => {
+      const h = details.requestHeaders;
+      if (!h.Referer && !h.referer) h.Referer = 'https://louvorja.com.br/';
+      callback({ requestHeaders: h });
+    }
+  );
 
   createLoadingWindow();
   registerDisplayWatcher();
