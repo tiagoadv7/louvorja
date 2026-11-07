@@ -1256,6 +1256,12 @@ function registerIpcHandlers() {
   // target identifica QUEM pediu o resync ('output' | 'return' | 'pip') —
   // repassado pra SystemBar.vue poder marcar cada state-update do resync
   // com esse mesmo target, ver comentário em 'state-update' acima.
+  ipcMain.on('app:log-error', (event, msg) => {
+    let where = 'janela';
+    try { where = (event.sender.getURL().split('#')[1] || '/').split('?')[0] || 'principal'; } catch (_) { /* */ }
+    logCrash(`erro na interface [${where}] ${String(msg).replace(/\s+/g, ' ').slice(0, 1500)}`);
+  });
+
   ipcMain.on('output:ready', (_, target) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('output-ready', target);

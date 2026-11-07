@@ -22,6 +22,26 @@ window.electron?.setRemoteFilesUrl?.(import.meta.env.VITE_URL_FILES);
 
 const app = createApp(App);
 
+// Erros da interface também vão para logs/falhas.log (electron/main.js#logCrash):
+// ajuda a descobrir por que uma janela ficou sem nada na tela. Repetidos em
+// sequência são gravados uma vez só.
+{
+  let last = "", lastAt = 0;
+  const report = (kind, err) => {
+    const msg = `${kind}: ${err?.stack || err?.message || err}`.slice(0, 1500);
+    const now = Date.now();
+    if (msg === last && now - lastAt < 60000) return;
+    last = msg; lastAt = now;
+    try { window.electron?.logError?.(msg); } catch { /* */ }
+  };
+  app.config.errorHandler = (err, _vm, info) => {
+    console.error(err);
+    report(`Vue (${info})`, err);
+  };
+  window.addEventListener("error", (e) => report("Erro", e.error || e.message));
+  window.addEventListener("unhandledrejection", (e) => report("Promessa rejeitada", e.reason));
+}
+
 //Modules
 import ModuleManager from "@/helpers/ModuleManager";
 

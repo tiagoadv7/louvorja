@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 // Canais que o renderer pode ouvir (main → renderer)
 const RECEIVE_CHANNELS = [
@@ -220,6 +220,12 @@ contextBridge.exposeInMainWorld('electron', {
   // Foco de áudio — bidirecional entre janela principal e janela de saída
   sendAudioFocusRequest: (data) => ipcRenderer.send('audio-focus-request', data),
   notifyOutputReady: (target) => ipcRenderer.send('output:ready', target),
+  // Erro da interface → logs/falhas.log (ver electron/main.js#logCrash)
+  logError: (msg) => ipcRenderer.send('app:log-error', String(msg).slice(0, 1500)),
+  // Libera o cache de memória do Blink (imagens decodificadas que não estão mais
+  // na tela). Sem isso a janela principal acumulava as imagens de fundo de cada
+  // música tocada (~10 MB por faixa) até cair depois de horas de uso.
+  clearMemoryCache: () => { try { webFrame.clearCache(); } catch (_) { /* */ } },
   openUtilityWindow: (moduleId) => ipcRenderer.invoke('utility:open-window', moduleId),
   appLoaded: () => ipcRenderer.send('app:loaded'),
 

@@ -29,6 +29,17 @@ function ownAudio(el) {
   ownedAudio.add(el);
   return el;
 }
+// Descarta um <audio> de verdade: "src = ''" não libera o decodificador/buffer
+// de mídia do Chromium (aponta para a própria página) — a cada troca de música
+// sobrava memória presa na janela principal (~6 MB por faixa), até ela cair
+// depois de horas tocando. removeAttribute + load() solta tudo na hora.
+function releaseAudio(el) {
+  if (!el) return;
+  try { el.pause(); } catch { /* */ }
+  try { el.removeAttribute("src"); el.load(); } catch { /* */ }
+  try { el.remove(); } catch { /* */ }
+  ownedAudio.delete(el);
+}
 
 const Media = {
   async open(params) {
@@ -481,6 +492,17 @@ const Media = {
     }
 
     $appdata.set("modules.media.config.mode", mode);
+    this._scheduleMemoryRelief();
+  },
+
+  // Depois de cada troca de música (passado o crossfade), solta da memória as
+  // imagens da música anterior que não estão mais na tela (ver
+  // electron/preload.js#clearMemoryCache). A tela atual não é afetada.
+  _scheduleMemoryRelief() {
+    clearTimeout(this._reliefTimer);
+    this._reliefTimer = setTimeout(() => {
+      try { window.electron?.clearMemoryCache?.(); } catch { /* */ }
+    }, 4000);
   },
 
   async switchMode(newMode, skipChoice = false) {
@@ -642,7 +664,7 @@ const Media = {
 
     xfade.addEventListener("canplay", () => {
       if (this._fadeKey !== xfadeKey) {
-        xfade.pause(); xfade.src = ""; xfade.remove();
+        releaseAudio(xfade);
         return;
       }
 
@@ -684,7 +706,9 @@ const Media = {
           // audio.load() causava: timeupdate com currentTime=0 → slide de título,
           // e play() antes do seek completar → engasgo/gargalo.
           audio.pause();
-          audio.src = "";
+          // Solta o decodificador do elemento que sai (ver releaseAudio)
+          audio.removeAttribute("src");
+          try { audio.load(); } catch { /* */ }
           audio.removeAttribute("id");
 
           xfade.id = "__audio";
@@ -897,9 +921,7 @@ const Media = {
 
     xfade.addEventListener("canplay", () => {
       if (this._fadeKey !== xfadeKey) {
-        xfade.pause();
-        xfade.src = "";
-        xfade.remove();
+        releaseAudio(xfade);
         this._crossfading = false;
         $appdata.set("modules.media.config.is_fading", false);
         return;
@@ -928,10 +950,8 @@ const Media = {
         oldAudio.volume = Math.max(0, outStart - outD * outN);
         if (outN >= steps) {
           clearInterval(this._fades.xfade_out);
-          oldAudio.pause();
-          oldAudio.src = "";
           oldAudio.removeAttribute("id");
-          oldAudio.remove();
+          releaseAudio(oldAudio);
         }
       }, INTERVAL);
 
@@ -948,10 +968,8 @@ const Media = {
           // O fade de saída pode não ter chegado ao fim (timers fora de
           // passo): sem encerrar aqui, a música antiga ficava na página com o
           // mesmo id "__audio", tocando baixinho e fora do controle do player.
-          oldAudio.pause();
-          oldAudio.src = "";
           oldAudio.removeAttribute("id");
-          oldAudio.remove();
+          releaseAudio(oldAudio);
 
           xfade.id = "__audio";
           xfade.setAttribute("preload", "auto");
@@ -1001,9 +1019,7 @@ const Media = {
       ghost.volume = Math.max(0, startVol - d * n);
       if (n >= STEPS) {
         clearInterval(t);
-        ghost.pause();
-        ghost.src = "";
-        ghost.remove();
+        releaseAudio(ghost);
       }
     }, 40);
   },
@@ -1024,13 +1040,8 @@ const Media = {
       if (el === keep) continue;
       if (el.isConnected && el.id === "__audio_fadeout") continue;
       if (keepXfade && el.isConnected && el.id === "__audio_xfade") continue;
-      try {
-        el.pause();
-        if (el.getAttribute("src")) el.removeAttribute("src");
-        if (el.id === "__audio") el.removeAttribute("id");
-        el.remove();
-      } catch { /* */ }
-      ownedAudio.delete(el);
+      try { if (el.id === "__audio") el.removeAttribute("id"); } catch { /* */ }
+      releaseAudio(el);
     }
   },
 
@@ -1041,9 +1052,9 @@ const Media = {
     $appdata.set("modules.media.config.is_fading", false);
 
     const stray = document.getElementById("__audio_xfade");
-    if (stray) { stray.pause(); stray.src = ""; stray.remove(); }
+    if (stray) releaseAudio(stray);
     const ghost = document.getElementById("__audio_fadeout");
-    if (ghost) { ghost.pause(); ghost.src = ""; ghost.remove(); }
+    if (ghost) releaseAudio(ghost);
 
     if (!keepMain) {
       const main = document.getElementById("__audio");
