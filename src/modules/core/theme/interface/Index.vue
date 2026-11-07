@@ -159,6 +159,7 @@ onMounted(async () => {
 
   for (const key in proxy.$vuetify.theme.themes) {
     const item = proxy.$vuetify.theme.themes[key];
+    if (key === "lja-glass") continue; // tema interno das janelas, não é escolha do usuário
     if (item.dark) themes.value.dark[key] = item;
     else themes.value.light[key] = item;
   }

@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialogModel" max-width="720" scrollable>
-    <v-card class="lja-glass" theme="dark">
+    <v-card class="lja-glass" theme="lja-glass">
       <v-card-title class="d-flex align-center ga-2 flex-wrap">
         <v-icon color="primary">mdi-monitor-dashboard</v-icon>
         <span class="text-primary">{{ $t('components.monitor_arrangement.title') }}</span>

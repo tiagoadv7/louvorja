@@ -52,7 +52,7 @@
        Cabeçalho e rodapé ficam FORA da área que rola (.upd-scroll-body),
        sempre visíveis. -->
   <v-dialog v-model="dialog" max-width="460" persistent>
-    <v-card rounded="lg" elevation="12" class="upd-card lja-glass" theme="dark">
+    <v-card rounded="lg" elevation="12" class="upd-card lja-glass" theme="lja-glass">
 
       <!-- Cabeçalho -->
       <div class="upd-header">

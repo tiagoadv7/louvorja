@@ -10,7 +10,7 @@
     :height="w_height"
     :theme="dark ? 'dark' : ''"
   >
-    <v-card :color="color ? color : ''" :class="{ 'lja-glass': !color }" :theme="color ? undefined : 'dark'">
+    <v-card :color="color ? color : ''" :class="{ 'lja-glass': !color }" :theme="color ? undefined : 'lja-glass'">
       <slot name="toolbar">
         <div
           class="d-flex flex-no-wrap align-stretch flex-row justify-space-between"

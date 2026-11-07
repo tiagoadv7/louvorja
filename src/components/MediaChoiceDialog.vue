@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="show" max-width="440" content-class="mcd-dialog">
-    <v-card class="mcd-card lja-glass" theme="dark">
+    <v-card class="mcd-card lja-glass" theme="lja-glass">
       <div class="mcd-header">
         <v-icon size="18" class="mcd-header-icon">mdi-cloud-download-outline</v-icon>
         <span>{{ $t('modules.media.alerts.choose_play_title') }}</span>

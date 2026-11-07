@@ -3,7 +3,7 @@
        rodar (já aplicado na hora) e o nome do distrito e da igreja. Aparece na
        primeira abertura; depois, pelo menu da bandeira (evento "open-welcome"). -->
   <v-dialog v-model="dialog" max-width="560" persistent content-class="wl-dialog">
-    <v-card class="lja-glass wl-card" theme="dark" rounded="xl" elevation="16">
+    <v-card class="lja-glass wl-card" theme="lja-glass" rounded="xl" elevation="16">
       <div class="wl-glow" />
 
       <div class="wl-head">

@@ -113,10 +113,9 @@ body {
    Mesmas cores do load inicial (public/loading.html): degradê azul-escuro
    #0d1929 → #142338 → #0b1520, com o brilho azul (#0097D7) no alto à
    esquerda e o dourado (#F8C800) embaixo à direita. Os cartões com esta
-   classe usam theme="dark" (igual ao Centro de Downloads, sempre escuro),
-   então o texto fica claro em qualquer tema do app. */
-.v-theme--dark .lja-glass,
-.lja-glass.v-theme--dark {
+   classe usam o tema interno "lja-glass" (src/plugins/vuetify.js): escuro
+   como o Centro de Downloads, com ícones/realces em azul claro (#4FB6EC). */
+.lja-glass {
   --v-theme-surface: 19, 33, 58;
   background:
     radial-gradient(circle at 12% 0%, rgba(0, 151, 215, 0.28), transparent 55%),
@@ -126,13 +125,10 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 /* Partes internas transparentes: o degradê aparece por inteiro, sem faixas cinza */
-.v-theme--dark .lja-glass .v-list,
-.v-theme--dark .lja-glass .v-toolbar,
-.v-theme--dark .lja-glass .v-tabs,
-.v-theme--dark .lja-glass .v-card-text,
-.v-theme--dark .lja-glass .v-card-actions,
-.lja-glass.v-theme--dark .v-list,
-.lja-glass.v-theme--dark .v-toolbar,
-.lja-glass.v-theme--dark .v-tabs {
+.lja-glass .v-list,
+.lja-glass .v-toolbar,
+.lja-glass .v-tabs,
+.lja-glass .v-card-text,
+.lja-glass .v-card-actions {
   background: transparent !important;
 }

@@ -9,6 +9,26 @@ export default createVuetify({
   theme: {
     defaultTheme: "darkblue",
     themes: {
+      // Tema interno das janelas/diálogos com o visual do Centro de Downloads
+      // (classe .lja-glass em main.css) — não aparece no seletor de temas.
+      // Antes essas janelas usavam o tema "dark", cujo primary é cinza
+      // (#616161): todos os ícones azuis ficavam cinza. Aqui o primary é um
+      // azul claro da mesma família do azul do layout (#0097D7 do load,
+      // #009FE3 do Centro de Downloads), legível no fundo escuro; o
+      // secundário é o dourado do logo.
+      "lja-glass": {
+        dark: true,
+        internal: true,
+        colors: {
+          primary: "#4FB6EC",
+          secondary: "#F8C800",
+          info: "#4FB6EC",
+          surface: "#13213A",
+          background: "#0B1420",
+          "on-surface": "#EEF4FF",
+          "on-background": "#EEF4FF",
+        },
+      },
       light: {
         dark: false,
         colors: {
