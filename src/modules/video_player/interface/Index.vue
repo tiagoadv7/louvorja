@@ -308,91 +308,11 @@
         </button>
       </div>
 
-      <!-- ── Subaba "Catálogo" ────────────────────────────────────────────── -->
-      <div v-show="onlineSubTab === 'catalog'" class="vp-catalog">
-        <div v-if="!isOnline" class="vp-catalog-msg">
-          <v-icon size="22" style="opacity:0.4">mdi-wifi-off</v-icon>
-          Catálogo indisponível sem conexão com a internet
-        </div>
-        <template v-else>
-          <div class="vp-catalog-search-row">
-            <v-icon size="16" style="opacity:0.5">mdi-magnify</v-icon>
-            <input v-model="catalogSearch" class="vp-catalog-search-input" placeholder="Buscar vídeo no catálogo..." />
-            <button v-if="catalogSearch" class="vp-catalog-search-clear" @click="catalogSearch = ''">
-              <v-icon size="14">mdi-close</v-icon>
-            </button>
-          </div>
-
-          <v-progress-linear v-if="catalogLoading" indeterminate height="2" />
-          <div v-if="catalogError" class="vp-catalog-msg vp-catalog-msg--error">{{ catalogError }}</div>
-
-          <div class="vp-catalog-body">
-            <!-- Resultados de busca (sobrepõe a navegação por canal/playlist) -->
-            <template v-if="catalogSearching">
-              <div class="vp-catalog-section-title">Resultados</div>
-              <div v-if="!catalogSearchResults.length && !catalogLoading" class="vp-catalog-msg">Nenhum vídeo encontrado</div>
-              <div class="vp-catalog-grid">
-                <OnlineVideoCard
-                  v-for="video in catalogSearchResults" :key="video.video_id"
-                  :entity="video" variant="video"
-                  :active="onlineConfig.videoId === video.video_id"
-                  :subtitle="catalogPlaylistTitle(video.playlist_id)"
-                  @select="projectCatalogVideo(video)"
-                />
-              </div>
-            </template>
-
-            <template v-else>
-              <div v-if="catalogLevel > 1" class="vp-catalog-back" @click="catalogGoBack">
-                <v-icon size="16">mdi-arrow-left</v-icon>
-                <span>{{ catalogBackTitle }}</span>
-              </div>
-
-              <template v-if="catalogLevel === 1">
-                <div class="vp-catalog-section-title">Canais</div>
-                <div v-if="!catalogChannels.length && !catalogLoading" class="vp-catalog-msg">Nenhum canal disponível</div>
-                <div class="vp-catalog-grid">
-                  <OnlineVideoCard
-                    v-for="ch in catalogChannels" :key="ch.channel_id"
-                    :entity="ch" variant="channel" play-all
-                    :subtitle="ch.custom_url"
-                    @select="catalogSelectChannel(ch)"
-                    @play-all="catalogPlayChannel(ch.channel_id)"
-                  />
-                </div>
-              </template>
-
-              <template v-else-if="catalogLevel === 2">
-                <div class="vp-catalog-section-title">Playlists</div>
-                <div v-if="!catalogPlaylists.length" class="vp-catalog-msg">Nenhuma playlist neste canal</div>
-                <div class="vp-catalog-grid">
-                  <OnlineVideoCard
-                    v-for="pl in catalogPlaylists" :key="pl.playlist_id"
-                    :entity="pl" variant="playlist" play-all
-                    :first-video-id="catalogFirstVideoIdOf(pl.playlist_id) || ''"
-                    :subtitle="`${catalogVideoCountOf(pl.playlist_id)} vídeo(s)`"
-                    @select="catalogSelectPlaylist(pl)"
-                    @play-all="catalogPlayPlaylist(pl.playlist_id)"
-                  />
-                </div>
-              </template>
-
-              <template v-else-if="catalogLevel === 3">
-                <div class="vp-catalog-section-title">Vídeos</div>
-                <div v-if="!catalogVideos.length" class="vp-catalog-msg">Nenhum vídeo nesta playlist</div>
-                <div class="vp-catalog-grid">
-                  <OnlineVideoCard
-                    v-for="video in catalogVideos" :key="video.video_id"
-                    :entity="video" variant="video"
-                    :active="onlineConfig.videoId === video.video_id"
-                    @select="projectCatalogVideo(video)"
-                  />
-                </div>
-              </template>
-            </template>
-          </div>
-        </template>
-      </div>
+      <!-- ── Subaba "Catálogo": coletâneas online (réplica do flute, ver OnlineCollection.vue) ── -->
+      <OnlineCollection
+        v-show="onlineSubTab === 'catalog'"
+        :visible="!!module.show && activeTab === 'online' && onlineSubTab === 'catalog'"
+      />
 
       <!-- ── Subaba "Meus Links" (fluxo original: colar um link avulso) ────── -->
       <div v-show="onlineSubTab === 'custom'" class="vp-custom-links">
@@ -598,10 +518,9 @@ import LScreenBtn from '@/components/buttons/Screen.vue';
 import LReturnScreenBtn from '@/components/buttons/ReturnScreen.vue';
 import LCustomizationTools from '@/components/CustomizationTools.vue';
 import SoundMasterPanel from '../components/SoundMasterPanel.vue';
-import OnlineVideoCard from '../components/OnlineVideoCard.vue';
+import OnlineCollection from '../components/OnlineCollection.vue';
 import $audioBus from '@/helpers/AudioBus';
 import $pdfRenderer from '@/helpers/PdfRenderer';
-import $database from '@/helpers/Database';
 
 // Posição/tamanho padrão da aba "Overlay de Imagem" — mesmos valores de
 // image_overlay/interface/Index.vue (agora um stub; a UI de verdade vive
@@ -614,7 +533,7 @@ const OVERLAY_STORAGE_DIR = "image_overlay";
 
 export default {
   name: 'VideoPlayerModule',
-  components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel, OnlineVideoCard },
+  components: { Window, LScreenBtn, LReturnScreenBtn, LCustomizationTools, SoundMasterPanel, OnlineCollection },
 
   data: () => ({
     pipOpen: false,
@@ -645,18 +564,6 @@ export default {
     isOnline: navigator.onLine,
     _onlineHandler: null,
     _offlineHandler: null,
-
-    // ── Catálogo de vídeos online (canais/playlists/vídeos) ─────────────────
-    // Mesmo catálogo consumido pelo módulo online_videos do violin-app — ver
-    // helpers/Database.js#resolveUrl (rota REST /collections/online).
-    catalogData: null, // { channels: [], playlists: [], videos: [] }
-    catalogLoading: false,
-    catalogError: '',
-    catalogLoadedLocale: '',
-    catalogLevel: 1, // 1=canais, 2=playlists, 3=vídeos
-    catalogSelectedChannel: null,
-    catalogSelectedPlaylist: null,
-    catalogSearch: '',
 
     // ── Aba "Overlay de Imagem" (módulo independente image_overlay) ────────
     OVERLAY_HANDLES,
@@ -712,58 +619,6 @@ export default {
     onlinePlaylist: {
       get() { return this.$webLink.getPlaylist(); },
       set(v) { this.$webLink.setPlaylist(v); },
-    },
-
-    // ── Catálogo de vídeos online ────────────────────────────────────────────
-    catalogLocale() {
-      return this.$i18n?.locale?.value || this.$i18n?.locale || 'pt';
-    },
-    catalogKey() { return `${this.catalogLocale}_collections_online`; },
-    catalogChannels() {
-      const list = [...(this.catalogData?.channels || [])];
-      return list.sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
-    },
-    catalogPlaylists() {
-      if (!this.catalogSelectedChannel) return [];
-      return (this.catalogData?.playlists || [])
-        .filter((p) => p.channel_id === this.catalogSelectedChannel.channel_id)
-        .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
-    },
-    catalogVideos() {
-      if (!this.catalogSelectedPlaylist) return [];
-      return this._catalogDedupe(
-        (this.catalogData?.videos || [])
-          .filter((v) => v.playlist_id === this.catalogSelectedPlaylist.playlist_id)
-          .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
-      );
-    },
-    catalogSearching() { return this.catalogSearch.trim().length > 0; },
-    catalogSearchResults() {
-      const q = this.catalogSearch.trim().toLowerCase();
-      if (!q) return [];
-      let pool = this.catalogData?.videos || [];
-      // Escopo pelo nível de navegação atual — igual à busca do violin-app:
-      // nível 3 → só a playlist aberta; nível 2 → playlists do canal aberto;
-      // nível 1 → catálogo inteiro.
-      if (this.catalogLevel === 3 && this.catalogSelectedPlaylist) {
-        pool = pool.filter((v) => v.playlist_id === this.catalogSelectedPlaylist.playlist_id);
-      } else if (this.catalogLevel === 2 && this.catalogSelectedChannel) {
-        const plIds = new Set(
-          (this.catalogData?.playlists || [])
-            .filter((p) => p.channel_id === this.catalogSelectedChannel.channel_id)
-            .map((p) => p.playlist_id)
-        );
-        pool = pool.filter((v) => plIds.has(v.playlist_id));
-      }
-      return this._catalogDedupe(
-        pool.filter((v) => v.title.toLowerCase().includes(q))
-          .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
-      );
-    },
-    catalogBackTitle() {
-      if (this.catalogLevel === 2) return this.catalogSelectedChannel?.title || '';
-      if (this.catalogLevel === 3) return this.catalogSelectedPlaylist?.title || '';
-      return '';
     },
 
     // "Mídia" (video_player) e "Overlay de Imagem" (image_overlay) continuam
@@ -827,7 +682,6 @@ export default {
       if (val) {
         this.$modules.open('image_overlay');
         this.$modules.open('soundmaster');
-        this._maybeLoadCatalog();
         this._maybeLoadCaptureSources();
       } else {
         // A prévia local (não a captura mandada pro Retorno, que é
@@ -836,21 +690,13 @@ export default {
         this._stopCapturePreview();
       }
     },
-    // Catálogo só é buscado (alguns MB) quando o operador realmente vê a
-    // subaba "Catálogo" com a janela aberta — Window usa "eager" (conteúdo
-    // sempre montado, mesmo com a janela fechada — ver Window.vue), então
-    // sem essa checagem explícita o catálogo baixaria sozinho já no boot.
     activeTab(val) {
-      if (val === 'online') this._maybeLoadCatalog();
       if (val === 'capture') {
         this._maybeLoadCaptureSources();
         if (this.captureSourceId) this._startCapturePreview(this.captureSourceId);
       } else {
         this._stopCapturePreview();
       }
-    },
-    onlineSubTab(val) {
-      if (val === 'catalog') this._maybeLoadCatalog();
     },
     // Prévia de PDF no painel do operador — mesmo canvas, escala menor que a
     // da projeção (ver Popup.vue). Também precisa reagir a troca de página,
@@ -860,13 +706,6 @@ export default {
     },
     'config.pdfPage'() {
       if (this.config.mediaType === 'pdf' && this.config.src) this._renderPreviewPdf();
-    },
-    // Catálogo vem por idioma (pt_collections_online, es_collections_online)
-    // — troca de idioma do app com o catálogo já carregado precisa buscar de
-    // novo com a chave nova (se ainda nem carregou, a troca de subaba/aba
-    // acima já cuida disso).
-    catalogLocale() {
-      if (this.catalogLoadedLocale) this._loadCatalog();
     },
   },
 
@@ -1054,87 +893,6 @@ export default {
       });
       if (!name) return;
       this.$webLink.renamePlaylistItem(item.id, name);
-    },
-
-    // ── Catálogo de vídeos online ─────────────────────────────────────────
-    // Só busca quando a subaba "Catálogo" está de fato visível com a janela
-    // aberta (ver watchers de module.show/activeTab/onlineSubTab acima) —
-    // essencial porque este componente é "eager" (sempre montado, mesmo com
-    // a janela "Mídia" fechada), então sem essa checagem o catálogo (alguns
-    // MB) baixaria sozinho logo no boot do app.
-    _maybeLoadCatalog() {
-      if (this.module.show && this.activeTab === 'online' && this.onlineSubTab === 'catalog') {
-        this._loadCatalog();
-      }
-    },
-    async _loadCatalog() {
-      if (this.catalogLoading) return;
-      this.catalogLoading = true;
-      this.catalogError = '';
-      try {
-        const data = await $database.get(this.catalogKey);
-        if (data) {
-          this.catalogData = data;
-          this.catalogLoadedLocale = this.catalogLocale;
-        } else {
-          this.catalogError = 'Não foi possível carregar o catálogo de vídeos.';
-        }
-      } finally {
-        this.catalogLoading = false;
-      }
-    },
-    // A API retorna uma entrada por (playlist, vídeo) — o mesmo vídeo pode
-    // repetir (ex.: reaproveitado em mais de uma playlist do canal).
-    _catalogDedupe(list) {
-      const seen = new Set();
-      return list.filter((v) => (seen.has(v.video_id) ? false : (seen.add(v.video_id), true)));
-    },
-    catalogPlaylistTitle(playlistId) {
-      return (this.catalogData?.playlists || []).find((p) => p.playlist_id === playlistId)?.title || '';
-    },
-    catalogFirstVideoIdOf(playlistId) {
-      const list = (this.catalogData?.videos || [])
-        .filter((v) => v.playlist_id === playlistId)
-        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-      return list[0]?.video_id || null;
-    },
-    catalogVideoCountOf(playlistId) {
-      return (this.catalogData?.videos || []).filter((v) => v.playlist_id === playlistId).length;
-    },
-    catalogSelectChannel(ch) {
-      this.catalogSelectedChannel = ch;
-      this.catalogLevel = 2;
-    },
-    catalogSelectPlaylist(pl) {
-      this.catalogSelectedPlaylist = pl;
-      this.catalogLevel = 3;
-    },
-    catalogGoBack() {
-      if (this.catalogLevel === 3) this.catalogLevel = 2;
-      else if (this.catalogLevel === 2) this.catalogLevel = 1;
-    },
-    // "Reproduzir todos" (canal/playlist) — só inicia o primeiro vídeo, igual
-    // ao violin-app: dali pra frente o operador segue clicando os próximos
-    // pela lista (não há avanço automático entre vídeos, mesma limitação já
-    // aceita hoje pela fila de "Meus Links").
-    catalogPlayChannel(channelId) {
-      const pls = (this.catalogData?.playlists || []).filter((p) => p.channel_id === channelId);
-      for (const pl of pls) {
-        const first = (this.catalogData?.videos || []).find((v) => v.playlist_id === pl.playlist_id);
-        if (first) { this.projectCatalogVideo(first); return; }
-      }
-    },
-    catalogPlayPlaylist(playlistId) {
-      const list = (this.catalogData?.videos || [])
-        .filter((v) => v.playlist_id === playlistId)
-        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-      if (list[0]) this.projectCatalogVideo(list[0]);
-    },
-    // addToPlaylist:false — vídeos do catálogo tocam na hora sem entrar na
-    // "Fila de Links" (essa fila é só pra links que o próprio operador colou,
-    // ver "Meus Links" acima); o catálogo já é a lista de onde escolher.
-    projectCatalogVideo(video) {
-      this.$webLink.open(`https://www.youtube.com/watch?v=${video.video_id}`, video.title, { addToPlaylist: false });
     },
 
     // Prévia de PDF no painel do operador — mesma renderização da projeção
@@ -1359,7 +1117,7 @@ export default {
 
     // ── Aba "Capturar Tela" ──────────────────────────────────────────────
     // Só busca a lista (com thumbnails) quando o operador de fato vê a aba
-    // com a janela aberta — mesmo motivo do _maybeLoadCatalog acima (este
+    // com a janela aberta — o componente é "eager" (este
     // componente é "eager", sempre montado mesmo com a janela fechada).
     _maybeLoadCaptureSources() {
       if (this.module.show && this.activeTab === 'capture') this.loadCaptureSources();
@@ -1422,11 +1180,7 @@ export default {
     window.addEventListener('online',  this._onlineHandler);
     window.addEventListener('offline', this._offlineHandler);
 
-    // Cobre o caso da janela "Mídia" já estar aberta na aba/subaba certas no
-    // exato momento em que este componente monta (eager) — ex.: estado
-    // restaurado de uma sessão anterior. As trocas normais (abrir a janela,
-    // trocar de aba/subaba) já são pegas pelos watchers correspondentes.
-    this._maybeLoadCatalog();
+    // Janela "Mídia" já aberta na aba Capturar no momento em que monta (eager)
     this._maybeLoadCaptureSources();
     if (this.activeTab === 'capture' && this.captureSourceId) {
       this._startCapturePreview(this.captureSourceId);
@@ -1806,83 +1560,6 @@ export default {
   color: rgb(var(--v-theme-on-primary));
   border-color: transparent;
 }
-
-/* ── Subaba "Catálogo" ── */
-.vp-catalog {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.vp-catalog-search-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  flex-shrink: 0;
-}
-.vp-catalog-search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 13px;
-  color: rgb(var(--v-theme-on-surface));
-}
-.vp-catalog-search-clear {
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: rgba(var(--v-theme-on-surface), 0.5);
-  display: flex;
-}
-.vp-catalog-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.vp-catalog-section-title {
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0.55;
-  flex-shrink: 0;
-}
-.vp-catalog-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-.vp-catalog-back:hover { opacity: 1; }
-.vp-catalog-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
-}
-.vp-catalog-msg {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-align: center;
-  font-size: 12.5px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  padding: 20px 0;
-}
-.vp-catalog-msg--error { color: #e53935; opacity: 1; }
 
 /* ── Subaba "Meus Links" ── */
 .vp-custom-links {
