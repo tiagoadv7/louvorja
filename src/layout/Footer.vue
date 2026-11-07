@@ -1,5 +1,9 @@
 <template>
   <v-footer id="footer-bar" class="pa-0" color="primary">
+    <!-- YouTube fora da projeção continua tocando aqui (ver WebLinkLocalPlayer.vue) -->
+    <WebLinkLocalPlayer />
+    <!-- Vídeo local fora da projeção continua com som aqui (ver VideoLocalPlayer.vue) -->
+    <VideoLocalPlayer />
     <l-player v-if="$media.isMinimized()" location="footer" />
     <l-player v-else-if="videoActive" location="footer" source="video" />
     <l-player v-else-if="soundmasterActive" location="footer" source="soundmaster" />
@@ -7,6 +11,11 @@
     <l-player v-else-if="slideEditorActive" location="footer" source="slide_editor" />
     <v-row v-else class="ma-0 pa-0 align-center">
       <span class="text-caption pa-1">Versão {{ version }}</span>
+      <!-- Igreja e distrito informados nas boas-vindas (WelcomeDialog.vue) -->
+      <div v-if="churchLabel" class="d-flex align-center ms-2" style="gap: 3px; min-width: 0">
+        <v-icon size="12">mdi-church-outline</v-icon>
+        <span class="text-caption text-truncate">{{ churchLabel }}</span>
+      </div>
       <v-spacer />
       <div class="d-flex align-center me-3" style="gap: 3px">
         <v-icon size="12">mdi-desktop-classic</v-icon>
@@ -24,11 +33,15 @@
 import packageJson from "../../package.json";
 
 import LPlayer from "@/components/Player.vue";
+import WebLinkLocalPlayer from "@/components/WebLinkLocalPlayer.vue";
+import VideoLocalPlayer from "@/components/VideoLocalPlayer.vue";
 
 export default {
   name: "FooterLayout",
   components: {
     LPlayer,
+    WebLinkLocalPlayer,
+    VideoLocalPlayer,
   },
   data: () => ({
     db_version: 0,
@@ -39,6 +52,10 @@ export default {
   computed: {
     version() {
       return packageJson.version + "." + this.db_version;
+    },
+    churchLabel() {
+      const c = this.$userdata.get("church") || {};
+      return [c.name, c.district].filter(Boolean).join(" · ");
     },
     // Módulo Vídeo minimizado com algo carregado → mostra na barra do rodapé
     // (mesmo lugar/estilo da barra do player de mídia), com o controle de

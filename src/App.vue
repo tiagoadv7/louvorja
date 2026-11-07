@@ -18,6 +18,9 @@
   <!-- Novidades da versão instalada (uma vez por versão, após atualizar) -->
   <ReleaseNotesDialog ref="releaseNotes" />
 
+  <!-- Boas-vindas: idioma + distrito/igreja (1ª abertura, ou pelo menu da bandeira) -->
+  <WelcomeDialog ref="welcome" />
+
   <!-- Aviso de novo conteúdo publicado -->
   <DbUpdateDialog ref="dbUpdater" @sync-requested="onDbUpdateSyncRequested" />
 
@@ -52,10 +55,11 @@ import FileCheckDialog from "@/components/FileCheckDialog.vue";
 import UpdateDialog    from "@/components/UpdateDialog.vue";
 import DbUpdateDialog  from "@/components/DbUpdateDialog.vue";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
+import WelcomeDialog from "@/components/WelcomeDialog.vue";
 
 export default {
   name: "App",
-  components: { AppLoading, FileCheckDialog, UpdateDialog, DbUpdateDialog, ReleaseNotesDialog },
+  components: { AppLoading, FileCheckDialog, UpdateDialog, DbUpdateDialog, ReleaseNotesDialog, WelcomeDialog },
 
   data: () => ({
     autoImportSnack:     false,
@@ -145,10 +149,22 @@ export default {
     // (cantado + playback, ver scripts/import-hinario-es.mjs). Igual ao português: a
     // varredura silenciosa só abre o diálogo se houver algo faltando, e o download
     // começa só depois da confirmação.
-    const isSpanish = (this.$i18n?.locale?.value || this.$i18n?.locale) === 'es';
-    this.$electron.storeGet('startup_file_check_done', false)
-      .then(done => { if (!done || isSpanish) this.scheduleStartupFileCheck(); })
-      .catch(() => this.scheduleStartupFileCheck());
+    // Boas-vindas primeiro (idioma + distrito/igreja); os avisos abaixo esperam
+    // ela fechar — inclusive porque o idioma escolhido ali decide a verificação.
+    const welcomeDone = (async () => {
+      await this.$nextTick();
+      await new Promise((r) => setTimeout(r, 600));
+      try { await this.$refs.welcome?.open(); } catch (_) { /* segue sem */ }
+    })();
+    this._openWelcomeHandler = () => this.$refs.welcome?.open(true);
+    window.addEventListener('open-welcome', this._openWelcomeHandler);
+
+    welcomeDone.then(() => {
+      const isSpanish = (this.$i18n?.locale?.value || this.$i18n?.locale) === 'es';
+      this.$electron.storeGet('startup_file_check_done', false)
+        .then(done => { if (!done || isSpanish) this.scheduleStartupFileCheck(); })
+        .catch(() => this.scheduleStartupFileCheck());
+    });
 
     // 4. Verifica atualização do banco SQLite via API (após 6s para não competir com o
     //    auto-import). Diferente de antes, não baixa mais silenciosamente — só abre o
@@ -161,7 +177,7 @@ export default {
     // ReleaseNotesDialog.vue). O check do updater (UpdateDialog, item 6 do
     // menu) só roda 15s depois do boot em build empacotada (ver electron/
     // updater.js#init), então não compete com este modal.
-    this.$electron.getVersion().then(async (version) => {
+    welcomeDone.then(() => this.$electron.getVersion()).then(async (version) => {
       if (!version) return;
       const skipped = await this.$electron.storeGet('skip_release_notes_version', null).catch(() => null);
       if (skipped === version) return;
@@ -244,6 +260,7 @@ export default {
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
     window.removeEventListener('open-release-notes', this._whatsNewHandler);
+    window.removeEventListener('open-welcome', this._openWelcomeHandler);
     window.removeEventListener('check-updates', this._checkUpdatesHandler);
     window.removeEventListener('open-update-dialog', this._openUpdateDialogHandler);
   },

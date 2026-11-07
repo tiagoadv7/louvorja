@@ -25,6 +25,11 @@
           {{ language.name }}
         </v-list-item-title>
       </v-list-item>
+      <v-divider class="my-1" />
+      <!-- Reabre as boas-vindas (idioma + distrito/igreja), ver WelcomeDialog.vue -->
+      <v-list-item prepend-icon="mdi-church-outline" @click="openWelcome">
+        <v-list-item-title>{{ current_language === 'es' ? 'Iglesia y distrito' : 'Igreja e distrito' }}</v-list-item-title>
+      </v-list-item>
     </v-list>
   </v-menu>
 </template>
@@ -46,6 +51,9 @@ export default {
     },
   },
   methods: {
+    openWelcome() {
+      window.dispatchEvent(new CustomEvent("open-welcome"));
+    },
     changeLanguage(language) {
       this.$i18n.locale = language;
       this.$userdata.set("language", language);
