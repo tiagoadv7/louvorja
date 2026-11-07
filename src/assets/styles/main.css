@@ -129,6 +129,18 @@ body {
 .lja-glass .v-toolbar,
 .lja-glass .v-tabs,
 .lja-glass .v-card-text,
-.lja-glass .v-card-actions {
+.lja-glass .v-card-actions,
+.lja-glass .l-toolbar-card {
   background: transparent !important;
+}
+
+/* Selo redondo dos ícones de cabeçalho (Sincronizar arquivos, Novidades...):
+   azul claro sobre um círculo azul translúcido, combinando com o degradê */
+.lja-badge {
+  background: linear-gradient(145deg, rgba(79, 182, 236, 0.3), rgba(0, 151, 215, 0.14)) !important;
+  border: 1px solid rgba(79, 182, 236, 0.45);
+  color: #7fcdf4 !important;
+}
+.lja-badge .v-icon {
+  color: #7fcdf4 !important;
 }

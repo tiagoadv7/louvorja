@@ -254,6 +254,12 @@ export default {
       }
 
       if (value) {
+        // O fade de saída termina com fill "forwards" (opacidade 0 presa no
+        // elemento). Com eager o Vuetify reaproveita o MESMO elemento ao
+        // reabrir: sem cancelar aqui, a janela voltava invisível/vazia —
+        // o "conteúdo some" depois de minimizar/fechar e abrir de novo.
+        const el = this.$el?.closest?.(".v-overlay__content");
+        try { el?.getAnimations?.().forEach((a) => a.cancel()); } catch { /* */ }
         this.internalVisible = true;
         return;
       }
@@ -278,8 +284,11 @@ export default {
       );
       this._fadeAnimation.finished
         .then(() => {
+          const anim = this._fadeAnimation;
           this.internalVisible = false;
           this._fadeAnimation = null;
+          // Já fechado: solta a opacidade 0 para não sobrar na próxima abertura
+          setTimeout(() => { try { if (!this.internalVisible) anim?.cancel(); } catch { /* */ } }, 400);
         })
         .catch(() => {}); // cancelada (reabriu no meio do fade) — nada a fazer
     },

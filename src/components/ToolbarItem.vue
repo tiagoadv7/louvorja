@@ -1,6 +1,6 @@
 <template>
   <v-slide-group-item>
-    <v-card flat>
+    <v-card flat class="l-toolbar-card">
       <v-card-text class="pa-2 px-1">
         <slot />
       </v-card-text>

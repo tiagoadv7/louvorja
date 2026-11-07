@@ -4,7 +4,7 @@
 
       <!-- Cabeçalho -->
       <div class="rn-header">
-        <v-avatar size="44" color="primary" variant="tonal" class="flex-shrink-0">
+        <v-avatar size="44" class="flex-shrink-0 lja-badge">
           <v-icon size="22">mdi-bullhorn-outline</v-icon>
         </v-avatar>
         <div class="flex-grow-1 min-w-0">
