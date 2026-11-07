@@ -21,6 +21,15 @@ function withOpusFallback(url) {
   return url.replace(/\.mp3(\?|#|$)/i, ".opus$1");
 }
 
+// Todo <audio> criado pelo player (principal, crossfade, fade de saída) fica
+// registrado aqui, inclusive os que já saíram da página — assim nenhum pode
+// continuar tocando escondido, fora do controle do player (ver _sweepAudio).
+const ownedAudio = new Set();
+function ownAudio(el) {
+  ownedAudio.add(el);
+  return el;
+}
+
 const Media = {
   async open(params) {
     // typeof null === "object" — sem o check explícito, open(null) (ex.: retry
@@ -86,6 +95,15 @@ const Media = {
       return;
     }
 
+    // Cliques repetidos: cada abertura ganha um número; se outra mais nova
+    // começar enquanto esta ainda espera (banco, arquivo, download), esta
+    // desiste sem mexer no áudio. Antes, uma abertura "atrasada" terminava
+    // depois da troca de faixa e dava play() num <audio> que já tinha saído da
+    // página (o crossfade remove o elemento antigo) — o som tocava escondido,
+    // sem player na tela, até fechar o programa.
+    const openSeq = (this._openSeq = (this._openSeq || 0) + 1);
+    const stale = () => openSeq !== this._openSeq;
+
     const _newMode = params.mode || "no_audio";
     if (_newMode === "audio" || _newMode === "instrumental") {
       // Avisa outros donos de áudio (soundmaster, video_player) para pararem com fade
@@ -134,6 +152,7 @@ const Media = {
     $appdata.set("modules.media.loading", true);
 
     let data = await $database.get(`music_${id_music}`);
+    if (stale()) return;
     if (data == null) {
       this._crossfading = false;
       if (typeof this._autoCloseCallback === 'function') {
@@ -151,11 +170,13 @@ const Media = {
       return;
     }
     await this.resolveDataImages(data);
+    if (stale()) return;
 
     // Precarrega a imagem do slide capa no cache do browser (elimina tela preta inicial).
     // Se o arquivo estiver local o protocolo app-local:// o serve em ms; se não estiver,
     // busca da API em background — em ambos os casos a imagem já está pronta ao renderizar.
     await this.preloadImage(data.url_image);
+    if (stale()) return;
 
     // Precarrega imagens dos demais slides sem bloquear (evita flash ao navegar).
     {
@@ -242,6 +263,10 @@ const Media = {
       const streamUrl = localUrl
         ? null
         : await $electron.mediaResolveRemoteUrl(rawUrl, import.meta.env.VITE_URL_FILES);
+      if (stale()) return;
+      // O elemento capturado lá em cima pode ter sido trocado por um crossfade
+      // durante as esperas: usa sempre o "__audio" atual da página
+      if (audio && !audio.isConnected) audio = this.getElement();
       $appdata.set("modules.media.config.audio", localUrl || streamUrl || $path.file(rawUrl));
 
       // Arquivo ainda não baixado, app em Modo Offline e com internet disponível →
@@ -370,6 +395,7 @@ const Media = {
           // "error" por conta própria, sem ser uma falha de carregamento).
           this._pendingAudioUrl = audioUrl;
           this._opusFallbackAttempted = false;
+          this._sweepAudio(audio);
           audio.src = audioUrl;
           audio.load();
           this.play();
@@ -406,12 +432,20 @@ const Media = {
 
           request.responseType = "blob";
           request.onload = function () {
+            if (stale()) return;
             if (this.status == 200) {
               const blobUrl = URL.createObjectURL(this.response);
+              // Libera o arquivo da música anterior (ficava inteiro na memória
+              // até fechar o app). Espera o crossfade terminar antes.
+              const prevBlob = self._lastBlobUrl;
+              self._lastBlobUrl = blobUrl;
+              if (prevBlob) setTimeout(() => { try { URL.revokeObjectURL(prevBlob); } catch { /* */ } }, 5000);
               $appdata.set("modules.media.config.audio", url);
               if (_willCrossfade) {
                 self._crossfadeAudioTrack(blobUrl, $appdata.get("modules.media.config.volume") / 100);
               } else {
+                if (!audio.isConnected) audio = self.getElement();
+                self._sweepAudio(audio);
                 audio.src = blobUrl;
                 audio.load();
                 self.play();
@@ -426,6 +460,7 @@ const Media = {
             }
           };
           request.onerror = function () {
+            if (stale()) return;
             const fallbackUrl = !isFallback && withOpusFallback(url);
             if (fallbackUrl) {
               sendAudioRequest(fallbackUrl, true);
@@ -598,7 +633,7 @@ const Media = {
     const existing = document.getElementById("__audio_xfade");
     if (existing) { existing.pause(); existing.remove(); }
 
-    const xfade = document.createElement("audio");
+    const xfade = ownAudio(document.createElement("audio"));
     xfade.id = "__audio_xfade";
     xfade.preload = "auto";
     xfade.volume = 0;
@@ -660,6 +695,7 @@ const Media = {
           xfade.addEventListener("ended", this._onAudioEnded.bind(this));
 
           audio.remove();
+          this._sweepAudio(xfade);
           $appdata.set("modules.media.config.is_fading", false);
           // Garante que a faixa promovida respeite um pause() feito durante
           // a transição (mesmo motivo do guard no canplay, acima).
@@ -845,7 +881,7 @@ const Media = {
     const existing = document.getElementById("__audio_xfade");
     if (existing) { existing.pause(); existing.remove(); }
 
-    const xfade = document.createElement("audio");
+    const xfade = ownAudio(document.createElement("audio"));
     xfade.id = "__audio_xfade";
     xfade.preload = "auto";
     xfade.volume = 0;
@@ -909,6 +945,13 @@ const Media = {
         if (inN >= steps) {
           clearInterval(this._fades.xfade_in);
           clearInterval(this._fades.xfade_out);
+          // O fade de saída pode não ter chegado ao fim (timers fora de
+          // passo): sem encerrar aqui, a música antiga ficava na página com o
+          // mesmo id "__audio", tocando baixinho e fora do controle do player.
+          oldAudio.pause();
+          oldAudio.src = "";
+          oldAudio.removeAttribute("id");
+          oldAudio.remove();
 
           xfade.id = "__audio";
           xfade.setAttribute("preload", "auto");
@@ -917,6 +960,7 @@ const Media = {
           xfade.addEventListener("progress", this.timeUpdate.bind(this));
           xfade.addEventListener("ended", this._onAudioEnded.bind(this));
 
+          this._sweepAudio(xfade);
           this._crossfading = false;
           // Só libera is_paused se ninguém pausou durante a transição — do
           // contrário isso desfazia silenciosamente o pause() do usuário
@@ -939,7 +983,7 @@ const Media = {
     if (!audio || audio.paused) return;
     const existing = document.getElementById("__audio_fadeout");
     if (existing) { existing.pause(); existing.remove(); }
-    const ghost = document.createElement("audio");
+    const ghost = ownAudio(document.createElement("audio"));
     ghost.id = "__audio_fadeout";
     ghost.src = audio.src;
     ghost.currentTime = audio.currentTime;
@@ -973,6 +1017,23 @@ const Media = {
   // ter mandado parar/fechar. keepMain=true preserva o elemento principal
   // "__audio" tocando (usado ao reabrir a mesma música: só o lixo da transição
   // anterior é limpo, a faixa atual continua até o novo crossfade assumir).
+  // Para e remove todo <audio> do player que não seja "keep" (nem o fade de
+  // saída em andamento, nem — com keepXfade — a faixa entrando num crossfade).
+  _sweepAudio(keep, { keepXfade = false } = {}) {
+    for (const el of [...ownedAudio]) {
+      if (el === keep) continue;
+      if (el.isConnected && el.id === "__audio_fadeout") continue;
+      if (keepXfade && el.isConnected && el.id === "__audio_xfade") continue;
+      try {
+        el.pause();
+        if (el.getAttribute("src")) el.removeAttribute("src");
+        if (el.id === "__audio") el.removeAttribute("id");
+        el.remove();
+      } catch { /* */ }
+      ownedAudio.delete(el);
+    }
+  },
+
   _killCrossfade({ keepMain = false } = {}) {
     this._fadeKey = (this._fadeKey || 0) + 1;
     if (this._pauseInterval) { clearInterval(this._pauseInterval); this._pauseInterval = null; }
@@ -1004,6 +1065,7 @@ const Media = {
     const audio = this.getElement();
     this.pause(true, () => {
       audio.setAttribute("src", "");
+      this._sweepAudio(this.getElement(), { keepXfade: true });
       if (callback) callback();
     });
   },
@@ -1488,7 +1550,7 @@ const Media = {
     let el;
     let id = "__audio";
     if (!document.getElementById(id)) {
-      el = document.createElement("audio");
+      el = ownAudio(document.createElement("audio"));
       el.setAttribute("id", id);
       el.setAttribute("preload", "auto");
       document.body.appendChild(el);
