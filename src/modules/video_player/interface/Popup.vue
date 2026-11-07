@@ -23,11 +23,12 @@
       ref="video"
       :src="renderedSrc"
       :loop="config.loop"
+      muted
+      playsinline
       class="vp-video"
       :class="{ 'vp-video--fading': visualFading }"
       :style="{ transitionDuration: videoFadeMs + 'ms' }"
       @loadedmetadata="onLoadedMetadata"
-      @timeupdate="onTimeUpdate"
       @playing="onPlaying"
       @ended="onEnded"
     />
@@ -38,6 +39,7 @@
 import manifest from '../manifest.json';
 import $audioBus from '@/helpers/AudioBus';
 import $pdfRenderer from '@/helpers/PdfRenderer';
+import { expectedTime, followClock, startFollowing } from '@/helpers/VideoClock';
 
 // Mesmos números do player de referência (github.com/tiagoadv7/Player-Video):
 // fade-in em passos de 0.05 a cada 100ms, fade-out em passos de 0.05 a cada 50ms,
@@ -153,21 +155,9 @@ export default {
         if (src) this.$nextTick(() => this._fadePdfIn());
         return;
       }
-      const el = this.$refs.video;
-      // Troca de vídeo com áudio tocando (ex.: próximo item da playlist) —
-      // esmaece o volume do vídeo atual antes de soltar o elemento pro
-      // próximo, em vez de cortar o áudio na hora. Sem áudio tocando (pausado,
-      // mudo, ou primeiro vídeo carregando) não tem o que esmaecer — troca na
-      // hora, igual antes.
-      if (el && this.renderedSrc && !el.paused && el.volume > 0) {
-        this._fadeVolume(el.volume, 0, false, () => {
-          this.renderedSrc = src;
-          this.$nextTick(() => this.$refs.video?.load());
-        });
-      } else {
-        this.renderedSrc = src;
-        this.$nextTick(() => this.$refs.video?.load());
-      }
+      // Mudo (o som é da janela principal, que já trocou de vídeo): troca na hora
+      this.renderedSrc = src;
+      this.$nextTick(() => this.$refs.video?.load());
     },
     // Botão de próxima/anterior página (Index.vue) — só re-renderiza a
     // página nova no MESMO canvas, sem fade nenhum (troca de página dentro
@@ -176,12 +166,23 @@ export default {
     'config.pdfPage'() {
       if (this.config.mediaType === 'pdf' && this.config.src) this._renderPdfPage();
     },
-    'config.currentTime'(t) {
-      // Seek vindo do controle remoto (Index.vue) — só aplica se a diferença for
-      // grande o bastante para não entrar em loop com o próprio timeupdate.
-      if (this._left) return;
+    // Seek do operador: alinha na hora com o áudio da janela principal
+    'config.clock'(clock) {
+      if (this._left || !this._metaLoaded) return;
       const el = this.$refs.video;
-      if (el && Math.abs(el.currentTime - t) > 0.75) el.currentTime = t;
+      // Pausa no mesmo quadro em que o áudio parou (o fade de som é de lá)
+      if (el && clock && clock.src === this.config.src && !clock.playing && !this.config.isPlaying && !el.paused) {
+        clearInterval(this._fadeInterval);
+        this._fadeInterval = null;
+        this.$appdata.set('modules.video_player.config.isFading', false);
+        el.pause();
+        el.currentTime = clock.t;
+        return;
+      }
+      if (Date.now() - (this._lastSeekStamp || 0) < 600) this._follow();
+    },
+    'config.seekStamp'() {
+      this._lastSeekStamp = Date.now();
     },
   },
 
@@ -189,49 +190,22 @@ export default {
     onLoadedMetadata() {
       const el = this.$refs.video;
       if (!el) return;
-      this.$appdata.set('modules.video_player.config.duration', el.duration || 0);
-      el.volume = (this.config.volume ?? 100) / 100;
-      // Voltando para a projeção: continua do ponto em que o áudio da janela
-      // principal estava (vídeo novo chega com currentTime 0)
-      const resumeAt = this.config.currentTime || 0;
-      if (resumeAt > 0.5 && resumeAt < (el.duration || Infinity)) el.currentTime = resumeAt;
+      // Sempre mudo: o som é o da janela principal (components/VideoLocalPlayer.vue).
+      // Abre já no ponto em que esse áudio está (voltando para a projeção, etc.)
+      const resumeAt = expectedTime(this.config.clock, 0, this.config.src);
+      if (resumeAt > 0.3 && resumeAt < (el.duration || Infinity)) el.currentTime = resumeAt;
       this._metaLoaded = true;
       if (this.config.isPlaying) this._play();
-      this._lastProgressSent = Date.now();
-      this.$electron.sendVideoProgress({ currentTime: el.currentTime || 0, duration: el.duration || 0 });
     },
-    onTimeUpdate() {
-      const el = this.$refs.video;
-      // Antes do loadedmetadata o <video> ainda está em 0 (recarregando): gravar
-      // esse 0 apagava o ponto em que o áudio da janela principal estava, e a
-      // volta para a projeção recomeçava o vídeo do início.
-      if (!el || this._left || !this._metaLoaded) return;
-      this.$appdata.set('modules.video_player.config.currentTime', el.currentTime || 0);
-      // Escritas feitas por esta janela (is_popup=true) nunca voltam pra
-      // janela principal (ver AppData.js) — sem isso, o painel/barra do
-      // rodapé nunca sabiam o tempo real de reprodução e ficavam parados em
-      // 0:00. Canal dedicado, a cada 0,25 s: o áudio mudo da janela principal
-      // (VideoLocalPlayer.vue) se alinha por esse tempo, e com 1 s ele ficava
-      // até ~0,7 s adiantado — ao tirar da projeção, o som "pulava".
-      const now = Date.now();
-      if (!this._lastProgressSent || now - this._lastProgressSent >= 250) {
-        this._lastProgressSent = now;
-        this.$electron.sendVideoProgress({
-          currentTime: el.currentTime || 0,
-          duration: el.duration || 0,
-        });
-      }
-    },
-    // 1º quadro tocando de fato: alinha com o tempo atual (o áudio da janela
-    // principal seguiu enquanto este carregava) e avisa a principal, que só
-    // então abaixa o som dela — troca cruzada, sem buraco nem repetição.
+    // 1º quadro tocando: alinha com o áudio (ele seguiu enquanto este carregava)
     onPlaying() {
-      const el = this.$refs.video;
-      if (!el || this._hasPlayed || this._left) return;
+      if (this._hasPlayed || this._left) return;
       this._hasPlayed = true;
-      const target = this.config.currentTime || 0;
-      if (target > 0.5 && Math.abs(target - el.currentTime) > 0.5) el.currentTime = target + 0.15;
-      this.$electron.sendVideoProgress({ outputPlaying: true });
+      this._follow();
+    },
+    _follow() {
+      if (this._left || !this._metaLoaded) return;
+      followClock(this.$refs.video, this.config.clock, { loop: !!this.config.loop, src: this.config.src });
     },
     // Vídeo tirado da projeção (botão de tela): esmaece o áudio rápido e pausa,
     // SEM limpar o estado — a imagem sai pelo crossfade da janela de saída
@@ -254,10 +228,9 @@ export default {
         }
       }, 40);
     },
-    onEnded() {
-      if (this.config.loop) return;
-      this._stopWithFade();
-    },
+    // Fim do vídeo: quem encerra é o áudio da janela principal (mesmo tempo),
+    // que manda o stop para todas as telas — aqui só fica no último quadro.
+    onEnded() {},
 
     _play() {
       const el = this.$refs.video;
@@ -441,6 +414,8 @@ export default {
   },
 
   mounted() {
+    // Imagem acompanha o relógio do áudio (pequenas diferenças: velocidade, sem salto)
+    this._stopFollow = startFollowing(() => (this._left || !this._metaLoaded ? null : this.$refs.video), () => this.config.clock, () => ({ loop: !!this.config.loop, src: this.config.src }));
     if (this.config.mediaType === 'image' && this.config.src) this._fadeImageIn();
     if (this.config.mediaType === 'pdf' && this.config.src) this._fadePdfIn();
     // Primeira montagem: nada tocando ainda pra esmaecer — liga direto.
@@ -481,6 +456,7 @@ export default {
     document.addEventListener('keydown', this._escHandler);
   },
   unmounted() {
+    this._stopFollow?.();
     // Se um fade de fechamento estiver em andamento (closingHold), deixa ele
     // terminar sozinho — o componente pode desmontar antes (o <transition>
     // de src/views/Popup.vue não espera o CSS terminar), mas o elemento

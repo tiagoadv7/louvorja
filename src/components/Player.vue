@@ -367,6 +367,7 @@
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import LSlide from "@/components/Slide.vue";
 import { loadYoutubeApi } from "@/helpers/YoutubeApi";
+import { expectedTime, startFollowing } from "@/helpers/VideoClock";
 
 export default {
   name: "PlayerComponent",
@@ -744,8 +745,7 @@ export default {
         } catch { /* */ }
         return;
       }
-      const el = this.$refs.miniVideo;
-      if (el && Math.abs(el.currentTime - time) > 0.4) el.currentTime = time;
+      // Vídeo local: segue o relógio do áudio (ver startFollowing em mounted)
     },
   },
   methods: {
@@ -841,7 +841,8 @@ export default {
       const el = this.$refs.miniVideo;
       const m = this.mini_media;
       if (!el || !m) return;
-      el.currentTime = m.time;
+      const cfg = this.$videoPlayer.getConfig();
+      el.currentTime = expectedTime(cfg.clock, m.time, cfg.src);
       if (m.playing) el.play().catch(() => {});
     },
     toggleRepeat() {
@@ -963,12 +964,19 @@ export default {
   // deixando o PIP do vídeo sem o aviso de janela fechada)
   async mounted() {
     this.miniPipCorner = this.$userdata.get("modules.media.miniplayer_corner", "bottom-left");
+    // Quadro do vídeo local: mesma imagem e mesmo tempo do áudio (helpers/VideoClock.js)
+    this._stopMiniFollow = startFollowing(
+      () => (this.mini_media?.kind === "video" ? this.$refs.miniVideo : null),
+      () => this.$videoPlayer.getConfig().clock,
+      () => { const c = this.$videoPlayer.getConfig(); return { loop: !!c.loop, src: c.src }; },
+    );
     if (this.mini_media?.kind === "youtube") this.$nextTick(() => this.initMiniYt());
     if (this.source !== 'video' || !this.$electron.isElectron()) return;
     this.pipOpen = await this.$electron.pipIsOpen();
     this._pipClosedHandler = this.$electron.on('video-pip:closed', () => { this.pipOpen = false; });
   },
   beforeUnmount() {
+    this._stopMiniFollow?.();
     if (this._pipClosedHandler) this.$electron.off('video-pip:closed', this._pipClosedHandler);
     clearInterval(this._volumeFadeInterval);
     this.endMiniPipDrag();

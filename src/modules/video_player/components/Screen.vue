@@ -17,7 +17,8 @@
       ref="video"
       :src="renderedSrc"
       :loop="config.loop"
-      :muted="mainAlsoShowing"
+      muted
+      playsinline
       class="vps-media"
       :style="mediaStyle"
       @loadedmetadata="onLoadedMetadata"
@@ -26,11 +27,14 @@
 </template>
 
 <script>
+import { expectedTime, followClock, startFollowing } from '@/helpers/VideoClock';
+
 // Espelho simplificado do módulo Vídeo para o monitor de retorno — mesma
 // config compartilhada de @/helpers/VideoPlayer (ver interface/Popup.vue,
 // que é a janela de saída "de verdade"), sem nenhum dos efeitos colaterais
 // dessa janela (pedido de foco no AudioBus, envio de progresso por IPC, ESC
-// fechando a projeção) — aqui é só visualização. Áudio: ver mainAlsoShowing.
+// fechando a projeção) — aqui é só visualização, sempre muda (o som é o da
+// janela principal, components/VideoLocalPlayer.vue).
 export default {
   name: 'VideoPlayerScreen',
 
@@ -44,17 +48,6 @@ export default {
     },
     isActive() {
       return !!this.config.src;
-    },
-    // Mudo só quando a saída PRINCIPAL também está mostrando este vídeo
-    // (mesmo appdata, mesma reprodução) — nesse caso o som já sai por lá, e
-    // tocar aqui também duplicaria o áudio. Quando o operador manda o vídeo
-    // SÓ pro retorno (ver helpers/VideoPlayer.js#ensureOutputShowing — botão
-    // de "Retorno" marcado sem "Tela" também marcada), a principal nunca
-    // chega a abrir: este é o ÚNICO lugar tocando o vídeo, então precisa do
-    // próprio som — mudo sempre, nesse caso, tocava a projeção sem áudio em
-    // lugar nenhum.
-    mainAlsoShowing() {
-      return this.$appdata.get('popup_module') === 'video_player';
     },
     mediaStyle() {
       const rotation = this.config.rotation || 0;
@@ -86,18 +79,12 @@ export default {
       el.pause();
       el.currentTime = 0;
     },
-    // Volume nunca importava enquanto o elemento ficava sempre mudo — agora
-    // que ele pode tocar com som de verdade (ver mainAlsoShowing), precisa
-    // acompanhar o volume configurado no painel, igual à saída principal.
-    'config.volume'(v) {
-      const el = this.$refs.video;
-      if (el) el.volume = (v ?? 100) / 100;
+    // Seek do operador: alinha já no próximo tempo publicado
+    'config.seekStamp'() {
+      this._seekAt = Date.now();
     },
-    // Seek vindo do controle remoto (Index.vue) — mesma tolerância de
-    // interface/Popup.vue, pra não entrar em loop com o próprio timeupdate.
-    'config.currentTime'(t) {
-      const el = this.$refs.video;
-      if (el && Math.abs(el.currentTime - t) > 0.75) el.currentTime = t;
+    'config.clock'() {
+      if (Date.now() - (this._seekAt || 0) < 600) this.follow();
     },
   },
 
@@ -105,15 +92,25 @@ export default {
     onLoadedMetadata() {
       const el = this.$refs.video;
       if (!el) return;
-      el.volume = (this.config.volume ?? 100) / 100;
+      // Sempre mudo: o som é o da janela principal (components/VideoLocalPlayer.vue);
+      // a imagem segue o tempo desse áudio (helpers/VideoClock.js)
+      const t = expectedTime(this.config.clock, 0, this.config.src);
+      if (t > 0.3 && t < (el.duration || Infinity)) el.currentTime = t;
       if (this.config.isPlaying) el.play().catch(() => {});
+    },
+    follow() {
+      followClock(this.$refs.video, this.config.clock, { loop: !!this.config.loop, src: this.config.src });
     },
   },
 
   mounted() {
+    this._stopFollow = startFollowing(() => this.$refs.video, () => this.config.clock, () => ({ loop: !!this.config.loop, src: this.config.src }));
     // Monta já com o vídeo carregado se um estiver ativo (ex.: o operador
     // ativou o retorno depois de já ter selecionado um vídeo/imagem).
     if (this.config.mediaType !== 'image' && this.config.src) this.renderedSrc = this.config.src;
+  },
+  beforeUnmount() {
+    this._stopFollow?.();
   },
 };
 </script>

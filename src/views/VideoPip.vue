@@ -51,6 +51,8 @@
 </template>
 
 <script>
+import { expectedTime, followClock, startFollowing } from '@/helpers/VideoClock';
+
 const isElectron = () =>
   typeof window !== 'undefined' &&
   typeof window.electron !== 'undefined' &&
@@ -96,7 +98,11 @@ export default {
   methods: {
     onLoadedMetadata() {
       const el = this.$refs.video;
-      if (el && this.config.isPlaying) el.play().catch(() => {});
+      if (!el) return;
+      // Mesmo ponto do áudio da janela principal (helpers/VideoClock.js)
+      const t = expectedTime(this.config.clock, 0, this.config.src);
+      if (t > 0.3 && t < (el.duration || Infinity)) el.currentTime = t;
+      if (this.config.isPlaying) el.play().catch(() => {});
     },
     // Repassa o comando para a janela principal, que é a dona da config
     // compartilhada — assim o play/pause controla o mesmo vídeo/áudio real
@@ -139,8 +145,10 @@ export default {
 
   mounted() {
     if (isElectron()) this.initElectron();
+    this._stopFollow = startFollowing(() => this.$refs.video, () => this.config.clock, () => ({ loop: !!this.config.loop, src: this.config.src }));
   },
   beforeUnmount() {
+    this._stopFollow?.();
     if (isElectron()) {
       if (this.stateHandler) window.electron.off('state-update', this.stateHandler);
       if (this.batchHandler) window.electron.off('state-update-batch', this.batchHandler);
