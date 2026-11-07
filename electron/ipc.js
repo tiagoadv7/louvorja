@@ -979,11 +979,29 @@ function setupIpc(mainWindow) {
   // Busca recursiva por nome de arquivo em uma árvore de diretórios.
   // Usado para musicas que ficam em subpastas com nomes do SQLite
   // (ex: config/musicas/1992 - Brilha Jesus/) que podem diferir do nome do álbum no JSON.
+  // Listagem de pasta com cache curto: a verificação de arquivos procura
+  // milhares de nomes nas mesmas pastas em sequência — sem isto cada arquivo
+  // faltando relia a árvore inteira do disco (era o que deixava a verificação
+  // do catálogo em espanhol lenta). 1,5 s basta para uma varredura e não deixa
+  // um download recém-terminado "invisível" por muito tempo.
+  const _dirCache = new Map();
+  const readDirCached = (dir) => {
+    const now = Date.now();
+    const hit = _dirCache.get(dir);
+    if (hit && now - hit.at < 1500) return hit.entries;
+    let entries = null;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { entries = null; }
+    if (_dirCache.size > 5000) _dirCache.clear();
+    _dirCache.set(dir, { at: now, entries });
+    return entries;
+  };
+
   const findFileInTree = (dir, filename) => {
-    if (!filename || !dir || !fs.existsSync(dir)) return null;
+    if (!filename || !dir) return null;
     const lower = filename.toLowerCase();
     try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const entries = readDirCached(dir);
+      if (!entries) return null;
       // 1. Busca flat primeiro (mais rápido)
       for (const e of entries) {
         if (e.isFile() && e.name.toLowerCase() === lower) return path.join(dir, e.name);
@@ -1164,8 +1182,20 @@ function setupIpc(mainWindow) {
   // Capas e imagens → flat em config/capas/ e config/imagens/
   // Músicas → busca recursiva em config/musicas/ (subpastas com nomes do SQLite Delphi,
   //           ex: "1992 - Brilha Jesus/", "Hinário Adventista/", "Adoradores 2/")
-  async function syncLocalFileUrls(dbDir) {
+  // onlyAlbumFiles (opcional): só esses album_*.json — a verificação de arquivos
+  // passa os álbuns que acabou de varrer (ex.: só os 23 em espanhol), em vez de
+  // reprocessar o banco inteiro (milhares de JSON, ~10 s com o app parado).
+  // musicCache (opcional): Map id_music → JSON já lido pela verificação, para não ler de novo.
+  async function syncLocalFileUrls(dbDir, onlyAlbumFiles = null, musicCache = null) {
     if (!fs.existsSync(dbDir)) return;
+    // Mesmo endereço checado uma vez só por execução (os slides do hinário
+    // repetem as mesmas imagens de fundo em centenas de músicas)
+    const _memo = new Map();
+    const existsMemo = (url) => {
+      if (!url) return false;
+      if (!_memo.has(url)) _memo.set(url, fileUrlExists(url));
+      return _memo.get(url);
+    };
 
     const capasW  = getAutoCapasDir(true);             // writable flat (userData)
     const capasR  = getAutoCapasDir();                  // read-only flat (install)
@@ -1174,8 +1204,13 @@ function setupIpc(mainWindow) {
     const musicasW = getAutoMediaDir(null, true);       // writable musicas root
     const musicasR = getAutoMediaDir();                 // read-only musicas root (Delphi structure)
 
-    const albumFiles = fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
+    const albumFiles = Array.isArray(onlyAlbumFiles)
+      ? onlyAlbumFiles
+      : fs.readdirSync(dbDir).filter(f => f.startsWith('album_') && f.endsWith('.json'));
     for (const af of albumFiles) {
+      // Cede a vez entre um álbum e outro: o processo principal continua
+      // respondendo às janelas durante a atualização
+      await new Promise(resolve => setImmediate(resolve));
       const afPath = path.join(dbDir, af);
       let albumData;
       try { albumData = JSON.parse(fs.readFileSync(afPath, 'utf8')); } catch (_) { continue; }
@@ -1183,10 +1218,14 @@ function setupIpc(mainWindow) {
       let changed = false;
 
       // ── Capa do álbum: usa app-local:// para ser independente do caminho ──
-      if (!fileUrlExists(albumData.url_image)) {
+      // Só grava se o endereço mudar de fato: o arquivo faltando já estava como
+      // app-local:// e era regravado igual a cada verificação (centenas de JSON
+      // no catálogo em espanhol — boa parte da lentidão)
+      if (!existsMemo(albumData.url_image)) {
         const capaName = safeBasename(albumData.url_image);
-        if (capaName) {
-          albumData.url_image = `app-local://capas/${encodeURIComponent(capaName)}`;
+        const next = capaName ? `app-local://capas/${encodeURIComponent(capaName)}` : null;
+        if (next && next !== albumData.url_image) {
+          albumData.url_image = next;
           changed = true;
         }
       }
@@ -1194,15 +1233,17 @@ function setupIpc(mainWindow) {
       // ── Músicas ────────────────────────────────────────────────────────────
       for (const m of (albumData.musics || [])) {
         const mPath = path.join(dbDir, `music_${m.id_music}.json`);
-        if (!fs.existsSync(mPath)) continue;
-        let md;
-        try { md = JSON.parse(fs.readFileSync(mPath, 'utf8')); } catch (_) { continue; }
+        let md = musicCache?.get(String(m.id_music)) || null;
+        if (!md) {
+          if (!fs.existsSync(mPath)) continue;
+          try { md = JSON.parse(fs.readFileSync(mPath, 'utf8')); } catch (_) { continue; }
+        }
         let mChanged = false;
 
         // url_music — se encontrado localmente: file:// (acesso direto, mais rápido).
         // Se não encontrado: app-local://musicas/folder/nome — protocolo serve ou busca na API.
         const resolveAudioUrl = (rawUrl) => {
-          if (!rawUrl || rawUrl.startsWith('app-local://musicas/') || fileUrlExists(rawUrl)) return rawUrl; // já é local
+          if (!rawUrl || rawUrl.startsWith('app-local://musicas/') || existsMemo(rawUrl)) return rawUrl; // já é local
           const name = safeBasename(rawUrl);
           if (!name) return rawUrl;
           const folder = extractFolderFromMusicUrl(rawUrl);
@@ -1236,18 +1277,17 @@ function setupIpc(mainWindow) {
           return rawUrl; // mantém API URL
         };
 
-        if (md.url_music !== resolveAudioUrl(md.url_music)) {
-          md.url_music = resolveAudioUrl(md.url_music); mChanged = true;
-        }
-        if (md.url_instrumental_music !== resolveAudioUrl(md.url_instrumental_music)) {
-          md.url_instrumental_music = resolveAudioUrl(md.url_instrumental_music); mChanged = true;
-        }
+        const nextMusic = resolveAudioUrl(md.url_music);
+        if (md.url_music !== nextMusic) { md.url_music = nextMusic; mChanged = true; }
+        const nextInstr = resolveAudioUrl(md.url_instrumental_music);
+        if (md.url_instrumental_music !== nextInstr) { md.url_instrumental_music = nextInstr; mChanged = true; }
 
         // url_image do topo da música (imagem padrão usada quando slide não tem imagem própria)
-        if (md.url_image && !fileUrlExists(md.url_image)) {
+        if (md.url_image && !existsMemo(md.url_image)) {
           const imgName = safeBasename(md.url_image);
-          if (imgName) {
-            md.url_image = `app-local://imagens/${encodeURIComponent(imgName)}`;
+          const next = imgName ? `app-local://imagens/${encodeURIComponent(imgName)}` : null;
+          if (next && next !== md.url_image) {
+            md.url_image = next;
             mChanged = true;
           }
         }
@@ -1261,10 +1301,11 @@ function setupIpc(mainWindow) {
                          : (md.lyric && typeof md.lyric === 'object' ? Object.values(md.lyric) : []);
 
         for (const s of slideItems) {
-          if (s?.url_image && !fileUrlExists(s.url_image)) {
+          if (s?.url_image && !existsMemo(s.url_image)) {
             const imgName = safeBasename(s.url_image);
-            if (imgName) {
-              s.url_image = `app-local://imagens/${encodeURIComponent(imgName)}`;
+            const next = imgName ? `app-local://imagens/${encodeURIComponent(imgName)}` : null;
+            if (next && next !== s.url_image) {
+              s.url_image = next;
               mChanged = true;
             }
           }
@@ -1289,11 +1330,12 @@ function setupIpc(mainWindow) {
         let catChanged = false;
         cats.forEach(cat => {
           (cat.albums || []).forEach(album => {
-            if (!fileUrlExists(album.url_image)) {
+            if (!existsMemo(album.url_image)) {
               const coverName = safeBasename(album.url_image);
               // Converte para app-local:// → independente do caminho de instalação
-              if (coverName) {
-                album.url_image = `app-local://capas/${encodeURIComponent(coverName)}`;
+              const next = coverName ? `app-local://capas/${encodeURIComponent(coverName)}` : null;
+              if (next && next !== album.url_image) {
+                album.url_image = next;
                 catChanged = true;
               }
             }
@@ -2709,6 +2751,7 @@ document.getElementById('f').onsubmit=async(e)=>{
     return (await shell.openPath(dir)) === '';
   });
 
+  let lastHymnalEsRefresh = 0;
   ipcMain.handle('files:scan-albums', async (event, dbBaseUrl, token, scope = 'pt') => {
     const emptyStats = () => ({ audio: { found: 0, missing: 0 }, cover: { found: 0, missing: 0 }, image: { found: 0, missing: 0 } });
     const emptyResult = () => ({ total: 0, totalFiles: 0, foundFiles: 0, albums: [], allAlbums: [], allMissing: [], stats: emptyStats() });
@@ -2716,7 +2759,10 @@ document.getElementById('f').onsubmit=async(e)=>{
 
     // Hinário em espanhol: antes de varrer, atualiza o catálogo a partir da API
     // (ver electron/hymnal-es-sync.js). Falha de rede não impede a verificação.
-    if (scope === 'es' && dbBaseUrl) {
+    // No máximo a cada 30 min: buscar na API a cada verificação somava 1-2 s
+    // de espera antes de começar, só no espanhol.
+    if (scope === 'es' && dbBaseUrl && Date.now() - (lastHymnalEsRefresh || 0) > 30 * 60 * 1000) {
+      lastHymnalEsRefresh = Date.now();
       try {
         const sync = await refreshHymnalEs({
           dbDir: getDbDir(),
@@ -2959,6 +3005,7 @@ document.getElementById('f').onsubmit=async(e)=>{
       const withMissing = [];
       const allAlbums   = [];
       const typeStats   = emptyStats();
+      const musicCache  = new Map(); // reaproveitado pelo syncLocalFileUrls no fim
       let totalFiles = 0;
       let foundFiles = 0;
 
@@ -3061,6 +3108,7 @@ document.getElementById('f').onsubmit=async(e)=>{
         for (const music of (albumData.musics || [])) {
           const md = await ensureMusicJsonCached(dbDir, dbBaseUrl, token, music.id_music);
           if (!md) continue;
+          musicCache.set(String(music.id_music), md);
           chk(md.url_music, audioW, 'audio');
           chk(md.url_instrumental_music, audioW, 'audio');
           chk(md.url_image, imgsW, 'image');
@@ -3088,9 +3136,10 @@ document.getElementById('f').onsubmit=async(e)=>{
       const allMissing = withMissing.flatMap(a => a.items).sort((a, b) => a.name.localeCompare(b.name));
 
       // Mesmo motivo do branch Delphi acima — persiste o que este scan achou,
-      // pro Centro de Downloads (files:check-albums-complete) enxergar.
+      // pro Centro de Downloads (files:check-albums-complete) enxergar. Só os
+      // álbuns varridos agora (os do idioma escolhido).
       if (foundFiles > 0) {
-        try { await syncLocalFileUrls(dbDir); } catch (_) {}
+        try { await syncLocalFileUrls(dbDir, albumFiles, musicCache); } catch (_) {}
       }
 
       return {

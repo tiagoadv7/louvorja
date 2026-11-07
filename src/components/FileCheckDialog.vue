@@ -2,58 +2,57 @@
   <!-- ── Dialog principal ────────────────────────────────────────────────────── -->
   <v-dialog
     v-model="show"
-    max-width="900"
+    max-width="1080"
     transition="fade-transition"
     :persistent="step === 'downloading'"
     @update:modelValue="v => { if (!v) close(); }"
   >
-    <v-card theme="dark" rounded="lg" elevation="8" class="fcd-card" style="overflow:hidden">
+    <v-card theme="lja-glass" rounded="0" elevation="0" class="fcd-card" style="overflow:hidden">
 
       <!-- Cabeçalho -->
-      <div class="fcd-header">
-        <div class="d-flex align-center ga-3">
-          <v-avatar color="primary" variant="tonal" size="40">
-            <v-icon size="20" class="fc-icon">mdi-folder-sync-outline</v-icon>
-          </v-avatar>
-          <div>
-            <div class="text-subtitle-2 font-weight-bold">{{ $t('components.file_check.title') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.subtitle') }}</div>
-          </div>
+      <div class="fx-top">
+        <div class="fx-logo"><v-icon size="22">mdi-folder-sync-outline</v-icon></div>
+        <div class="fx-heading">
+          <h1>{{ $t('components.file_check.title') }}</h1>
+          <p>{{ $t('components.file_check.subtitle') }}</p>
         </div>
-        <div v-if="step === 'downloading'" class="d-flex align-center">
-          <v-btn icon="mdi-window-minimize" variant="text" size="small" density="comfortable" :title="$t('components.file_check.continue_bg')" @click="minimizeDownload" />
-        </div>
-        <v-btn v-else icon="mdi-close" variant="text" size="small" density="comfortable" @click="close" />
+        <button v-if="step === 'downloading'" type="button" class="fx-close" :title="$t('components.file_check.continue_bg')" @click="minimizeDownload">
+          <v-icon size="20">mdi-window-minimize</v-icon>
+        </button>
+        <button v-else type="button" class="fx-close" :aria-label="$t('components.file_check.close')" @click="close">
+          <v-icon size="22">mdi-close</v-icon>
+        </button>
       </div>
-      <v-divider />
 
       <!-- Conteúdo com transição entre etapas -->
       <transition name="fcd-step" mode="out-in">
         <div :key="step">
 
-          <!-- Barra de estatísticas (apenas nos passos com dados) -->
-          <div v-if="step === 'results' || step === 'all-good'" class="fcd-stats d-flex align-center flex-wrap ga-2 px-4 py-2">
-            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle-outline">
-              {{ $t('components.file_check.found') }}: <strong class="ml-1">{{ foundFiles }}</strong>
-            </v-chip>
-            <v-chip size="small" :color="totalMissing > 0 ? 'error' : 'success'" variant="tonal"
-                    :prepend-icon="totalMissing > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-all'">
-              {{ $t('components.file_check.missing') }}: <strong class="ml-1">{{ totalMissing }}</strong>
-            </v-chip>
-            <template v-if="stats">
-              <v-chip v-if="stats.audio.missing > 0" size="x-small" color="warning" variant="tonal" prepend-icon="mdi-music">
-                {{ $t('components.file_check.audio_count', { count: stats.audio.missing }) }}
-              </v-chip>
-              <v-chip v-if="stats.cover.missing + stats.image.missing > 0" size="x-small" color="secondary" variant="tonal" prepend-icon="mdi-image-outline">
-                {{ $t('components.file_check.image_count', { count: stats.cover.missing + stats.image.missing }) }}
-              </v-chip>
-            </template>
-            <v-spacer />
-            <span class="text-caption text-medium-emphasis">
-              {{ $t('components.file_check.album_summary', { albums: totalScanned, files: totalFiles }) }}
-              <template v-if="albumsOK > 0">{{ $t('components.file_check.ok_count', { count: albumsOK }) }}</template>
-              <template v-if="albumsWithIssues > 0">{{ $t('components.file_check.incomplete_count', { count: albumsWithIssues }) }}</template>
-            </span>
+          <!-- Resumo (apenas nos passos com dados) -->
+          <div v-if="step === 'results' || step === 'all-good'" class="fx-summary">
+            <div class="fx-stats">
+              <span class="fx-stat fx-stat--good">
+                <v-icon size="14">mdi-check-circle-outline</v-icon>
+                {{ $t('components.file_check.found') }}: <b>{{ foundFiles }}</b>
+              </span>
+              <span class="fx-stat" :class="totalMissing > 0 ? 'fx-stat--missing' : 'fx-stat--good'">
+                <v-icon size="14">{{ totalMissing > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-all' }}</v-icon>
+                {{ $t('components.file_check.missing') }}: <b>{{ totalMissing }}</b>
+              </span>
+              <template v-if="stats">
+                <span v-if="stats.audio.missing > 0" class="fx-stat fx-stat--audio">
+                  <v-icon size="14">mdi-music</v-icon>
+                  {{ $t('components.file_check.audio_count', { count: stats.audio.missing }) }}
+                </span>
+                <span v-if="stats.cover.missing + stats.image.missing > 0" class="fx-stat fx-stat--image">
+                  <v-icon size="14">mdi-image-outline</v-icon>
+                  {{ $t('components.file_check.image_count', { count: stats.cover.missing + stats.image.missing }) }}
+                </span>
+              </template>
+            </div>
+            <div class="fx-totals">
+              {{ $t('components.file_check.album_summary', { albums: totalScanned, files: totalFiles }) }}<template v-if="albumsOK > 0">{{ $t('components.file_check.ok_count', { count: albumsOK }) }}</template><template v-if="albumsWithIssues > 0">{{ $t('components.file_check.incomplete_count', { count: albumsWithIssues }) }}</template>
+            </div>
           </div>
 
           <!-- ── Escaneando ── -->
@@ -75,128 +74,108 @@
 
           <!-- ── Lista de arquivos ── -->
           <template v-else-if="step === 'results'">
-            <!-- Toolbar de seleção -->
-            <div class="fcd-toolbar d-flex align-center px-4 py-2" style="gap: 12px">
-              <span class="text-caption text-medium-emphasis">{{ $t('components.file_check.select_label') }}</span>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-check-all" @click="selectAll">{{ $t('components.file_check.select_all') }}</v-btn>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-checkbox-blank-outline" @click="deselectAll">{{ $t('components.file_check.select_none') }}</v-btn>
-              <v-btn size="small" variant="outlined" class="px-3" prepend-icon="mdi-swap-horizontal" @click="invertSelection">{{ $t('components.file_check.select_invert') }}</v-btn>
-              <v-spacer />
-              <v-btn-toggle v-model="viewMode" color="primary" density="compact" variant="outlined" mandatory rounded="lg" class="mr-4 fcd-view-toggle">
-                <v-btn value="grouped" size="small" icon="mdi-format-list-group" :title="$t('components.file_check.view_grouped')" />
-                <v-btn value="flat" size="small" icon="mdi-format-list-bulleted" :title="$t('components.file_check.view_flat')" />
-              </v-btn-toggle>
-              <v-chip size="small" color="primary" variant="tonal" prepend-icon="mdi-check">
-                {{ $t('components.file_check.selected_count', { count: selectedCount, total: fileList.length }) }}
-              </v-chip>
-            </div>
-            <v-divider />
-
-            <!-- Vista agrupada por álbum -->
-            <template v-if="viewMode === 'grouped'">
-              <v-expansion-panels v-model="expandedAlbums" multiple flat style="max-height:346px;overflow-y:auto">
-                <v-expansion-panel
-                  v-for="album in albumsIncomplete"
-                  :key="album.id_album || album.name"
-                  :value="album.id_album || album.name"
-                  rounded="0"
-                >
-                  <v-expansion-panel-title class="fcd-album-header" hide-actions>
-                    <template #default="{ isOpen }">
-                      <v-icon size="16" class="me-2 flex-shrink-0">
-                        {{ isOpen ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                      </v-icon>
-                      <span class="text-body-2 font-weight-medium text-truncate flex-grow-1">{{ album.name }}</span>
-                      <v-chip size="x-small" color="error" variant="tonal" class="mx-2 flex-shrink-0">
-                        {{ $t('components.file_check.album_missing', { count: album.missing }) }}
-                      </v-chip>
-                      <span class="text-caption text-medium-emphasis flex-shrink-0 me-2">
-                        {{ $t('components.file_check.album_files', { found: album.foundFiles, total: album.totalFiles }) }}
-                      </span>
-                    </template>
-                  </v-expansion-panel-title>
-                  <v-expansion-panel-text class="pa-0">
-                    <div
-                      v-for="item in album.items"
-                      :key="item.dest"
-                      class="fcd-list-row fcd-list-row--indent"
-                      :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
-                      @click="toggleItem(item.dest)"
-                    >
-                      <div class="fcd-col-check">
-                        <v-checkbox
-                          :model-value="selectedDests.has(item.dest)"
-                          density="compact"
-                          hide-details
-                          color="primary"
-                          @click.stop="toggleItem(item.dest)"
-                        />
-                      </div>
-                      <div class="fcd-col-name">
-                        <v-icon size="13" :color="item.type === 'audio' ? 'warning' : 'secondary'" class="me-1 flex-shrink-0">
-                          {{ item.type === 'audio' ? 'mdi-file-music-outline' : 'mdi-image-outline' }}
-                        </v-icon>
-                        <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
-                      </div>
-                      <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
-                        {{ item.relPath }}
-                      </div>
-                      <div class="fcd-col-status">
-                        <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
-                          {{ item.type === 'audio' ? $t('components.file_check.type_audio') : item.type === 'cover' ? $t('components.file_check.type_cover') : $t('components.file_check.type_image') }}
-                        </v-chip>
-                      </div>
-                    </div>
-                  </v-expansion-panel-text>
-                </v-expansion-panel>
-              </v-expansion-panels>
-            </template>
-
-            <!-- Vista lista plana -->
-            <template v-else>
-              <!-- Cabeçalho da lista -->
-              <div class="fcd-list-header">
-                <div class="fcd-col-check" />
-                <div class="fcd-col-name">{{ $t('components.file_check.col_file') }}</div>
-                <div class="fcd-col-dir">{{ $t('components.file_check.col_location') }}</div>
-                <div class="fcd-col-status">{{ $t('components.file_check.col_type') }}</div>
+            <div class="fx-toolbar">
+              <div class="fx-actions">
+                <button type="button" class="fx-btn" @click="selectAll"><v-icon size="16">mdi-checkbox-marked-outline</v-icon>{{ $t('components.file_check.select_all') }}</button>
+                <button type="button" class="fx-btn" @click="deselectAll"><v-icon size="16">mdi-checkbox-blank-outline</v-icon>{{ $t('components.file_check.select_none') }}</button>
+                <button type="button" class="fx-btn" @click="invertSelection"><v-icon size="16">mdi-swap-horizontal</v-icon>{{ $t('components.file_check.select_invert') }}</button>
               </div>
-
-              <!-- Linhas (virtual scroll) -->
-              <v-virtual-scroll :items="fileList" :height="310" :item-height="36">
-                <template #default="{ item }">
-                  <div
-                    class="fcd-list-row"
-                    :class="{ 'fcd-list-row--on': selectedDests.has(item.dest) }"
-                    @click="toggleItem(item.dest)"
-                  >
-                    <div class="fcd-col-check">
-                      <v-checkbox
-                        :model-value="selectedDests.has(item.dest)"
-                        density="compact"
-                        hide-details
-                        color="primary"
-                        @click.stop="toggleItem(item.dest)"
-                      />
-                    </div>
-                    <div class="fcd-col-name">
-                      <v-icon size="13" :color="item.type === 'audio' ? 'warning' : 'secondary'" class="me-1 flex-shrink-0">
-                        {{ item.type === 'audio' ? 'mdi-file-music-outline' : 'mdi-image-outline' }}
-                      </v-icon>
-                      <span class="text-truncate text-body-2" :title="item.name">{{ item.name }}</span>
-                    </div>
-                    <div class="fcd-col-dir text-caption text-medium-emphasis text-truncate" :title="item.relPath">
-                      {{ item.relPath }}
-                    </div>
-                    <div class="fcd-col-status">
-                      <v-chip size="x-small" :color="item.type === 'audio' ? 'error' : 'secondary'" variant="tonal">
-                        {{ item.type === 'audio' ? $t('components.file_check.type_audio') : item.type === 'cover' ? $t('components.file_check.type_cover') : $t('components.file_check.type_image') }}
-                      </v-chip>
-                    </div>
+              <div class="fx-spacer" />
+              <label class="fx-search">
+                <v-icon size="17">mdi-magnify</v-icon>
+                <input v-model="query" type="search" :placeholder="$t('components.file_check.search')" />
+              </label>
+              <div class="fx-filter">
+                <span class="fx-filter-label">{{ $t('components.file_check.view_label') }}</span>
+                <div class="fx-switch" role="group">
+                  <button type="button" :class="{ active: viewMode === 'grouped' }" :title="$t('components.file_check.view_grouped')" @click="viewMode = 'grouped'">
+                    <v-icon size="16">mdi-format-list-group</v-icon>{{ $t('components.file_check.view_group_btn') }}
+                  </button>
+                  <button type="button" :class="{ active: viewMode === 'flat' }" :title="$t('components.file_check.view_flat')" @click="viewMode = 'flat'">
+                    <v-icon size="16">mdi-format-list-bulleted</v-icon>{{ $t('components.file_check.view_list_btn') }}
+                  </button>
+                </div>
+              </div>
+              <div class="fx-filter">
+                <span class="fx-filter-label">{{ $t('components.file_check.filter_label') }}</span>
+<v-menu location="bottom end" offset="6" content-class="fx-menu">
+                  <template #activator="{ props, isActive }">
+                    <button type="button" class="fx-select" :class="{ open: isActive }" v-bind="props">
+                      <span>{{ statusOptions.find(o => o.value === statusFilter)?.label }}</span>
+                      <v-icon size="18" class="fx-select-arrow">mdi-chevron-down</v-icon>
+                    </button>
+                  </template>
+                  <div class="fx-menu-list">
+                    <button
+                      v-for="opt in statusOptions"
+                      :key="opt.value"
+                      type="button"
+                      class="fx-menu-item"
+                      :class="{ active: statusFilter === opt.value }"
+                      @click="statusFilter = opt.value"
+                    >
+                      <v-icon size="16" class="fx-menu-icon">{{ opt.icon }}</v-icon>
+                      <span>{{ opt.label }}</span>
+                      <v-icon v-if="statusFilter === opt.value" size="16" class="fx-menu-check">mdi-check</v-icon>
+                    </button>
                   </div>
+                </v-menu>
+              </div>
+              <span class="fx-selected">{{ $t('components.file_check.selected_short', { count: selectedCount }) }}</span>
+            </div>
+
+            <!-- Agrupado por álbum: só os álbuns abertos desenham as linhas -->
+            <div v-if="viewMode === 'grouped'" class="fx-content">
+              <div
+                v-for="album in visibleAlbums"
+                :key="album.key"
+                class="fx-album"
+                :class="{ open: isAlbumOpen(album) }"
+              >
+                <button type="button" class="fx-album-head" @click="toggleAlbum(album)">
+                  <v-icon size="16" class="fx-chevron">mdi-chevron-right</v-icon>
+                  <span class="fx-album-name">{{ album.name }}</span>
+                  <span v-if="album.missing > 0" class="fx-pill fx-pill--missing">{{ $t('components.file_check.album_missing', { count: album.missing }) }}</span>
+                  <span v-else class="fx-pill fx-pill--ok">{{ $t('components.file_check.album_complete') }}</span>
+                  <span class="fx-album-count">{{ $t('components.file_check.album_files', { found: album.foundFiles, total: album.totalFiles }) }}</span>
+                </button>
+                <div v-if="isAlbumOpen(album) && album.items.length" class="fx-tracks">
+                  <label
+                    v-for="item in album.items"
+                    :key="item.dest"
+                    class="fx-track"
+                    :class="{ on: selectedDests.has(item.dest) }"
+                  >
+                    <input type="checkbox" :checked="selectedDests.has(item.dest)" @change="toggleItem(item.dest)" />
+                    <div class="fx-file">
+                      <v-icon size="15" class="fx-file-icon" :class="'fx-file-icon--' + item.type">{{ item.type === 'audio' ? 'mdi-music-note' : 'mdi-image-outline' }}</v-icon>
+                      <span :title="item.name">{{ item.name }}</span>
+                    </div>
+                    <div class="fx-folder" :title="item.relPath">{{ item.relPath }}</div>
+                    <span class="fx-tag" :class="'fx-tag--' + item.type">{{ typeLabel(item.type) }}</span>
+                  </label>
+                </div>
+              </div>
+              <div v-if="!visibleAlbums.length" class="fx-empty">{{ $t('components.file_check.no_match') }}</div>
+            </div>
+
+            <!-- Lista contínua (rolagem virtual: aguenta milhares de arquivos) -->
+            <div v-else class="fx-content fx-content--list">
+              <v-virtual-scroll v-if="visibleFiles.length" :items="visibleFiles" height="100%" :item-height="46" class="fx-vscroll">
+                <template #default="{ item }">
+                  <label class="fx-track fx-track--flat" :class="{ on: selectedDests.has(item.dest) }">
+                    <input type="checkbox" :checked="selectedDests.has(item.dest)" @change="toggleItem(item.dest)" />
+                    <div class="fx-file">
+                      <v-icon size="15" class="fx-file-icon" :class="'fx-file-icon--' + item.type">{{ item.type === 'audio' ? 'mdi-music-note' : 'mdi-image-outline' }}</v-icon>
+                      <span :title="item.name">{{ item.name }}</span>
+                    </div>
+                    <div class="fx-folder" :title="item.relPath">{{ item.relPath }}</div>
+                    <span class="fx-tag" :class="'fx-tag--' + item.type">{{ typeLabel(item.type) }}</span>
+                  </label>
                 </template>
               </v-virtual-scroll>
-            </template>
+              <div v-else class="fx-empty">{{ $t('components.file_check.no_match') }}</div>
+            </div>
           </template>
 
           <!-- ── Tudo ok ── -->
@@ -266,38 +245,22 @@
         </div>
       </transition>
 
-      <v-divider v-if="step === 'results' || step === 'all-good' || step === 'done'" />
-
-      <!-- Barra de ações -->
-      <div v-if="step === 'results' || step === 'all-good' || step === 'done'" class="fcd-actions d-flex align-center px-5 py-3" style="gap: 12px">
-        <div class="flex-grow-1" />
-
+      <!-- Rodapé -->
+      <div v-if="step === 'results' || step === 'all-good' || step === 'done'" class="fx-footer">
+        <span class="fx-footer-note">
+          <template v-if="step === 'results'">{{ $t('components.file_check.footer_note') }}</template>
+        </span>
         <template v-if="step === 'results'">
-          <v-btn
-            size="small"
-            color="primary"
-            variant="flat"
-            class="px-5"
-            prepend-icon="mdi-download"
-            :disabled="selectedCount === 0"
-            @click="startDownload"
-          >
+          <button type="button" class="fx-btn fx-btn--primary" :disabled="selectedCount === 0" @click="startDownload">
+            <v-icon size="17">mdi-download</v-icon>
             {{ selectedCount === 1 ? $t('components.file_check.download_one', { count: selectedCount }) : $t('components.file_check.download_many', { count: selectedCount }) }}
-          </v-btn>
-          <v-divider vertical style="height:28px; align-self:center" />
-          <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
-            {{ $t('components.file_check.rescan') }}
-          </v-btn>
-          <v-divider vertical style="height:28px; align-self:center" />
-          <v-btn variant="text" size="small" class="px-5" prepend-icon="mdi-close" @click="close">{{ $t('components.file_check.close') }}</v-btn>
+          </button>
+          <button type="button" class="fx-btn" @click="rescan"><v-icon size="17">mdi-refresh</v-icon>{{ $t('components.file_check.rescan') }}</button>
+          <button type="button" class="fx-btn fx-btn--ghost" @click="close"><v-icon size="17">mdi-close</v-icon>{{ $t('components.file_check.close') }}</button>
         </template>
-
-        <template v-else-if="step === 'all-good' || step === 'done'">
-          <v-btn size="small" variant="tonal" class="px-5" prepend-icon="mdi-refresh" @click="rescan">
-            {{ $t('components.file_check.rescan') }}
-          </v-btn>
-          <v-divider vertical style="height:28px; align-self:center" />
-          <v-btn size="small" color="primary" variant="flat" class="px-5" prepend-icon="mdi-close" @click="close">{{ $t('components.file_check.close') }}</v-btn>
+        <template v-else>
+          <button type="button" class="fx-btn" @click="rescan"><v-icon size="17">mdi-refresh</v-icon>{{ $t('components.file_check.rescan') }}</button>
+          <button type="button" class="fx-btn fx-btn--primary" @click="close"><v-icon size="17">mdi-close</v-icon>{{ $t('components.file_check.close') }}</button>
         </template>
       </div>
 
@@ -352,7 +315,10 @@ export default {
 
     // Vista
     viewMode:       'grouped',  // 'grouped' | 'flat'
-    expandedAlbums: [],         // painéis expandidos no modo agrupado
+    expandedAlbums: [],         // chaves dos álbuns abertos no modo agrupado
+    query:          '',         // busca por arquivo ou álbum
+    collapsedAlbums: [],        // fechados à mão durante uma busca
+    statusFilter:   'all',      // all | missing (incompletos) | found (completos)
 
     // Seleção
     selectedDests: new Set(),
@@ -377,6 +343,43 @@ export default {
     albumsOK()         { return this.albumList.filter(a => a.missing === 0).length; },
     albumsWithIssues() { return this.albumList.filter(a => a.missing > 0).length; },
     albumsIncomplete() { return this.albumList.filter(a => a.missing > 0); },
+    statusOptions() {
+      return [
+        { value: 'all', label: this.$t('components.file_check.filter_all'), icon: 'mdi-folder-multiple-outline' },
+        { value: 'missing', label: this.$t('components.file_check.filter_missing'), icon: 'mdi-alert-circle-outline' },
+        { value: 'found', label: this.$t('components.file_check.filter_found'), icon: 'mdi-check-circle-outline' },
+      ];
+    },
+    normQuery()        { return (this.query || '').trim().toLocaleLowerCase(); },
+    // Álbuns na tela, já com busca e filtro aplicados (incompletos primeiro).
+    // A verificação só lista os arquivos que FALTAM; dos encontrados vem a
+    // contagem — por isso "Completos" filtra álbuns, não arquivos.
+    visibleAlbums() {
+      const q = this.normQuery;
+      const out = [];
+      const ordered = [...this.albumList].sort((a, b) => (b.missing > 0) - (a.missing > 0));
+      for (const a of ordered) {
+        if (this.statusFilter === 'missing' && !(a.missing > 0)) continue;
+        if (this.statusFilter === 'found' && a.missing > 0) continue;
+        let items = a.items || [];
+        if (q) {
+          const albumHit = (a.name || '').toLocaleLowerCase().includes(q);
+          if (!albumHit) {
+            items = items.filter(f => `${f.name} ${f.relPath || ''}`.toLocaleLowerCase().includes(q));
+            if (!items.length) continue;
+          }
+        }
+        out.push({ ...a, key: this.albumKey(a), items });
+      }
+      return out;
+    },
+    visibleFiles() {
+      return this.visibleAlbums.flatMap(a => a.items);
+    },
+  },
+
+  watch: {
+    query() { this.collapsedAlbums = []; },
   },
 
   methods: {
@@ -386,7 +389,27 @@ export default {
     // e os cliques no cabeçalho/rodapé (X, Fechar) parecem não fazer nada.
     defaultExpandedAlbums() {
       if (this.albumsIncomplete.length > 8) return [];
-      return this.albumsIncomplete.map(a => a.id_album || a.name);
+      return this.albumsIncomplete.map(a => this.albumKey(a));
+    },
+    albumKey(a) { return String(a.id_album || a.name); },
+    // Com busca ativa, os primeiros álbuns que combinam abrem sozinhos
+    isAlbumOpen(album) {
+      if (this.expandedAlbums.includes(album.key)) return true;
+      if (!this.normQuery || this.collapsedAlbums.includes(album.key)) return false;
+      const idx = this.visibleAlbums.findIndex(a => a.key === album.key);
+      return idx > -1 && idx < 12;
+    },
+    toggleAlbum(album) {
+      const open = this.isAlbumOpen(album);
+      this.expandedAlbums = this.expandedAlbums.filter(k => k !== album.key);
+      this.collapsedAlbums = this.collapsedAlbums.filter(k => k !== album.key);
+      if (open) this.collapsedAlbums.push(album.key);
+      else this.expandedAlbums.push(album.key);
+    },
+    typeLabel(type) {
+      return type === 'audio' ? this.$t('components.file_check.type_audio')
+        : type === 'cover' ? this.$t('components.file_check.type_cover')
+        : this.$t('components.file_check.type_image');
     },
 
     // Abre o dialog e inicia a varredura.
@@ -466,6 +489,8 @@ export default {
       // aqui).
       this.selectedDests  = new Set(this.fileList.map(f => f.dest));
       this.expandedAlbums = this.defaultExpandedAlbums();
+      this.query = '';
+      this.statusFilter = 'all';
       this.step           = 'results';
       this.show           = true;
     },
@@ -525,6 +550,8 @@ export default {
         this.step           = 'results';
         this.selectedDests  = new Set(this.fileList.map(f => f.dest));
         this.expandedAlbums = this.defaultExpandedAlbums();
+      this.query = '';
+      this.statusFilter = 'all';
       }
     },
 
@@ -612,10 +639,21 @@ export default {
       else s.add(dest);
       this.selectedDests = s;
     },
-    selectAll()      { this.selectedDests = new Set(this.fileList.map(f => f.dest)); },
-    deselectAll()    { this.selectedDests = new Set(); },
+    // Todos / Nenhum / Inverter valem para o que está na tela (busca e filtro)
+    selectAll() {
+      const s = new Set(this.selectedDests);
+      this.visibleFiles.forEach(f => s.add(f.dest));
+      this.selectedDests = s;
+    },
+    deselectAll() {
+      const s = new Set(this.selectedDests);
+      this.visibleFiles.forEach(f => s.delete(f.dest));
+      this.selectedDests = s;
+    },
     invertSelection() {
-      this.selectedDests = new Set(this.fileList.filter(f => !this.selectedDests.has(f.dest)).map(f => f.dest));
+      const s = new Set(this.selectedDests);
+      this.visibleFiles.forEach(f => (s.has(f.dest) ? s.delete(f.dest) : s.add(f.dest)));
+      this.selectedDests = s;
     },
 
     // ── Download ─────────────────────────────────────────────────────────
@@ -726,16 +764,334 @@ export default {
   border-bottom: 1px solid #1b2f48;
 }
 /* Mesma paleta do centro de downloads: janela em degradê azul, cartões em #13213a */
+/* ── Visual "Sincronizar arquivos" (design de referência) ──────────────── */
 .fcd-card {
-  --v-theme-surface: 19, 33, 58;
-  --v-theme-background: 11, 20, 32;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(0, 159, 227, 0.28), transparent 55%),
-    radial-gradient(circle at 100% 100%, rgba(246, 195, 42, 0.14), transparent 50%),
-    linear-gradient(135deg, #12294a 0%, #0b1420 100%) !important;
+  --fx-panel: #0e2238;
+  --fx-line: #29445f;
+  --fx-text: #e8f1fb;
+  --fx-muted: #9eb2c8;
+  --fx-blue: #38bdf8;
+  --fx-blue-2: #0ea5e9;
+  --fx-green: #34d399;
+  --fx-red: #fb7185;
+  --fx-amber: #fbbf24;
+  --v-theme-surface: 14, 34, 56;
+  --v-theme-background: 7, 21, 37;
+  --v-theme-primary: 56, 189, 248;
+  background: var(--fx-panel) !important;
+  color: var(--fx-text);
+  border: 1px solid #31516f !important;
+  border-radius: 18px !important;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6) !important;
+  font-size: 14px;
+  line-height: 1.45;
 }
+.fx-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  background: linear-gradient(110deg, #123858, #10253c);
+  border-bottom: 1px solid var(--fx-line);
+}
+.fx-logo {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: #164c70;
+  border: 1px solid #32759b;
+}
+.fx-logo .v-icon { color: #7dd3fc; }
+.fx-heading { flex: 1; min-width: 0; }
+.fx-heading h1 { font-size: 18px; margin: 0 0 3px; font-weight: 700; }
+.fx-heading p { margin: 0; color: #a9c4dc; }
+.fx-close {
+  border: 0;
+  background: transparent;
+  color: #dbeafe;
+  padding: 6px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.fx-close:hover { background: rgba(255, 255, 255, 0.09); }
+
+.fx-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 22px;
+  background: #142d46;
+  border-bottom: 1px solid var(--fx-line);
+}
+.fx-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.fx-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.fx-stat--good { color: var(--fx-green); }
+.fx-stat--missing { color: var(--fx-red); }
+.fx-stat--audio { color: var(--fx-amber); }
+.fx-stat--image { color: #c4b5fd; }
+.fx-totals { color: #b9c9da; font-weight: 600; }
+
+.fx-toolbar {
+  padding: 12px 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--fx-line);
+  background: #10263d;
+}
+.fx-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fx-spacer { flex: 1; }
+.fx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #466783;
+  background: #193650;
+  color: #e4f2ff;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s, color 0.18s;
+}
+.fx-btn .v-icon { color: inherit; }
+.fx-btn:hover { background: #244b6a; border-color: #5b91b7; transform: translateY(-1px); }
+.fx-btn--primary { background: var(--fx-blue-2); border-color: var(--fx-blue); color: #032338; }
+.fx-btn--primary:hover { background: var(--fx-blue); border-color: var(--fx-blue); }
+.fx-btn--ghost { background: transparent; }
+.fx-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+.fx-search {
+  position: relative;
+  min-width: 150px;
+  flex: 1;
+  max-width: 230px;
+  display: flex;
+  align-items: center;
+}
+.fx-search .v-icon { position: absolute; left: 10px; color: #8ba8c2; pointer-events: none; }
+.fx-search input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: 9px;
+  border: 1px solid #36536e;
+  background: #0b1d30;
+  color: var(--fx-text);
+  outline: none;
+}
+.fx-search input:focus { border-color: var(--fx-blue); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14); }
+.fx-filter { display: flex; align-items: center; gap: 7px; }
+.fx-filter-label { font-size: 12px; color: #91a9c0; }
+.fx-switch {
+  display: flex;
+  padding: 3px;
+  gap: 3px;
+  background: #091a2b;
+  border: 1px solid #304d67;
+  border-radius: 10px;
+}
+.fx-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  color: #9fb5c9;
+  background: transparent;
+  border-radius: 7px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.fx-switch button .v-icon { color: inherit; }
+.fx-switch button.active { background: #1d5275; color: #7dd3fc; box-shadow: inset 0 0 0 1px #397fa8; }
+.fx-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+  justify-content: space-between;
+  background: #0b1d30;
+  color: #dceafa;
+  border: 1px solid #36536e;
+  padding: 7px 8px 7px 12px;
+  border-radius: 10px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fx-select:hover { border-color: #4f7ea3; }
+.fx-select.open { border-color: var(--fx-blue); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14); }
+.fx-select-arrow { color: #8fb8d6 !important; transition: transform 0.2s; }
+.fx-select.open .fx-select-arrow { transform: rotate(180deg); }
+.fx-menu-list {
+  min-width: 190px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #0f2740;
+  border: 1px solid #36536e;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.fx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dceafa;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fx-menu-item:hover { background: #1b3a57; }
+.fx-menu-item.active { background: #1d5275; color: #7dd3fc; }
+.fx-menu-item span { flex: 1; }
+.fx-menu-icon { color: #8fb8d6 !important; }
+.fx-menu-item.active .fx-menu-icon,
+.fx-menu-check { color: #7dd3fc !important; }
+.fx-selected {
+  font-size: 12px;
+  color: #7dd3fc;
+  background: #123c57;
+  padding: 7px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.fx-content {
+  overflow: auto;
+  padding: 12px 16px 18px;
+  min-height: 230px;
+  max-height: min(52vh, 460px);
+}
+.fx-content--list {
+  height: min(52vh, 460px);
+  overflow: hidden;
+  padding: 10px 12px;
+}
+.fx-vscroll { height: 100%; }
+.fx-album {
+  border: 1px solid #29445d;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 0 0 10px;
+  background: #10283f;
+}
+.fx-album-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: #142b43;
+  border: 0;
+  color: var(--fx-text);
+  text-align: left;
+  cursor: pointer;
+}
+.fx-album-head:hover { background: #18334f; }
+.fx-chevron { color: #8fb8d6 !important; transition: transform 0.2s; }
+.fx-album.open .fx-chevron { transform: rotate(90deg); }
+.fx-album-name { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-album-count { color: #a8bdd0; font-size: 12px; white-space: nowrap; }
+.fx-pill { font-size: 11px; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.fx-pill--missing { color: #fda4af; background: #55283c; }
+.fx-pill--ok { color: #6ee7b7; background: #173f3a; }
+.fx-tracks { padding: 4px 7px 7px; }
+.fx-track {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1.15fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #1b354c;
+  margin: 4px 0;
+  min-height: 42px;
+  cursor: pointer;
+}
+.fx-track:hover { background: #23445e; }
+.fx-track--flat { height: 42px; margin: 0 0 4px; }
+.fx-track input { width: 17px; height: 17px; accent-color: var(--fx-blue); cursor: pointer; margin: 0; }
+.fx-file { display: flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; }
+.fx-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-file-icon { flex-shrink: 0; }
+.fx-file-icon--audio { color: var(--fx-amber) !important; }
+.fx-file-icon--cover,
+.fx-file-icon--image { color: #c4b5fd !important; }
+.fx-folder { color: #a8bed2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.fx-tag { font-size: 10px; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.fx-tag--audio { color: #fda4af; background: #572c40; }
+.fx-tag--cover,
+.fx-tag--image { color: #ddd6fe; background: #3b2d5c; }
+.fx-empty { padding: 35px; text-align: center; color: var(--fx-muted); }
+
+.fx-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 20px;
+  background: #0b1b2b;
+  border-top: 1px solid var(--fx-line);
+}
+.fx-footer-note { font-size: 12px; color: #8da5bb; flex: 1; min-width: 0; }
+
+@media (max-width: 700px) {
+  .fx-top, .fx-summary, .fx-toolbar { padding-left: 13px; padding-right: 13px; }
+  .fx-totals { width: 100%; }
+  .fx-search { max-width: none; order: 2; flex-basis: 100%; }
+  .fx-track { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .fx-folder, .fx-album-count { display: none; }
+  .fx-footer { flex-wrap: wrap; }
+  .fx-footer-note { flex-basis: 100%; }
+}
+/* Ícones em azul claro (#7FCDF4 / #4FB6EC), a mesma família de azuis do layout */
 .fc-icon {
-  color: #ffffff !important;
+  color: #7fcdf4 !important;
+}
+/* "Verificar novamente" e "Fechar": mesmo azul do "Baixar" ao passar o mouse */
+.fcd-act {
+  background: rgba(79, 182, 236, 0.1) !important;
+  color: #cfe9f8 !important;
+  border: 1px solid rgba(79, 182, 236, 0.28);
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.fcd-act:hover {
+  background: rgb(var(--v-theme-primary)) !important;
+  color: rgb(var(--v-theme-on-primary)) !important;
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 4px 14px rgba(79, 182, 236, 0.35);
+}
+.fcd-act :deep(.v-btn__overlay),
+.fcd-act :deep(.v-btn__underlay) {
+  display: none;
 }
 .fcd-pill {
   position: fixed;
@@ -808,8 +1164,8 @@ export default {
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  background: rgba(var(--v-theme-primary), 0.08);
-  border: 2px solid rgba(var(--v-theme-primary), 0.2);
+  background: radial-gradient(circle at 30% 25%, rgba(79, 182, 236, 0.28), rgba(0, 151, 215, 0.1) 70%);
+  border: 2px solid rgba(79, 182, 236, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
