@@ -99,6 +99,8 @@ function emptyConfig() {
     // "currentId" em helpers/VideoPlayer.js, usado pela UI pra destacar o
     // item ativo na lista.
     currentId: null,
+    // Nome do vídeo, mostrado na barra do rodapé
+    title: "",
   };
 }
 
@@ -125,24 +127,19 @@ function toPlain(v) {
 // registrar isso incondicionalmente aqui (roda também na janela de saída,
 // mas ela nunca recebe o evento).
 $electron.on("web-link:progress", (data) => {
-  if (data && data.error) $alert.error({ text: data.error, translate: false });
-  // Mesmo canal serve para o vídeo atual (videoId/url, enviado quando a projeção troca de vídeo)
-  if ("videoId" in data) {
-    $appdata.set("modules.web_link.config.videoId", data.videoId);
-    $appdata.set("modules.web_link.config.url", data.url || "");
-  }
-  if ("isPlaying" in data) $appdata.set("modules.web_link.config.isPlaying", data.isPlaying);
-  if ("currentTime" in data) $appdata.set("modules.web_link.config.current_time", data.currentTime);
-  if ("duration" in data) $appdata.set("modules.web_link.config.duration", data.duration);
-});
-// Projeção fechada: o vídeo online sai junto (sem isso, o miniplayer ficava com o quadro preto)
-$electron.on("output-window-closed", () => {
+  // A projeção só mostra a imagem: o som e o tempo vêm do player da janela
+  // principal (WebLinkLocalPlayer.vue). Daqui só chega erro do vídeo — aí
+  // encerra também o som, senão ele seguiria tocando sem imagem.
+  if (!data || !data.error) return;
+  $alert.error({ text: data.error, translate: false });
   $appdata.set("modules.web_link.config.isPlaying", false);
   $appdata.set("modules.web_link.config.videoId", null);
   $appdata.set("modules.web_link.config.url", "");
   $appdata.set("modules.web_link.config.current_time", 0);
   $appdata.set("modules.web_link.config.duration", 0);
 });
+// Projeção fechada: o vídeo NÃO para — segue tocando no app e no miniplayer
+// (WebLinkLocalPlayer.vue assume o som). Para encerrar de vez: X do rodapé (close()).
 
 export default {
   isYoutube(url) {
@@ -230,6 +227,11 @@ export default {
   // de $videoPlayer.selectPlaylistItem, sem duplicar/readicionar o item.
   selectPlaylistItem(item) {
     this.setConfig({
+      // Vídeo novo começa do início (current_time também serve para a projeção
+      // e o player local retomarem do mesmo ponto ao trocar de lugar)
+      current_time: 0,
+      duration: 0,
+      title: item.name || "",
       url: item.url,
       videoId: item.videoId,
       currentId: item.id,
@@ -256,6 +258,9 @@ export default {
       ? this.addToPlaylist(rawUrl, name)
       : { id: null, url: toEmbeddableUrl(rawUrl), videoId: extractYoutubeVideoId(toEmbeddableUrl(rawUrl)) };
     this.setConfig({
+      current_time: 0,
+      duration: 0,
+      title: name || item.name || "",
       url: item.url,
       videoId: item.videoId,
       currentId: item.id,
@@ -269,6 +274,8 @@ export default {
   togglePlay() {
     const cfg = this.getConfig();
     if (!cfg.videoId) return;
+    // Só alterna: fora da projeção, continua tocando no player local/miniplayer
+    // (volta para a tela só pelo botão de projeção)
     this.setConfig({ isPlaying: !cfg.isPlaying });
   },
 
@@ -300,7 +307,9 @@ export default {
   // porque a própria janela de saída escreve nele a cada poll).
   seekTo(time) {
     const cfg = this.getConfig();
-    const seekTime = Math.max(0, Math.min(cfg.duration || 0, time));
+    // Duração ainda desconhecida (0): não limita por cima, senão todo seek virava 0
+    const max = cfg.duration > 0 ? cfg.duration : Infinity;
+    const seekTime = Math.max(0, Math.min(max, time));
     this.setConfig({ seekTime, seekToken: (cfg.seekToken || 0) + 1 });
   },
   seekBy(delta) {
@@ -330,5 +339,21 @@ export default {
         this.setConfig({ videoId: null, url: "", current_time: 0, duration: 0 });
       }
     }, 1100);
+  },
+
+  // Botão fechar do player do rodapé (igual ao "close" do flute): para o vídeo
+  // e fecha a projeção do link. O fade de áudio e imagem acontece na própria
+  // janela de saída ao receber 'output-closing' (WebLinkFrame#_closeWithFade).
+  // Primeiro o fade completo (áudio e imagem, ~1 s, feito por stop()) e só
+  // depois fecha a janela de saída — fechar na hora deixava só ~0,4 s de fade.
+  close() {
+    const projectingLink = $appdata.get("popup") && $appdata.get("popup_module") === "web_link";
+    this.stop();
+    if (!projectingLink) return;
+    clearTimeout(this._closeTimer);
+    this._closeTimer = setTimeout(() => {
+      // Nada novo foi aberto no link enquanto esmaecia
+      if ($appdata.get("popup_module") === "web_link" && !this.getConfig().videoId) $popup.shutdown();
+    }, 1150);
   },
 };

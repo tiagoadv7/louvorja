@@ -1,5 +1,5 @@
 <template>
-  <div class="wl-root" :class="{ 'wl-root--active': videoId || url || loadError }">
+  <div class="wl-root" :class="{ 'wl-root--active': ((videoId || url) && !isFading) || loadError }">
     <!-- YouTube: precisa de um elemento próprio pro YT.Player assumir (ele
          substitui esse div por um <iframe> PRÓPRIO dele, sem herdar a classe
          "wl-iframe" nem o tamanho 100%/100% dela — por isso o vídeo aparecia
@@ -12,6 +12,7 @@
       :class="{ 'wl-iframe--fading': isFading }"
     >
       <div id="wl-yt-player" />
+      <div class="wl-shield" />
     </div>
     <!-- onError do YT.Player (vídeo removido/privado ou com incorporação
          desativada pelo dono — comum em vídeos oficiais de louvor): sem isso
@@ -38,24 +39,9 @@
 // Mesma cadência de fade do video_player (ver interface/Popup.vue): degraus
 // de 5% (equivalente ao STEP=0.05 de lá, só que na escala 0-100 do
 // player.setVolume do YouTube), 100ms/passo ao entrar, 50ms/passo ao sair.
-const STEP = 5;
+import { loadYoutubeApi } from '@/helpers/YoutubeApi';
 
-let ytApiPromise = null;
-function loadYoutubeApi() {
-  if (window.YT && window.YT.Player) return Promise.resolve();
-  if (ytApiPromise) return ytApiPromise;
-  ytApiPromise = new Promise((resolve) => {
-    const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve();
-    };
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(tag);
-  });
-  return ytApiPromise;
-}
+const STEP = 5;
 
 export default {
   name: 'WebLinkFrame',
@@ -76,6 +62,11 @@ export default {
     videoId() {
       return this.config.videoId || null;
     },
+    // Falso quando o operador tira o link da projeção (popup_module muda): o
+    // vídeo segue tocando na janela principal (WebLinkLocalPlayer.vue)
+    projecting() {
+      return this.$appdata.get('popup_module') === 'web_link';
+    },
     url() {
       // Compatibilidade: além do config novo, aceita o formato antigo
       // (só "modules.web_link.url", sem controles) caso algo ainda use.
@@ -84,49 +75,56 @@ export default {
   },
 
   watch: {
-    videoId(id, oldId) {
-      // A janela principal não recebe as escritas desta janela (is_popup): avisa o
-      // vídeo atual pelo canal dedicado, pra miniplayer e rodapé acompanharem.
-      this.$electron.sendWebLinkProgress({ videoId: id || null, url: this.config.url || "" });
-      if (id === oldId) return;
-      // Troca de vídeo com o anterior tocando: esmaece antes de trocar, em
-      // vez de cortar o áudio na hora (mesmo cuidado do video_player).
-      if (this.player && this._playerReady && oldId && this.config.isPlaying) {
-        this._fadeTo(0, () => {
-          this._teardownPlayer();
-          if (id) this._setupPlayer(id);
-        });
-      } else {
-        this._teardownPlayer();
-        if (id) this._setupPlayer(id);
-      }
+    projecting(on) {
+      if (!on) this._leaveProjection();
     },
+    videoId(id, oldId) {
+      // Não avisa mais a janela principal: ela é quem decide o vídeo (e o som).
+      // Antes, ao fechar a projeção, o "vídeo vazio" daqui era repassado para lá
+      // e podia cortar o áudio que devia continuar no miniplayer.
+      if (this._left || id === oldId) return;
+      // Projeção é muda: troca a imagem direto (o fade de áudio é da principal)
+      this._teardownPlayer();
+      if (id) this._setupPlayer(id);
+    },
+    // A projeção só mostra a imagem (muda): o som é do player da janela
+    // principal (WebLinkLocalPlayer.vue), que é quem manda no play/pausa e no tempo.
     'config.isPlaying'(playing) {
-      // A janela principal não recebe as escritas desta janela: avisa o estado
-      // (fim do vídeo e pausas) pelo mesmo canal, pro rodapé e o miniplayer seguirem.
-      this.$electron.sendWebLinkProgress({ isPlaying: !!playing });
-      if (!this.player || !this._playerReady) return;
-      if (playing) this._fadeInAndPlay();
-      else this._fadeOutAndPause();
+      if (this._left || !this.player || !this._playerReady) return;
+      try {
+        if (playing) {
+          this.isFading = false;
+          this.player.playVideo();
+        } else {
+          this.player.pauseVideo();
+        }
+      } catch { /* */ }
+    },
+    // Segue o tempo do player da janela principal (informado a cada 0,25 s).
+    // Só a imagem é reposicionada — o som nunca pula.
+    'config.current_time'(t) {
+      if (this._left || !this.player || !this._playerReady || !this.config.isPlaying) return;
+      if (Date.now() < (this._followUntil || 0)) return;
+      try {
+        const now = this.player.getCurrentTime?.() || 0;
+        if (Math.abs(now - t) > 0.35) {
+          // Um pouco à frente: o seek do YouTube leva um instante para voltar a tocar
+          this.player.seekTo(t + 0.2, true);
+          this._followUntil = Date.now() + 1500;
+        }
+      } catch { /* */ }
     },
     'config.stopToken'() {
-      if (!this.player || !this._playerReady) return;
+      if (this._left || !this.player || !this._playerReady) return;
       this._fadeOutAndStop();
     },
     // Volume ajustado pela barra do rodapé (Footer.vue → $webLink.setVolume) —
     // aplica na hora, igual ao vídeo (ver video_player/interface/Popup.vue
-    // watch 'config.volume'). Ignorado durante um fade (_fadeInterval ativo)
-    // pra não brigar com os passos do fade em andamento.
-    'config.volume'(v) {
-      if (!this.player || !this._playerReady || this._fadeInterval) return;
-      this.player.setVolume(Math.max(0, Math.min(100, v ?? 100)));
-    },
-    // Seek pedido pela barra do rodapé (clique na barra de progresso ou
-    // avançar/voltar 10s) — token em vez de observar current_time direto
-    // porque current_time é escrito por este mesmo componente a cada poll
-    // (ver _startProgressPolling), o que geraria um loop/eco sem sentido.
+    // Volume não se aplica aqui: a projeção é sempre muda (ver 'config.isPlaying').
+    // Seek pedido pela barra do rodapé (clique na barra ou ±10 s) — a imagem
+    // vai junto na hora, sem esperar o acompanhamento de 'config.current_time'.
     'config.seekToken'() {
-      if (!this.player || !this._playerReady) return;
+      if (this._left || !this.player || !this._playerReady) return;
       try { this.player.seekTo(this.config.seekTime || 0, true); } catch { /* */ }
     },
   },
@@ -162,10 +160,17 @@ export default {
         events: {
           onReady: () => {
             this._playerReady = true;
-            this.player.setVolume(0);
+            // Sempre mudo: o único áudio é o da janela principal
+            this.player.mute();
             this._disableCaptions();
-            if (this.config.isPlaying) this._fadeInAndPlay();
-            this._startProgressPolling();
+            // Começa no ponto em que o áudio está (um pouco à frente, pelo tempo de carregar)
+            const resumeAt = this.config.current_time || 0;
+            if (resumeAt > 0.5) { try { this.player.seekTo(resumeAt + (this.config.isPlaying ? 0.3 : 0), true); } catch { /* */ } }
+            if (this.config.isPlaying) {
+              this.isFading = true;
+              requestAnimationFrame(() => { requestAnimationFrame(() => { this.isFading = false; }); });
+              this.player.playVideo();
+            }
           },
           // Vídeo chegou ao fim sozinho (sem clique em "Parar"): sem isso, o
           // iframe do YouTube mostra a própria tela de fim (sugestões de
@@ -179,7 +184,10 @@ export default {
           // reforça a desativação nesse momento.
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.ENDED) this._fadeOutAndStop();
-            if (event.data === window.YT.PlayerState.PLAYING) this._disableCaptions();
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              this._disableCaptions();
+              try { this.player.mute(); } catch { /* */ }
+            }
           },
           onError: (event) => this._handlePlayerError(event.data),
         },
@@ -228,30 +236,6 @@ export default {
       if (!this.player) return;
       try { this.player.unloadModule('captions'); } catch { /* */ }
       try { this.player.setOption('captions', 'track', {}); } catch { /* */ }
-    },
-
-    // O IFrame Player da API do YouTube não emite um evento de "timeupdate"
-    // (ao contrário do <video> nativo usado pelo video_player) — só dá pra
-    // saber o tempo atual perguntando (getCurrentTime), por isso o poll.
-    // Alimenta modules.web_link.config.current_time/duration, que a barra do
-    // rodapé (Player.vue, source="web_link") usa pra desenhar a barra de
-    // progresso, igual ao vídeo/mídia do sistema.
-    _startProgressPolling() {
-      clearInterval(this._progressInterval);
-      this._progressInterval = setInterval(() => {
-        if (!this.player || !this._playerReady) return;
-        const currentTime = this.player.getCurrentTime?.() || 0;
-        const duration = this.player.getDuration?.() || 0;
-        // Escreve local (cobre o caso raro de não ser popup, ex.: preview em
-        // dev) e manda pelo canal dedicado (ver helpers/WebLink.js) — é o
-        // canal dedicado que de fato chega na janela principal; a escrita
-        // direta em appdata daqui (is_popup=true) nunca volta por IPC (ver
-        // AppData.js), então sozinha deixava a barra do rodapé/aba "Online"
-        // sempre em 0:00 e sem permitir arrastar pra buscar o tempo.
-        this.$appdata.set('modules.web_link.config.current_time', currentTime);
-        this.$appdata.set('modules.web_link.config.duration', duration);
-        this.$electron.sendWebLinkProgress({ currentTime, duration });
-      }, 500);
     },
 
     _teardownPlayer() {
@@ -316,6 +300,29 @@ export default {
         this.$appdata.set('modules.web_link.config.current_time', 0);
         this.$appdata.set('modules.web_link.config.duration', 0);
       });
+    },
+
+    // Link tirado da projeção (botão de tela): esmaece áudio e imagem e pausa,
+    // SEM limpar o estado — o vídeo continua na janela principal a partir do
+    // current_time que este player reportou por último. Para de reportar o
+    // progresso já, para não brigar com o player local durante o crossfade.
+    _leaveProjection() {
+      this._left = true;
+      clearInterval(this._progressInterval);
+      this._progressInterval = null;
+      if (!this.player || !this._playerReady) return;
+      this.isFading = true;
+      clearInterval(this._fadeInterval);
+      let v = this.player.getVolume?.() ?? 0;
+      this._fadeInterval = setInterval(() => {
+        v = Math.max(0, v - 10);
+        try { this.player.setVolume(v); } catch { /* */ }
+        if (v <= 0) {
+          clearInterval(this._fadeInterval);
+          this._fadeInterval = null;
+          try { this.player.pauseVideo(); } catch { /* */ }
+        }
+      }, 40);
     },
 
     // Fechamento real da janela de saída — o processo principal manda
@@ -408,11 +415,31 @@ export default {
 }
 /* :deep() pq o <iframe> real é criado pela API do YouTube fora do Vue (troca
    a div#wl-yt-player por ele), então não recebe o atributo do scoped CSS. */
+/* Esconde o título/canal (topo), o botão compartilhar e o "Mais vídeos"/logo
+   (base) que o YouTube desenha DENTRO do iframe — não dá para alcançá-los por
+   CSS nem desligá-los por parâmetro. Eles ficam presos às bordas de cima e de
+   baixo do player: com o player mais alto que a tela, o vídeo continua do
+   mesmo tamanho (cabe pela largura, em tela 16:9) e ganha faixas pretas em
+   cima/embaixo, onde esses elementos passam a ser desenhados, fora da tela. */
+.wl-iframe-wrap {
+  position: relative;
+  overflow: hidden;
+}
 .wl-iframe-wrap :deep(iframe) {
+  position: absolute;
+  left: 0;
+  top: calc(-1 * max(10%, 90px));
   width: 100%;
-  height: 100%;
+  height: calc(100% + 2 * max(10%, 90px));
   border: none;
   display: block;
+}
+/* Camada transparente por cima: o mouse sobre a projeção não faz o YouTube
+   mostrar os controles/título de novo */
+.wl-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 .wl-iframe--fading { opacity: 0; }
 .wl-error {

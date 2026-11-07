@@ -53,11 +53,18 @@
         playsinline
         @loadedmetadata="syncMiniVideo"
       />
+      <!-- YouTube: player da API (mudo) que segue a projeção por comandos, como no flute.
+           O host é do Vue; o YT.Player cria o próprio iframe dentro dele. -->
+      <div
+        v-else-if="mini_media.kind === 'youtube'"
+        class="mini-pip-media mini-pip-yt"
+      >
+        <div ref="miniYtHost" class="mini-pip-yt-host" />
+        <div v-if="miniYtCover" class="mini-pip-yt-cover" />
+      </div>
       <iframe
         v-else
-        ref="miniFrame"
-        :src="mini_media.kind === 'youtube' ? miniYtSrc : mini_media.src"
-        @load="syncMiniYoutube"
+        :src="mini_media.src"
         class="mini-pip-media"
         allow="autoplay; encrypted-media"
         frameborder="0"
@@ -273,8 +280,8 @@
           @click="fullscreen()"
         />
         <LScreenBtn
-          v-if="location !== 'fullscreen' && source !== 'soundmaster' && source !== 'web_link'"
-          :module="source === 'video' ? 'video_player' : source === 'slide_editor' ? 'slide_editor' : 'media'"
+          v-if="location !== 'fullscreen' && source !== 'soundmaster' && (source !== 'web_link' || media.config.audio)"
+          :module="source === 'video' ? 'video_player' : source === 'slide_editor' ? 'slide_editor' : source === 'web_link' ? 'web_link' : 'media'"
         />
 
         <v-menu v-if="location !== 'fullscreen' && compact">
@@ -359,6 +366,7 @@
 <script>
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import LSlide from "@/components/Slide.vue";
+import { loadYoutubeApi } from "@/helpers/YoutubeApi";
 
 export default {
   name: "PlayerComponent",
@@ -376,7 +384,8 @@ export default {
   data: () => ({
     pipOpen: false,
     _volumeFadeInterval: null,
-    miniYtSrc: "",
+    // Capa preta enquanto o player do YouTube inicia ou quando o vídeo terminou
+    miniYtCover: false,
     // Quadro flutuante (estilo do miniplayer do flute): canto salvo e arraste com encaixe
     miniPipCorner: "bottom-left",
     miniPipDx: 0,
@@ -461,7 +470,7 @@ export default {
           loading: false,
           data: {},
           config: {
-            title: "YouTube",
+            title: cfg.title || "YouTube",
             subtitle: "",
             track: 0,
             image: "",
@@ -659,7 +668,6 @@ export default {
       if (this.source === "web_link") {
         const cfg = this.$webLink.getConfig();
         if (cfg.videoId) {
-          // URL estável (sem autoplay): play/pause e posição vão por postMessage, sem recarregar o quadro
           return {
             kind: "youtube",
             youtubeId: cfg.videoId,
@@ -703,14 +711,23 @@ export default {
     },
   },
   watch: {
-    "mini_media.youtubeId": {
-      handler() { this.refreshMiniYt(); },
-      immediate: true,
+    // YouTube no quadro: cria o player ao aparecer um vídeo, troca de vídeo sem recriar
+    // e destrói quando o vídeo sai (fim, parar ou projeção fechada)
+    "mini_media.youtubeId"(id) {
+      if (!id) { this.destroyMiniYt(); return; }
+      if (this._miniYt) {
+        this.coverMiniYt();
+        try { this._miniYt.loadVideoById({ videoId: id, startSeconds: this.mini_media.time || 0 }); } catch { /* */ }
+        if (!this.mini_media.playing) setTimeout(() => { try { this._miniYt?.pauseVideo(); } catch { /* */ } }, 300);
+        return;
+      }
+      this.$nextTick(() => this.initMiniYt());
     },
-    // Espelha o vídeo local do quadro: play/pause e posição acompanham a projeção
+    // Espelha a projeção: play/pause e posição acompanham o que está na saída
     "mini_media.playing"(playing) {
       if (this.mini_media?.kind === "youtube") {
-        this.refreshMiniYt();
+        if (!this._miniYtReady) return;
+        try { if (playing) this._miniYt.playVideo(); else this._miniYt.pauseVideo(); } catch { /* */ }
         return;
       }
       const el = this.$refs.miniVideo;
@@ -719,7 +736,14 @@ export default {
       else el.pause();
     },
     "mini_media.time"(time) {
-      if (this.mini_media?.kind === "youtube") return;
+      if (this.mini_media?.kind === "youtube") {
+        if (!this._miniYtReady) return;
+        try {
+          const current = this._miniYt.getCurrentTime?.() || 0;
+          if (Math.abs(current - time) > 0.8) this._miniYt.seekTo(time, true);
+        } catch { /* */ }
+        return;
+      }
       const el = this.$refs.miniVideo;
       if (el && Math.abs(el.currentTime - time) > 0.4) el.currentTime = time;
     },
@@ -754,25 +778,63 @@ export default {
       window.removeEventListener("pointermove", this.onMiniPipMove);
       window.removeEventListener("pointerup", this.onMiniPipUp);
     },
-    // Quadro do YouTube: a URL recarrega só quando o estado muda (play/pausa ou outro vídeo),
-    // começando do tempo atual da projeção. Assim não depende de comandos postMessage.
-    refreshMiniYt() {
-      const m = this.mini_media;
-      if (!m || m.kind !== "youtube") { this.miniYtSrc = ""; return; }
-      this.miniYtSrc = `https://www.youtube.com/embed/${m.youtubeId}?autoplay=${m.playing ? 1 : 0}&mute=1&controls=0&rel=0&modestbranding=1&start=${Math.floor(m.time || 0)}`;
+    // Capa preta curta enquanto o player inicia (esconde o título/logo do YouTube)
+    coverMiniYt() {
+      this.miniYtCover = true;
+      clearTimeout(this._miniYtCoverTimer);
+      this._miniYtCoverTimer = setTimeout(() => { this.miniYtCover = false; }, 1200);
     },
-    // Comandos da API do YouTube (iframe com enablejsapi=1) — sem recarregar o quadro
-    postMiniYoutube(func, args = "") {
-      const w = this.$refs.miniFrame?.contentWindow;
-      if (w) w.postMessage(JSON.stringify({ event: "command", func, args }), "*");
-    },
-    syncMiniYoutube() {
+    // Player do quadro (mudo, sem controles): segue a projeção por comandos da API,
+    // sem recarregar o iframe — mesmo esquema do miniplayer do flute
+    async initMiniYt() {
+      if (this.location !== "footer" || this._miniYt) return;
       const m = this.mini_media;
-      if (!m || m.kind !== "youtube") return;
-      this._miniYtTime = m.time;
-      this.postMiniYoutube("mute");
-      this.postMiniYoutube("seekTo", [m.time, true]);
-      this.postMiniYoutube(m.playing ? "playVideo" : "pauseVideo");
+      const host = this.$refs.miniYtHost;
+      if (!m || m.kind !== "youtube" || !host) return;
+      const YT = await loadYoutubeApi();
+      // O vídeo pode ter saído enquanto a API carregava
+      if (this._miniYt || this.mini_media?.kind !== "youtube" || !this.$refs.miniYtHost) return;
+      const el = document.createElement("div");
+      this.$refs.miniYtHost.appendChild(el);
+      this._miniYtReady = false;
+      this.coverMiniYt();
+      this._miniYt = new YT.Player(el, {
+        width: "100%",
+        height: "100%",
+        videoId: this.mini_media.youtubeId,
+        playerVars: {
+          autoplay: 1, mute: 1, controls: 0, modestbranding: 1, rel: 0,
+          iv_load_policy: 3, disablekb: 1, fs: 0, playsinline: 1, cc_load_policy: 0,
+        },
+        events: {
+          onReady: () => {
+            if (!this._miniYt) return;
+            this._miniYtReady = true;
+            const cur = this.mini_media;
+            try {
+              this._miniYt.mute();
+              this._miniYt.setOption?.("captions", "track", {});
+              this._miniYt.seekTo(cur?.time || 0, true);
+              if (cur?.playing) this._miniYt.playVideo();
+              else this._miniYt.pauseVideo();
+            } catch { /* */ }
+          },
+          onStateChange: (event) => {
+            // Fim do vídeo: capa preta em vez da tela de sugestões do YouTube
+            if (event.data === 0) this.miniYtCover = true;
+            else if (event.data === 1) this.miniYtCover = false;
+          },
+        },
+      });
+    },
+    destroyMiniYt() {
+      try { this._miniYt?.destroy?.(); } catch { /* já destruído */ }
+      this._miniYt = null;
+      this._miniYtReady = false;
+      clearTimeout(this._miniYtCoverTimer);
+      this.miniYtCover = false;
+      const host = this.$refs.miniYtHost;
+      if (host) host.innerHTML = "";
     },
     // Ao carregar o quadro, posiciona no tempo atual da projeção e segue o estado de reprodução
     syncMiniVideo() {
@@ -838,7 +900,7 @@ export default {
     close: function () {
       if (this.source === 'video') { this.$videoPlayer.stop(); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.stop(); return; }
-      if (this.source === 'web_link') { this.$webLink.stop(); return; }
+      if (this.source === 'web_link') { this.$webLink.close(); return; }
       if (this.source === 'slide_editor') { this.$slideEditor.stop(); return; }
       this.$media.close();
     },
@@ -897,18 +959,20 @@ export default {
       else { await this.$electron.pipOpen(); this.pipOpen = true; }
     },
   },
+  // Um único mounted (antes havia dois e o segundo apagava o primeiro,
+  // deixando o PIP do vídeo sem o aviso de janela fechada)
   async mounted() {
+    this.miniPipCorner = this.$userdata.get("modules.media.miniplayer_corner", "bottom-left");
+    if (this.mini_media?.kind === "youtube") this.$nextTick(() => this.initMiniYt());
     if (this.source !== 'video' || !this.$electron.isElectron()) return;
     this.pipOpen = await this.$electron.pipIsOpen();
     this._pipClosedHandler = this.$electron.on('video-pip:closed', () => { this.pipOpen = false; });
-  },
-  mounted() {
-    this.miniPipCorner = this.$userdata.get("modules.media.miniplayer_corner", "bottom-left");
   },
   beforeUnmount() {
     if (this._pipClosedHandler) this.$electron.off('video-pip:closed', this._pipClosedHandler);
     clearInterval(this._volumeFadeInterval);
     this.endMiniPipDrag();
+    this.destroyMiniYt();
   },
 };
 </script>
@@ -924,6 +988,31 @@ export default {
   display: block;
   object-fit: contain;
   pointer-events: none;
+}
+.mini-pip-yt {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.mini-pip-yt-host {
+  width: 100%;
+  height: 100%;
+}
+/* Mesmo recorte da projeção (WebLinkFrame.vue), mais folgado porque no quadro
+   pequeno o título do YouTube ocupa uma parte maior da altura */
+.mini-pip-yt-host :deep(iframe) {
+  position: absolute;
+  left: 0;
+  top: -30%;
+  width: 100%;
+  height: 160%;
+  border: 0;
+  display: block;
+}
+.mini-pip-yt-cover {
+  position: absolute;
+  inset: 0;
+  background: #000;
 }
 /* O cartão do rodapé não pode cortar o que flutua acima dele (miniplayer). */
 .player-root--footer {

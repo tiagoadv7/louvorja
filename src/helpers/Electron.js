@@ -306,6 +306,10 @@ export default {
     isElectron() && window.electron.sendPipStop(),
   sendVideoProgress: (data) =>
     isElectron() && window.electron.sendVideoProgress(data),
+  // Estado do YouTube na projeção (tempo, duração, play/pausa, vídeo, erro)
+  // para a janela principal — ver WebLinkFrame.vue e helpers/WebLink.js
+  sendWebLinkProgress: (data) =>
+    isElectron() && window.electron.sendWebLinkProgress?.(data),
 
   // ── Sistema ───────────────────────────────────────────────────────────
   getHostname: () =>

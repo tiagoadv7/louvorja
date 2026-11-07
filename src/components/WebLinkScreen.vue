@@ -2,6 +2,7 @@
   <div v-if="isActive" class="wls-root">
     <div v-if="videoId" class="wls-iframe-wrap">
       <div id="wls-yt-player" />
+      <div class="wls-shield" />
     </div>
     <iframe
       v-else-if="url"
@@ -143,10 +144,24 @@ export default {
   height: 100%;
   border: none;
 }
+/* Mesmo recorte da projeção (ver WebLinkFrame.vue): título, compartilhar e
+   "Mais vídeos"/logo do YouTube ficam fora da área visível */
+.wls-iframe-wrap {
+  position: relative;
+  overflow: hidden;
+}
 .wls-iframe-wrap :deep(iframe) {
+  position: absolute;
+  left: 0;
+  top: calc(-1 * max(10%, 90px));
   width: 100%;
-  height: 100%;
+  height: calc(100% + 2 * max(10%, 90px));
   border: none;
   display: block;
+}
+.wls-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 </style>
