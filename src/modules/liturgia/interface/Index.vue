@@ -1740,6 +1740,11 @@ export default {
     onItemRowClick(item, idx) {
       if ((item.type === 'midia' || item.type === 'arquivo') && this.isPlayable(item)) {
         this.playItem(item, idx);
+      } else if (item.type === 'link' && item.url) {
+        // Link adicionado: clicar nele reproduz (YouTube alterna play/pausa,
+        // igual ao botão da linha; Canva/outros sites vão para a projeção)
+        if (this.$webLink.isYoutube(item.url)) this.toggleYoutubeItem(item, idx);
+        else this.playItem(item, idx);
       } else {
         this.toggleSelect(idx);
       }
