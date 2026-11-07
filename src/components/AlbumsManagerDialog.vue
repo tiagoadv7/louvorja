@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialog" max-width="640" scrollable>
-    <v-card rounded="lg" elevation="12" style="overflow:hidden">
+    <v-card rounded="lg" elevation="12" class="lja-glass" theme="dark" style="overflow:hidden">
       <div class="alb-header">
         <v-avatar size="44" color="primary" variant="tonal" class="flex-shrink-0">
           <v-icon size="22">mdi-album</v-icon>

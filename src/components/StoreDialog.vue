@@ -4,7 +4,7 @@
       <slot :props="props" />
     </template>
 
-    <v-card>
+    <v-card class="lja-glass" theme="dark">
       <v-card-title class="d-flex align-center ga-2 py-3">
         <v-icon>mdi-store-outline</v-icon>
         Loja / Cache Local

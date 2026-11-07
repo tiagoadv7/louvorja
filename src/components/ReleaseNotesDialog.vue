@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialog" max-width="560" persistent>
-    <v-card rounded="lg" elevation="12" style="overflow:hidden">
+    <v-card rounded="lg" elevation="12" class="lja-glass" theme="dark" style="overflow:hidden">
 
       <!-- Cabeçalho -->
       <div class="rn-header">
