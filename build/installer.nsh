@@ -23,6 +23,32 @@ Var featureSlideIndex
 Var hFontTitle
 Var legacyBackupDir
 Var legacyOrigDir
+; Instalações encontradas nos discos (ver LjaScanDrives / página "Onde instalar")
+Var ljaN
+Var ljaD1
+Var ljaD2
+Var ljaD3
+Var ljaD4
+Var ljaD5
+Var ljaD6
+Var ljaD7
+Var ljaD8
+Var ljaR1
+Var ljaR2
+Var ljaR3
+Var ljaR4
+Var ljaR5
+Var ljaR6
+Var ljaR7
+Var ljaR8
+Var ljaROther
+Var ljaPrevDir   ; pasta da instalação anterior do Louvor JA (registro)
+Var ljaFinalDir  ; pasta escolhida, antes do ajuste automático do electron-builder
+Var ljaKeepDir   ; 1 = a pasta escolhida já tem o Louvor JA: instala nela mesma
+Var bkADir       ; backup da pasta de destino
+Var bkAOrig
+Var bkBDir       ; backup da instalação anterior, quando for outra pasta
+Var bkBOrig
 !endif
 
 ; Recursiva: move de volta tudo que está em "$legacyBackupDir<subcaminho>" pra
@@ -41,10 +67,21 @@ Var legacyOrigDir
 ; só usa instruções nativas do NSIS (sem ${If}/LogicLib), processar isso já
 ; aqui em cima — antes do "!include MUI2.nsh" no topo do script gerado — é seguro.
 !ifndef BUILD_UNINSTALLER
+; Quando o arquivo do backup já existe no destino (recém-extraído):
+;  - em \config\...  → vale o do BACKUP (dados do Delphi e do usuário: banco,
+;    capas, músicas, imagens) — o recém-extraído é só o padrão de fábrica;
+;  - em \db, \locales, \resources ou um arquivo do próprio Electron na raiz →
+;    vale o NOVO (é o programa/catálogo atualizado); a cópia antiga é descartada;
+;  - qualquer outro caso → nada é apagado: a cópia antiga fica no backup.
+; Arquivos do LouvorJA Delphi (LouvorJA.exe, midas.dll, libeay32.dll,
+; ssleay32.dll, unins000.*) não têm nome igual a nenhum arquivo do Electron,
+; então sempre voltam para o lugar.
 Function RestoreLegacyMerge
   Exch $R0
   Push $R1
   Push $R2
+  Push $R3
+  Push $R4
 
   FindFirst $R1 $R2 "$legacyBackupDir$R0\*.*"
   loop:
@@ -61,8 +98,29 @@ Function RestoreLegacyMerge
       Goto continue
 
     isFile:
-      IfFileExists "$legacyOrigDir$R0\$R2" continue 0
+      IfFileExists "$legacyOrigDir$R0\$R2" collision 0
       Rename "$legacyBackupDir$R0\$R2" "$legacyOrigDir$R0\$R2"
+      Goto continue
+
+    collision:
+      ; \config ou \config\... → o do backup substitui o recém-extraído
+      StrCpy $R3 "$R0" 7
+      StrCmp $R3 "\config" 0 notConfig
+      StrCpy $R4 "$R0" 1 7
+      StrCmp $R4 "" keepOld
+      StrCmp $R4 "\" keepOld notConfig
+    keepOld:
+      Delete "$legacyOrigDir$R0\$R2"
+      Rename "$legacyBackupDir$R0\$R2" "$legacyOrigDir$R0\$R2"
+      Goto continue
+
+    notConfig:
+      Push "$R0"
+      Push "$R2"
+      Call LjaIsElectronPath
+      Pop $R3
+      StrCmp $R3 "1" 0 continue
+      Delete "$legacyBackupDir$R0\$R2"
 
     continue:
       FindNext $R1 $R2
@@ -71,10 +129,13 @@ Function RestoreLegacyMerge
   break:
     FindClose $R1
 
+  Pop $R4
+  Pop $R3
   Pop $R2
   Pop $R1
   Pop $R0
 FunctionEnd
+
 !endif
 
 ; ── Imagem no topo das páginas (Diretório, Modo de instalação, Progresso) ───
@@ -83,6 +144,40 @@ FunctionEnd
   !define MUI_HEADERIMAGE
   !define MUI_HEADERIMAGE_BITMAP "${BUILD_RESOURCES_DIR}\installer-header.bmp"
 !macroend
+
+; Opções da página "Onde instalar" (usadas em LjaWherePageCreate/Leave)
+  !macro LjaWhereRadio IDX
+    ${If} $ljaN >= ${IDX}
+      StrCpy $1 $ljaD${IDX}
+      StrCpy $2 ""
+      ${If} ${FileExists} "$1\LouvorJA.exe"
+        StrCpy $2 "LouvorJA Delphi"
+      ${EndIf}
+      ${If} ${FileExists} "$1\${APP_EXECUTABLE_FILENAME}"
+        ${If} $2 != ""
+          StrCpy $2 "$2 + Louvor JA"
+        ${Else}
+          StrCpy $2 "Louvor JA"
+        ${EndIf}
+      ${EndIf}
+      IntOp $3 $3 + 15
+      ${NSD_CreateRadioButton} 4% $3u 92% 13u "$1   ($2)"
+      Pop $ljaR${IDX}
+      ${If} $1 == $INSTDIR
+        ${NSD_Check} $ljaR${IDX}
+        StrCpy $4 "1"
+      ${EndIf}
+    ${EndIf}
+  !macroend
+
+  !macro LjaWherePick IDX
+    ${If} $ljaN >= ${IDX}
+      ${NSD_GetState} $ljaR${IDX} $0
+      ${If} $0 == ${BST_CHECKED}
+        StrCpy $INSTDIR $ljaD${IDX}
+      ${EndIf}
+    ${EndIf}
+  !macroend
 
 ; ── Página de boas-vindas com banner lateral (capas + recursos) ────────────
 ; O mesmo bitmap é reaproveitado automaticamente na página final (Finish),
@@ -95,6 +190,293 @@ FunctionEnd
   !define MUI_WELCOMEPAGE_TITLE "Bem-vindo ao instalador do Louvor JA"
   !define MUI_WELCOMEPAGE_TEXT "Este assistente vai instalar o Louvor JA no seu computador.$\r$\n$\r$\nOrganize hinários, coletâneas e apresente louvores em tela com facilidade."
   !insertmacro MUI_PAGE_WELCOME
+
+  ; Funções do Louvor JA que usam defines do electron-builder (APP_EXECUTABLE_FILENAME...)
+  ; e o LogicLib: ficam nesta macro, processada depois do common.nsh/MUI2.
+; Entrada: pilha = subpasta (ex.: "\db\x"), nome do arquivo. Saída: "1" se o
+; arquivo pertence ao Louvor JA (Electron) — pode ser trocado pela versão nova.
+Function LjaIsElectronPath
+  Exch $R6 ; nome do arquivo
+  Exch
+  Exch $R5 ; subpasta
+  Push $R7
+  Push $R8
+
+  StrCpy $R8 "0"
+  ; Pastas do Electron: \db, \locales, \resources (e o que houver dentro)
+  StrCpy $R7 "$R5" 3
+  StrCmp $R7 "\db" 0 +4
+    StrCpy $R7 "$R5" 1 3
+    StrCmp $R7 "" yes
+    StrCmp $R7 "\" yes
+  StrCpy $R7 "$R5" 8
+  StrCmp $R7 "\locales" 0 +4
+    StrCpy $R7 "$R5" 1 8
+    StrCmp $R7 "" yes
+    StrCmp $R7 "\" yes
+  StrCpy $R7 "$R5" 10
+  StrCmp $R7 "\resources" 0 +4
+    StrCpy $R7 "$R5" 1 10
+    StrCmp $R7 "" yes
+    StrCmp $R7 "\" yes
+  ; Arquivos do Electron na raiz
+  StrCmp $R5 "" 0 done
+  StrCmp $R6 "${APP_EXECUTABLE_FILENAME}" yes
+  StrCmp $R6 "${UNINSTALL_FILENAME}" yes
+  StrCmp $R6 "LICENSE.electron.txt" yes
+  StrCmp $R6 "LICENSES.chromium.html" yes
+  StrCmp $R6 "chrome_100_percent.pak" yes
+  StrCmp $R6 "chrome_200_percent.pak" yes
+  StrCmp $R6 "d3dcompiler_47.dll" yes
+  StrCmp $R6 "dxcompiler.dll" yes
+  StrCmp $R6 "dxil.dll" yes
+  StrCmp $R6 "ffmpeg.dll" yes
+  StrCmp $R6 "icudtl.dat" yes
+  StrCmp $R6 "libEGL.dll" yes
+  StrCmp $R6 "libGLESv2.dll" yes
+  StrCmp $R6 "resources.pak" yes
+  StrCmp $R6 "snapshot_blob.bin" yes
+  StrCmp $R6 "v8_context_snapshot.bin" yes
+  StrCmp $R6 "vk_swiftshader.dll" yes
+  StrCmp $R6 "vk_swiftshader_icd.json" yes
+  StrCmp $R6 "vulkan-1.dll" yes
+  StrCmp $R6 "uninstallerIcon.ico" yes done
+  yes:
+    StrCpy $R8 "1"
+  done:
+  StrCpy $R6 $R8
+  Pop $R8
+  Pop $R7
+  Pop $R5
+  Exch $R6
+FunctionEnd
+
+; Remove só as subpastas que ficaram VAZIAS no backup (RMDir sem /r nunca
+; apaga pasta com arquivo dentro). Entrada: pilha = pasta.
+Function LjaPruneEmpty
+  Exch $R0
+  Push $R1
+  Push $R2
+  FindFirst $R1 $R2 "$R0\*.*"
+  ploop:
+    StrCmp $R2 "" pdone
+    StrCmp $R2 "." pnext
+    StrCmp $R2 ".." pnext
+    IfFileExists "$R0\$R2\*.*" 0 pnext
+      Push "$R0\$R2"
+      Call LjaPruneEmpty
+      RMDir "$R0\$R2"
+    pnext:
+    FindNext $R1 $R2
+    Goto ploop
+  pdone:
+  FindClose $R1
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+; Tira a pasta do caminho (renomeia para "<pasta>.update-backup") antes de
+; instalar — ver comentário em customInit sobre o desinstalador antigo.
+; Entrada: pilha = pasta. Saída: caminho do backup, "" (nada a guardar),
+; "BUSY" (já existem dois backups antigos) ou "ERR" (arquivo em uso).
+Function LjaBackupDir
+  Exch $R0
+  Push $R1
+  StrCpy $R1 ""
+  IfFileExists "$R0\*.*" 0 bdone
+  StrCpy $R1 "$R0.update-backup"
+  IfFileExists "$R1\*.*" 0 brename
+    IfFileExists "$R0.update-backup-old\*.*" 0 +3
+      StrCpy $R1 "BUSY"
+      Goto bdone
+    Rename "$R1" "$R0.update-backup-old"
+  brename:
+  ClearErrors
+  Rename "$R0" "$R1"
+  IfErrors 0 bdone
+    ClearErrors
+    StrCpy $R1 "ERR"
+  bdone:
+  StrCpy $R0 $R1
+  Pop $R1
+  Exch $R0
+FunctionEnd
+
+; Devolve um backup para o lugar (merge) e limpa o que sobrar vazio.
+; Usa $legacyBackupDir/$legacyOrigDir.
+Function LjaRestoreBackup
+  CreateDirectory "$legacyOrigDir"
+  Push ""
+  Call RestoreLegacyMerge
+  Push "$legacyBackupDir"
+  Call LjaPruneEmpty
+  ClearErrors
+  RMDir "$legacyBackupDir"
+  ClearErrors
+  ${If} ${FileExists} "$legacyBackupDir\*.*"
+    DetailPrint "  » Alguns arquivos antigos foram mantidos em $legacyBackupDir"
+  ${Else}
+    DetailPrint "  » Arquivos de $legacyOrigDir restaurados (LouvorJA Delphi e dados preservados)"
+  ${EndIf}
+FunctionEnd
+
+; Procura o Louvor JA (Delphi: LouvorJA.exe / novo: "Louvor JA.exe") em todos
+; os discos (fixos, removíveis e de rede — sem CD/DVD, que travaria pedindo disco).
+Function LjaAddIfInstalled
+  Exch $R0
+  Push $R1
+  IfFileExists "$R0\LouvorJA.exe" found 0
+  IfFileExists "$R0\${APP_EXECUTABLE_FILENAME}" found adone
+  found:
+    ; Sem repetir o mesmo caminho
+    StrCmp $R0 $ljaD1 adone
+    StrCmp $R0 $ljaD2 adone
+    StrCmp $R0 $ljaD3 adone
+    StrCmp $R0 $ljaD4 adone
+    StrCmp $R0 $ljaD5 adone
+    StrCmp $R0 $ljaD6 adone
+    StrCmp $R0 $ljaD7 adone
+    StrCmp $R0 $ljaD8 adone
+    IntCmp $ljaN 8 adone 0 adone
+    IntOp $ljaN $ljaN + 1
+    StrCmp $ljaN 1 0 +2
+      StrCpy $ljaD1 $R0
+    StrCmp $ljaN 2 0 +2
+      StrCpy $ljaD2 $R0
+    StrCmp $ljaN 3 0 +2
+      StrCpy $ljaD3 $R0
+    StrCmp $ljaN 4 0 +2
+      StrCpy $ljaD4 $R0
+    StrCmp $ljaN 5 0 +2
+      StrCpy $ljaD5 $R0
+    StrCmp $ljaN 6 0 +2
+      StrCpy $ljaD6 $R0
+    StrCmp $ljaN 7 0 +2
+      StrCpy $ljaD7 $R0
+    StrCmp $ljaN 8 0 +2
+      StrCpy $ljaD8 $R0
+  adone:
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+Function LjaScanDrives
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
+  Push $9
+  StrCpy $ljaN 0
+  ; Sem a caixa "não há disco na unidade" do Windows durante a busca
+  System::Call 'kernel32::SetErrorMode(i 0x8001) i .r9'
+  ; A instalação já registrada primeiro
+  StrCmp $ljaPrevDir "" +3
+    Push $ljaPrevDir
+    Call LjaAddIfInstalled
+  System::Call 'kernel32::GetLogicalDrives() i .r0'
+  StrCpy $1 0
+  sloop:
+    IntCmp $1 26 sdone
+    IntOp $2 1 << $1
+    IntOp $2 $0 & $2
+    IntCmp $2 0 snext
+    IntOp $3 $1 + 65
+    IntFmt $4 "%c" $3
+    System::Call 'kernel32::GetDriveTypeW(w "$4:\") i .r5'
+    IntCmp $5 2 scheck
+    IntCmp $5 3 scheck
+    IntCmp $5 4 scheck snext snext
+    scheck:
+      Push "$4:\Program Files (x86)\Louvor JA"
+      Call LjaAddIfInstalled
+      Push "$4:\Program Files\Louvor JA"
+      Call LjaAddIfInstalled
+      Push "$4:\Program Files (x86)\LouvorJA"
+      Call LjaAddIfInstalled
+      Push "$4:\Program Files\LouvorJA"
+      Call LjaAddIfInstalled
+      Push "$4:\Louvor JA"
+      Call LjaAddIfInstalled
+      Push "$4:\LouvorJA"
+      Call LjaAddIfInstalled
+    snext:
+    IntOp $1 $1 + 1
+    Goto sloop
+  sdone:
+  System::Call 'kernel32::SetErrorMode(i r9)'
+  Pop $9
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
+  ; ── Página "Onde instalar": instalações encontradas nos discos ────────────
+  ; Lista cada pasta com o Louvor JA (Delphi e/ou novo) em C:, D:, E:, B:...
+  ; e deixa escolher em qual instalar — ou "Outro local", que segue para a
+  ; tela de pasta normal. Sem nada encontrado, a página nem aparece.
+  Page custom LjaWherePageCreate LjaWherePageLeave
+
+
+  Function LjaWherePageCreate
+    ; Atualização automática (sem perguntas) não mostra esta página
+    ${If} ${isUpdated}
+      Abort
+    ${EndIf}
+    Call LjaScanDrives
+    ${If} $ljaN == 0
+      Abort
+    ${EndIf}
+
+    !insertmacro MUI_HEADER_TEXT "Onde instalar" "O Louvor JA já está neste computador"
+
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 24u "Encontramos o Louvor JA nas pastas abaixo. Escolha onde instalar esta versão.$\r$\nOs arquivos do LouvorJA Delphi e as suas músicas, capas e banco de dados são mantidos."
+    Pop $0
+
+    StrCpy $3 14   ; posição vertical (u) da próxima opção
+    StrCpy $4 "0"  ; alguma opção já marcada?
+    !insertmacro LjaWhereRadio 1
+    !insertmacro LjaWhereRadio 2
+    !insertmacro LjaWhereRadio 3
+    !insertmacro LjaWhereRadio 4
+    !insertmacro LjaWhereRadio 5
+    !insertmacro LjaWhereRadio 6
+    !insertmacro LjaWhereRadio 7
+    !insertmacro LjaWhereRadio 8
+
+    IntOp $3 $3 + 19
+    ${NSD_CreateRadioButton} 4% $3u 92% 13u "Outro local (escolher na próxima tela)"
+    Pop $ljaROther
+
+    ; Nada coincidiu com a pasta padrão: marca a primeira encontrada
+    ${If} $4 == "0"
+      ${NSD_Check} $ljaR1
+    ${EndIf}
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function LjaWherePageLeave
+    !insertmacro LjaWherePick 1
+    !insertmacro LjaWherePick 2
+    !insertmacro LjaWherePick 3
+    !insertmacro LjaWherePick 4
+    !insertmacro LjaWherePick 5
+    !insertmacro LjaWherePick 6
+    !insertmacro LjaWherePick 7
+    !insertmacro LjaWherePick 8
+  FunctionEnd
 !macroend
 
 ; ── Página com slideshow dos recursos do app (antes de copiar os arquivos) ──
@@ -231,6 +613,70 @@ FunctionEnd
 
   Function FeatureSlidesPageLeave
     ${NSD_KillTimer} FeatureSlidesAdvance
+    Call LjaDoBackups
+  FunctionEnd
+
+  ; ── Backup das pastas antes de instalar ─────────────────────────────────
+  ; A pasta de destino e a da instalação anterior (se for outra) saem do caminho
+  ; (rename para "<pasta>.update-backup", instantâneo) antes do
+  ; "uninstallOldVersion": o desinstalador ANTIGO gravado em disco é quem roda
+  ; ali, e versões antigas faziam "RMDir /r" na pasta inteira — LouvorJA Delphi,
+  ; músicas, capas e banco junto. Depois da extração, customInstall devolve tudo
+  ; (LjaRestoreBackup). Nada do Delphi é apagado em nenhum momento.
+  Function LjaDoBackups
+    ${If} $bkADir != ""
+    ${OrIf} $bkBDir != ""
+      Return ; já feito (voltou de página)
+    ${EndIf}
+    ; Pasta que já tem o Louvor JA (Delphi ou novo): instala nela mesma — sem
+    ; o ajuste automático do electron-builder, que acrescentaria "\Louvor JA"
+    ; a uma pasta "D:\LouvorJA" e instalaria numa subpasta
+    StrCpy $ljaKeepDir 0
+    ${If} ${FileExists} "$INSTDIR\LouvorJA.exe"
+    ${OrIf} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+      StrCpy $ljaKeepDir 1
+    ${Else}
+      ${StrContains} $0 "${APP_FILENAME}" $INSTDIR
+      ${If} $0 == ""
+        StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
+      ${EndIf}
+    ${EndIf}
+    StrCpy $ljaFinalDir $INSTDIR
+
+    ; A) pasta de destino
+    Push $INSTDIR
+    Call LjaBackupDir
+    Pop $0
+    ${If} $0 == "BUSY"
+      MessageBox MB_OK|MB_ICONSTOP "Existem cópias de segurança de uma atualização anterior em:$\r$\n$INSTDIR.update-backup$\r$\n$INSTDIR.update-backup-old$\r$\n$\r$\nNada foi apagado. Verifique essas pastas (músicas e capas podem estar nelas) e tente de novo."
+      Abort
+    ${ElseIf} $0 == "ERR"
+      MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a instalação em:$\r$\n$INSTDIR$\r$\n$\r$\nAlgum arquivo está em uso. Feche o Louvor JA e o LouvorJA Delphi (e qualquer programa usando essa pasta) e tente de novo. Nada foi apagado."
+      Abort
+    ${EndIf}
+    StrCpy $bkADir $0
+    StrCpy $bkAOrig $INSTDIR
+
+    ; B) instalação anterior do Louvor JA em OUTRA pasta (outro disco, por ex.)
+    ${If} $ljaPrevDir != ""
+    ${AndIf} $ljaPrevDir != $INSTDIR
+    ${AndIf} ${FileExists} "$ljaPrevDir\*.*"
+      Push $ljaPrevDir
+      Call LjaBackupDir
+      Pop $0
+      ${If} $0 == "BUSY"
+      ${OrIf} $0 == "ERR"
+        ; Desfaz o backup A antes de parar — nada fica fora do lugar
+        ${If} $bkADir != ""
+          Rename "$bkADir" "$bkAOrig"
+          StrCpy $bkADir ""
+        ${EndIf}
+        MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a pasta da instalação anterior:$\r$\n$ljaPrevDir$\r$\n$\r$\nFeche o Louvor JA e o LouvorJA Delphi e tente de novo. Nada foi apagado."
+        Abort
+      ${EndIf}
+      StrCpy $bkBDir $0
+      StrCpy $bkBOrig $ljaPrevDir
+    ${EndIf}
   FunctionEnd
 
   ; ── Texto da página "Instalando" (a página seguinte, MUI_PAGE_INSTFILES) ──
@@ -247,6 +693,10 @@ FunctionEnd
   !define MUI_PAGE_CUSTOMFUNCTION_SHOW InstFilesSubtitleShow
 
   Function InstFilesSubtitleShow
+    ${If} $ljaKeepDir == 1
+    ${AndIf} $ljaFinalDir != ""
+      StrCpy $INSTDIR $ljaFinalDir
+    ${EndIf}
     FindWindow $0 "#32770" "" $HWNDPARENT
     GetDlgItem $1 $0 1006
     SendMessage $1 ${WM_SETTEXT} 0 "STR:Extraindo arquivos para $INSTDIR..."
@@ -281,6 +731,23 @@ FunctionEnd
       StrCpy $INSTDIR "$PROGRAMFILES\Louvor JA"
     ${EndIf}
   ${EndIf}
+
+  !ifndef BUILD_UNINSTALLER
+    ; Pasta da instalação anterior do Louvor JA — a mesma que o
+    ; "uninstallOldVersion" do electron-builder lê para rodar o desinstalador
+    ; antigo (que em versões antigas apagava a pasta inteira, Delphi junto).
+    ReadRegStr $3 HKLM "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+    ${If} $3 == ""
+      ReadRegStr $3 HKCU "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+    ${EndIf}
+    ${If} $3 == ""
+      StrCpy $3 $0
+    ${EndIf}
+    ${If} $3 == ""
+      StrCpy $3 $1
+    ${EndIf}
+    StrCpy $ljaPrevDir $3
+  !endif
 !macroend
 
 ; ── Corrige o $INSTDIR de volta para (x86) após o initMultiUser ────────────
@@ -302,55 +769,16 @@ FunctionEnd
     ${EndIf}
   ${EndIf}
 
-  ; ── Backup preventivo de $INSTDIR antes do uninstallOldVersion ────────────
-  ; $INSTDIR é compartilhado com o LouvorJA Delphi legado (ver preInit acima)
-  ; e, numa instalação já existente, é TAMBÉM onde o config/ gravável do
-  ; próprio Electron mora — getWritableBase() em electron/ipc.js resolve pra
-  ; pasta do .exe (com fallback pra userData só se essa não for gravável), ou
-  ; seja, banco de dados, músicas baixadas e capas do usuário ficam aqui.
-  ;
-  ; O installSection.nsh do electron-builder chama "uninstallOldVersion" ANTES
-  ; de extrair os novos arquivos: ele copia e executa o DESINSTALADOR JÁ
-  ; GRAVADO EM DISCO (o binário da versão anterior, com a lógica que ELA tinha
-  ; na época). Builds publicados antes deste ajuste (customRemoveFiles logo
-  ; abaixo) não têm esse guard e fazem "RMDir /r $INSTDIR" por padrão — apaga
-  ; TUDO (Delphi + config/) mesmo só "instalando uma atualização". O
-  ; customRemoveFiles deste MESMO installer.nsh não ajuda nessa transição
-  ; específica, porque quem roda ali é o uninstaller ANTIGO, já gravado em
-  ; disco antes desta correção existir.
-  ;
-  ; Solução: renomeia a pasta inteira pra uma pasta-irmã ANTES desse passo.
-  ; Rename de pasta no mesmo volume é só troca de metadado (instantâneo, não
-  ; copia nada — não importa o tamanho da biblioteca de músicas). Com
-  ; $INSTDIR fora do caminho, "uninstallOldVersion" não encontra mais o
-  ; uninstaller antigo ali e desiste silenciosamente (mesmo comportamento já
-  ; previsto pelo template pra quando não existe versão anterior instalada).
-  ; RestoreLegacyMerge (chamada em customInstall, depois da extração) devolve
-  ; tudo pro lugar, exceto o que os arquivos novos do Electron já recriaram.
-  StrCpy $legacyOrigDir "$INSTDIR"
-  ; NUNCA apaga um backup anterior: músicas e capas baixadas podem estar nele
-  ; (uma tentativa de atualização que falhou no meio). Se já existir, guarda
-  ; num nome de reserva; se nem esse estiver livre, para a instalação.
-  StrCpy $legacyBackupDir "$INSTDIR.update-backup"
-  ${If} ${FileExists} "$INSTDIR\*.*"
-    ${If} ${FileExists} "$legacyBackupDir\*.*"
-      ${If} ${FileExists} "$INSTDIR.update-backup-old\*.*"
-        MessageBox MB_OK|MB_ICONSTOP "Existem cópias de segurança de uma atualização anterior em:$\r$\n$legacyBackupDir$\r$\n$INSTDIR.update-backup-old$\r$\n$\r$\nNada foi apagado. Verifique essas pastas (músicas e capas podem estar nelas) e tente de novo."
-        Abort
-      ${EndIf}
-      Rename "$legacyBackupDir" "$INSTDIR.update-backup-old"
-    ${EndIf}
-    ClearErrors
-    Rename "$INSTDIR" "$legacyBackupDir"
-    ${If} ${Errors}
-      ; Sem como tirar a pasta do caminho (ex.: arquivo em uso): para em vez de
-      ; seguir sem backup, porque o desinstalador antigo poderia apagar tudo.
-      ClearErrors
-      MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a atualização do Louvor JA: algum arquivo está em uso.$\r$\n$\r$\nFeche o Louvor JA (e qualquer programa que esteja usando a pasta de instalação) e tente de novo. Nada foi apagado."
-      Abort
-    ${EndIf}
-  ${Else}
-    StrCpy $legacyBackupDir ""
+  ; ── Backup preventivo (ver LjaDoBackups) ──────────────────────────────────
+  ; Com telas, o backup acontece só DEPOIS que a pasta é escolhida (saída da
+  ; página de recursos, logo antes de copiar): cancelar o instalador não mexe
+  ; em nada. Na atualização automática (silenciosa, sem telas) não há página,
+  ; então é feito aqui mesmo.
+  StrCpy $bkADir ""
+  StrCpy $bkBDir ""
+  StrCpy $ljaKeepDir 0
+  ${If} ${Silent}
+    Call LjaDoBackups
   ${EndIf}
 !macroend
 
@@ -365,40 +793,22 @@ FunctionEnd
 
   DetailPrint "Arquivos do Louvor JA copiados com sucesso."
 
-  ; ── Restaura o backup preventivo (ver customInit) ─────────────────────────
-  ; $legacyBackupDir só é != "" quando customInit encontrou algo em $INSTDIR e
-  ; conseguiu tirá-lo do caminho antes da extração — inclui tanto os arquivos
-  ; do LouvorJA Delphi quanto o config/ gravável de uma instalação Electron
-  ; anterior (banco de dados, músicas baixadas, capas, etc.).
-  ${If} $legacyBackupDir != ""
+  ; ── Devolve os backups (ver LjaDoBackups) ─────────────────────────────────
+  ; Arquivos do LouvorJA Delphi e dados do usuário (config\: banco, músicas,
+  ; capas, imagens) voltam para o lugar e têm prioridade sobre os padrões de
+  ; fábrica recém-extraídos. Só cópias antigas de arquivos do próprio Louvor JA
+  ; (programa, db\ do catálogo) dão lugar às novas.
+  ${If} $bkADir != ""
     DetailPrint "Restaurando LouvorJA Delphi e configurações existentes..."
-
-    ; Só faz sentido quando o destino final não mudou (usuário não escolheu
-    ; outra pasta na página de instalação): o banco recém-extraído
-    ; (bundled/config/database.db, via "extraFiles" do package.json) é só um
-    ; padrão de fábrica — se já existia um banco de verdade no backup, ele tem
-    ; prioridade; removendo o novo primeiro, o merge abaixo ("só move se o
-    ; destino ainda não existe") deixa o antigo assumir o lugar dele.
-    ${If} $INSTDIR == $legacyOrigDir
-    ${AndIf} ${FileExists} "$legacyBackupDir\config\database.db"
-    ${AndIf} ${FileExists} "$INSTDIR\config\database.db"
-      Delete "$INSTDIR\config\database.db"
-    ${EndIf}
-
-    Push ""
-    Call RestoreLegacyMerge
-
-    ; Só remove a pasta de backup se ela ficou VAZIA (tudo foi restaurado). Se
-    ; sobrou algo (arquivo que colidiu com um novo ou que não pôde ser movido),
-    ; a pasta fica no lugar — nada é apagado por aqui.
-    ClearErrors
-    RMDir "$legacyBackupDir"
-    ClearErrors
-    ${If} ${FileExists} "$legacyBackupDir\*.*"
-      DetailPrint "  » Alguns arquivos antigos foram mantidos em $legacyBackupDir"
-    ${Else}
-      DetailPrint "  » LouvorJA Delphi e configurações existentes restaurados"
-    ${EndIf}
+    StrCpy $legacyBackupDir $bkADir
+    StrCpy $legacyOrigDir $bkAOrig
+    Call LjaRestoreBackup
+  ${EndIf}
+  ${If} $bkBDir != ""
+    DetailPrint "Restaurando a pasta da instalação anterior ($bkBOrig)..."
+    StrCpy $legacyBackupDir $bkBDir
+    StrCpy $legacyOrigDir $bkBOrig
+    Call LjaRestoreBackup
   ${EndIf}
 
   DetailPrint "Configurando estrutura de pastas..."
@@ -442,7 +852,7 @@ FunctionEnd
   ; afastar o padrão recém-extraído pra não competir com ele. Quando
   ; $legacyBackupDir já restaurou algo, o banco em $INSTDIR\config\database.db
   ; já É o de verdade — mexer aqui de novo só arriscaria apagá-lo por engano.
-  ${If} $legacyBackupDir == ""
+  ${If} $bkADir == ""
     StrCpy $0 "$APPDATA\LouvorJA\config\database.db"
     ${If} ${FileExists} "$0"
       DetailPrint "  » Banco personalizado detectado em AppData — preservando versão do usuário"
