@@ -209,9 +209,19 @@ export default {
   mounted() {
     this.windowResize();
     window.addEventListener("resize", this.windowResize);
+    // Também mede quando o QUADRO muda de tamanho sem a janela mudar (camada
+    // "Dividir a tela" na projeção, mosaico do multiviewer no retorno) e
+    // quando o módulo aparece (o container só existe com isActive).
+    const host = this.$el && this.$el.parentElement;
+    if (host && window.ResizeObserver) {
+      this._hostObserver = new ResizeObserver(() => this.windowResize());
+      this._hostObserver.observe(host);
+    }
+    this.$watch("isActive", (on) => { if (on) this.$nextTick(() => this.windowResize()); });
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
+    if (this._hostObserver) this._hostObserver.disconnect();
   },
 };
 </script>

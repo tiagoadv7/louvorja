@@ -50,6 +50,8 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="bible" />
+      <LLayerScreenBtn module="bible" />
+      <LReturnScreenBtn module="bible" />
     </template>
 
     <template v-slot:header>
@@ -320,6 +322,8 @@ import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
+import LLayerScreenBtn from "@/components/buttons/LayerScreen.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 
 export default {
@@ -328,6 +332,8 @@ export default {
     LWindow,
     Screen,
     LScreenBtn,
+    LReturnScreenBtn,
+    LLayerScreenBtn,
     LSelect,
     LCustomizationTools,
   },

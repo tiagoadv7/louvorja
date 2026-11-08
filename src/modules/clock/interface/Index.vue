@@ -40,6 +40,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="clock" />
+      <LLayerScreenBtn module="clock" />
       <LReturnScreenBtn module="clock" />
     </template>
 
@@ -88,6 +89,7 @@ import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
+import LLayerScreenBtn from "@/components/buttons/LayerScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -100,6 +102,7 @@ export default {
     Screen,
     LScreenBtn,
     LReturnScreenBtn,
+    LLayerScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,

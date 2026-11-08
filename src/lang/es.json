@@ -351,7 +351,20 @@
         "confirm": "Confirmar"
     },
     "popup": {
-        "close": "Cerrar Ventana"
+        "close": "Cerrar Ventana",
+        "layer_title": "Proyectar junto con la pantalla actual",
+        "layer_overlay": "Superponer",
+        "layer_overlay_hint": "Encima de todo; la música sigue debajo",
+        "layer_share": "Dividir la pantalla",
+        "layer_share_hint": "Lado a lado con lo que se está proyectando",
+        "layer_off": "Quitar de la proyección",
+        "layer_on_overlay": "Superpuesto a la proyección",
+        "layer_on_share": "Dividiendo la pantalla de proyección",
+        "return_send": "Enviar al retorno",
+        "return_remove": "Quitar del retorno",
+        "return_multiview": "Multiviewer: mostrar junto en el retorno",
+        "return_multiview_hint": "Divide el retorno con letra, reloj, Biblia...",
+        "return_multiview_on": "En el multiviewer del retorno"
     },
     "messages": {
         "file_database_not_found": "Archivo de datos no encontrado!",

@@ -1,6 +1,6 @@
 <template>
   <transition name="rs-fade" appear>
-    <div v-if="visible" class="rs-root">
+    <div v-if="visible" class="rs-root" :class="{ 'rs-multi': isMulti }">
       <!-- Mesmo fundo animado da saída principal (Slide.vue), só quando há slide na tela -->
       <AnimatedBackground
         v-if="(mediaActive || slideEditorActive) && animatedBg"
@@ -15,7 +15,12 @@
            abaixo), então o retorno mostra a apresentação do Editor
            exatamente como mostra um slide de música comum. -->
       <transition name="rs-fade">
-        <div v-if="mediaActive || slideEditorActive" class="rs-slide">
+        <div
+          v-if="mediaActive || slideEditorActive"
+          class="rs-slide"
+          :class="{ 'rs-tile': isMulti }"
+          :style="tileStyle(slideEditorActive ? 'slide_editor' : 'media')"
+        >
           <!-- Barra de progresso da faixa (topo) -->
           <div class="rs-track-bar">
             <div class="rs-track-fill" :style="{ width: trackProgress + '%' }" />
@@ -69,7 +74,7 @@
            foi configurado nele) — só quando ele é o que está projetado no
            momento (popup_module), nunca junto com uma música. -->
       <transition name="rs-fade">
-        <div v-if="clockModuleActive" class="rs-module-mirror">
+        <div v-if="clockModuleActive" class="rs-module-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('clock')">
           <ClockScreen />
         </div>
       </transition>
@@ -79,7 +84,7 @@
            modules/cronometro_culto/interface/Index.vue#activeTab e
            Popup.vue, mesmo mecanismo). -->
       <transition name="rs-fade">
-        <div v-if="timersModuleActive" class="rs-module-mirror">
+        <div v-if="timersModuleActive" class="rs-module-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('cronometro_culto')">
           <StopwatchScreen v-if="timersActiveTab === 'avulso'" />
           <CronometroScreen v-else />
         </div>
@@ -92,7 +97,7 @@
            components/buttons/Screen.vue#popup, que só limpa popup_module,
            sem mexer na config do vídeo). -->
       <transition name="rs-fade">
-        <div v-if="videoPlayerActive" class="rs-module-mirror">
+        <div v-if="videoPlayerActive" class="rs-module-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('video_player')">
           <VideoPlayerScreen />
         </div>
       </transition>
@@ -100,8 +105,17 @@
       <!-- Espelho do link (YouTube/Canva, aba "Online" de Mídia) — mesmo
            esquema do Vídeo acima, sempre mudo (ver components/WebLinkScreen.vue). -->
       <transition name="rs-fade">
-        <div v-if="webLinkActive" class="rs-module-mirror">
+        <div v-if="webLinkActive" class="rs-module-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('web_link')">
           <WebLinkScreen />
+        </div>
+      </transition>
+
+      <!-- Espelho da Bíblia (versículo projetado) — mesmo esquema dos outros:
+           projetada na principal, forçada pelo botão de retorno ou no
+           multiviewer. -->
+      <transition name="rs-fade">
+        <div v-if="bibleActive" class="rs-module-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('bible')">
+          <BibleScreen />
         </div>
       </transition>
 
@@ -127,6 +141,11 @@ import CronometroScreen from '@/modules/cronometro_culto/components/Screen.vue';
 import StopwatchScreen from '@/modules/cronometro_culto/components/StopwatchScreen.vue';
 import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
 import WebLinkScreen from '@/components/WebLinkScreen.vue';
+import BibleScreen from '@/modules/core/bible/components/Screen.vue';
+
+// Ordem dos quadros no multiviewer: a letra (o que o palco mais precisa)
+// sempre fica com o quadro maior, à esquerda.
+const TILE_ORDER = ['media', 'slide_editor', 'bible', 'clock', 'cronometro_culto', 'video_player', 'web_link'];
 import AnimatedBackground from '@/components/AnimatedBackground.vue';
 
 const isElectron = () =>
@@ -136,7 +155,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen, AnimatedBackground },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen, BibleScreen, AnimatedBackground },
 
   data: () => ({
     stateHandler: null,
@@ -176,11 +195,11 @@ export default {
     returnPopupModule() {
       return this.$appdata.get('return_popup_module');
     },
-    clockModuleActive() {
+    clockModuleActiveSolo() {
       if (this.returnPopupModule) return this.returnPopupModule === 'clock';
       return this.popupModule === 'clock';
     },
-    timersModuleActive() {
+    timersModuleActiveSolo() {
       if (this.returnPopupModule) return this.returnPopupModule === 'cronometro_culto';
       return this.popupModule === 'cronometro_culto';
     },
@@ -189,14 +208,57 @@ export default {
     timersActiveTab() {
       return this.$appdata.get('modules.cronometro_culto.active_tab') || 'culto';
     },
-    videoPlayerActive() {
+    videoPlayerActiveSolo() {
       if (this.returnPopupModule) return this.returnPopupModule === 'video_player';
       return this.popupModule === 'video_player';
     },
-    webLinkActive() {
+    webLinkActiveSolo() {
       if (this.returnPopupModule) return this.returnPopupModule === 'web_link';
       return this.popupModule === 'web_link';
     },
+    bibleActiveSolo() {
+      const open = !!this.$appdata.get('modules.bible.show') || !!this.$appdata.get('modules.bible.minimized');
+      if (this.returnPopupModule) return this.returnPopupModule === 'bible' && open;
+      return this.popupModule === 'bible' && open;
+    },
+
+    // ── Multiviewer (helpers/Layers.js, "return_multiview") ──────────────
+    // O que o retorno mostraria sozinho (regra de sempre) + os módulos
+    // marcados para aparecer junto. Com 2 ou mais, vira mosaico.
+    soloModule() {
+      const solo = {
+        media: this.mediaActiveSolo,
+        slide_editor: this.slideEditorActiveSolo,
+        clock: this.clockModuleActiveSolo,
+        cronometro_culto: this.timersModuleActiveSolo,
+        video_player: this.videoPlayerActiveSolo,
+        web_link: this.webLinkActiveSolo,
+        bible: this.bibleActiveSolo,
+      };
+      return Object.keys(solo).find((m) => solo[m]) || null;
+    },
+    tiles() {
+      const list = (this.$appdata.get('return_multiview') || []).filter((m) => this.moduleOpen(m));
+      if (this.soloModule) list.unshift(this.soloModule);
+      return [...new Set(list)].sort((a, b) => TILE_ORDER.indexOf(a) - TILE_ORDER.indexOf(b));
+    },
+    isMulti() {
+      return this.tiles.length > 1;
+    },
+    mediaActive() { return this.isMulti ? this.tiles.includes('media') : this.mediaActiveSolo; },
+    slideEditorActive() { return this.isMulti ? this.tiles.includes('slide_editor') : this.slideEditorActiveSolo; },
+    clockModuleActive() { return this.isMulti ? this.tiles.includes('clock') : this.clockModuleActiveSolo; },
+    timersModuleActive() { return this.isMulti ? this.tiles.includes('cronometro_culto') : this.timersModuleActiveSolo; },
+    videoPlayerActive() { return this.isMulti ? this.tiles.includes('video_player') : this.videoPlayerActiveSolo; },
+    webLinkActive() { return this.isMulti ? this.tiles.includes('web_link') : this.webLinkActiveSolo; },
+    bibleActive() { return this.isMulti ? this.tiles.includes('bible') : this.bibleActiveSolo; },
+    // Tamanho real do quadro da letra (as fontes da letra são proporcionais a ele)
+    slideBox() {
+      const r = this.isMulti ? this.tileRect(this.tiles.indexOf(this.slideEditorActive ? 'slide_editor' : 'media')) : null;
+      if (!r) return { w: this.width, h: this.height };
+      return { w: (this.width * r.w) / 100, h: (this.height * r.h) / 100 };
+    },
+
     // Captura de tela/janela — independente de popup_module/returnPopupModule
     // de propósito: é uma sobreposição que o operador liga/desliga na hora,
     // não um "módulo projetado" que compete pela mesma seleção dos outros.
@@ -231,7 +293,7 @@ export default {
     // encerrar explicitamente) deixava o retorno preso no último slide pra
     // sempre: popup_module continuava 'slide_editor' e essa computed não
     // checava mais nada além disso.
-    slideEditorActive() {
+    slideEditorActiveSolo() {
       if (this.returnPopupModule) {
         return this.returnPopupModule === 'slide_editor' && (this.slideEditorShow || this.slideEditorMinimized);
       }
@@ -263,7 +325,7 @@ export default {
     // "forçar para o retorno" (return_popup_module) que Relógio/Cronômetro
     // já usam — permite manter a música no retorno mesmo se outro módulo
     // virar o popup_module da saída principal.
-    mediaActive() {
+    mediaActiveSolo() {
       if (this.returnPopupModule) {
         return this.returnPopupModule === 'media' && (this.mediaShow || this.mediaMinimized);
       }
@@ -399,6 +461,11 @@ export default {
   },
 
   watch: {
+    // Quadros mudaram: módulos que medem o próprio container no "resize"
+    tiles(n, o) {
+      if (n.join() === (o || []).join()) return;
+      [50, 450].forEach((ms) => setTimeout(() => window.dispatchEvent(new Event('resize')), ms));
+    },
     slideSnapshot(newVal, oldVal) {
       this.pushTextSlide(newVal, oldVal);
     },
@@ -412,6 +479,38 @@ export default {
   },
 
   methods: {
+    moduleOpen(m) {
+      if (m === 'web_link') {
+        const c = this.$appdata.get('modules.web_link.config') || {};
+        return !!(c.videoId || c.url);
+      }
+      return !!this.$appdata.get(`modules.${m}.show`) || !!this.$appdata.get(`modules.${m}.minimized`);
+    },
+    // Posição (em %) do quadro i no mosaico: 2 = lado a lado; 3 = letra à
+    // esquerda inteira + 2 empilhados à direita; 4+ = grade.
+    tileRect(i) {
+      const n = this.tiles.length;
+      if (i < 0 || n < 2) return null;
+      if (n === 2) return { x: i * 50, y: 0, w: 50, h: 100 };
+      if (n === 3) return i === 0 ? { x: 0, y: 0, w: 50, h: 100 } : { x: 50, y: (i - 1) * 50, w: 50, h: 50 };
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      return { x: (i % cols) * (100 / cols), y: Math.floor(i / cols) * (100 / rows), w: 100 / cols, h: 100 / rows };
+    },
+    tileStyle(m) {
+      if (!this.isMulti) return null;
+      const r = this.tileRect(this.tiles.indexOf(m));
+      if (!r) return null;
+      return {
+        position: 'absolute',
+        left: `calc(${r.x}% + 3px)`,
+        top: `calc(${r.y}% + 3px)`,
+        width: `calc(${r.w}% - 6px)`,
+        height: `calc(${r.h}% - 6px)`,
+        right: 'auto',
+        bottom: 'auto',
+      };
+    },
     // Captura de tela/janela — pede seu PRÓPRIO stream (id vem do appdata,
     // escolhido no operador via video_player/interface/Index.vue). Cada
     // janela (operador, saída, retorno) que exibir a captura chama
@@ -498,7 +597,7 @@ export default {
     // tela (metade dele), não ao lado inteiro, pra não ficar gigante em
     // telas muito largas.
     fontSizePc(pc) {
-      const v = Math.min(this.width, this.height);
+      const v = Math.min(this.slideBox.w, this.slideBox.h);
       return (pc * v) / 100 / 2;
     },
 
@@ -724,8 +823,12 @@ export default {
 /* ── Espelho dos módulos Relógio / Cronômetro de Culto ──────────── */
 /* Preenche a tela toda — cada módulo já desenha seu próprio fundo/fonte/cor
    configurados (Screen.vue de cada um), então isso só posiciona e garante
-   que fique por cima caso o bloco do slide ainda esteja saindo do fade. */
-.rs-module-mirror {
+   que fique por cima caso o bloco do slide ainda esteja saindo do fade.
+   ".rs-root >" é obrigatório: sem ele a regra genérica ".rs-root >
+   :not(.anim-bg) { position: relative }" (mais específica) vencia, o espelho
+   ficava com altura 0 e tudo que usa height:100% sumia — o YouTube (aba
+   Online) não aparecia no retorno por causa disso. */
+.rs-root > .rs-module-mirror {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -740,6 +843,17 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* ── Multiviewer: mosaico com fundo preto entre os quadros ────── */
+.rs-root.rs-multi {
+  background: #000;
+}
+.rs-tile {
+  overflow: hidden;
+  border-radius: 6px;
+  z-index: 2;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 /* Contador discreto */

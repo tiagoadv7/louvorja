@@ -28,11 +28,36 @@
            álbum está tocando, e o módulo novo (ex. vídeo) nunca chega a
            montar. O <div> dá a esta <transition> um nó próprio, isolado do
            que acontece dentro do módulo filho. -->
-      <transition name="module-crossfade">
-        <div v-if="moduleComponent" :key="module" class="module-crossfade-item">
-          <component :is="moduleComponent" style="width: 100%; height: 100%;" />
+      <!-- Área do que está projetado (popup_module). Com uma camada
+           "Dividir a tela" ativa (helpers/Layers.js), encolhe para a metade
+           esquerda e a camada fica com a direita. -->
+      <div class="popup-main" :style="mainAreaStyle">
+        <transition name="module-crossfade">
+          <div v-if="moduleComponent" :key="module" class="module-crossfade-item">
+            <component :is="moduleComponent" style="width: 100%; height: 100%;" />
+          </div>
+        </transition>
+      </div>
+
+      <!-- Camadas "Dividir a tela": coluna da direita, uma embaixo da outra -->
+      <transition-group name="layer-fade">
+        <div
+          v-for="(layer, i) in shareLayers"
+          :key="'share-' + layer"
+          class="popup-layer"
+          :style="shareLayerStyle(i)"
+        >
+          <component :is="layerComponent(layer)" style="width: 100%; height: 100%;" />
         </div>
-      </transition>
+      </transition-group>
+
+      <!-- Camadas "Sobrepor": tela inteira por cima do que está projetado
+           (que continua rodando por baixo e reaparece ao desligar) -->
+      <transition-group name="layer-fade">
+        <div v-for="layer in overlayLayers" :key="'over-' + layer" class="popup-layer popup-layer-over">
+          <component :is="layerComponent(layer)" style="width: 100%; height: 100%;" />
+        </div>
+      </transition-group>
 
       <!-- Overlay de imagem (logo/aviso) — montado incondicionalmente, ao
            contrário do <component :is="moduleComponent"> acima, que só exibe
@@ -51,6 +76,10 @@
 import { defineAsyncComponent } from "vue";
 import WebLinkFrame from "@/components/WebLinkFrame.vue";
 import ImageOverlayPopup from "@/modules/image_overlay/interface/Popup.vue";
+
+// Componentes das camadas (helpers/Layers.js) — um por módulo, reaproveitado
+// entre recomputes (defineAsyncComponent novo a cada vez remontaria a camada).
+const layerComponents = {};
 
 const isElectron = () =>
   typeof window !== "undefined" &&
@@ -92,8 +121,58 @@ export default {
         )
       );
     },
+    // Camadas ativas (helpers/Layers.js), sem o módulo que já é o principal e
+    // só de módulos abertos (painel aberto ou minimizado) — fechar o Relógio
+    // tira a camada da tela sem deixar meia tela vazia.
+    activeLayers() {
+      if (this.isUtility) return [];
+      const layers = this.$appdata.get("projection_layers") || {};
+      return Object.entries(layers).filter(([mod, mode]) =>
+        mode && mod !== this.module &&
+        (this.$appdata.get(`modules.${mod}.show`) || this.$appdata.get(`modules.${mod}.minimized`))
+      );
+    },
+    shareLayers() {
+      return this.activeLayers.filter(([, mode]) => mode === "share").map(([mod]) => mod);
+    },
+    overlayLayers() {
+      return this.activeLayers.filter(([, mode]) => mode === "overlay").map(([mod]) => mod);
+    },
+    isSplit() {
+      return this.shareLayers.length > 0 && !!this.moduleComponent;
+    },
+    mainAreaStyle() {
+      return this.isSplit ? { width: "50%" } : { width: "100%" };
+    },
+  },
+  watch: {
+    // Quadro mudou de tamanho: Relógio/Bíblia medem o próprio container no
+    // "resize" da janela — avisa depois da transição terminar.
+    isSplit() {
+      [50, 450, 1100].forEach((ms) => setTimeout(() => window.dispatchEvent(new Event("resize")), ms));
+    },
   },
   methods: {
+    layerComponent(mod) {
+      if (!layerComponents[mod]) {
+        layerComponents[mod] = defineAsyncComponent(() =>
+          import(`@/modules/core/${mod}/interface/Popup.vue`).catch(() =>
+            import(`@/modules/${mod}/interface/Popup.vue`)
+          )
+        );
+      }
+      return layerComponents[mod];
+    },
+    shareLayerStyle(i) {
+      const n = this.shareLayers.length;
+      const full = !this.moduleComponent;
+      return {
+        left: full ? "0" : "50%",
+        width: full ? "100%" : "50%",
+        top: `${(100 / n) * i}%`,
+        height: `${100 / n}%`,
+      };
+    },
     // Entradas de estado que só valem para a projeção/principal, não para o
     // utilitário desta janela: popup_module e show/minimized do próprio módulo.
     isOwnUtilityEntry(param) {
@@ -322,6 +401,31 @@ export default {
    sobreporem exatamente durante o crossfade, em vez de empilhar um embaixo
    do outro no fluxo normal (ambos existem juntos no DOM nesse intervalo,
    agora que a transição não usa mais mode="out-in"). */
+.popup-main {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.6s ease;
+  overflow: hidden;
+}
+.popup-layer {
+  position: absolute;
+  overflow: hidden;
+  z-index: 2;
+}
+.popup-layer-over {
+  inset: 0;
+  z-index: 3;
+}
+.layer-fade-enter-active,
+.layer-fade-leave-active {
+  transition: opacity 0.6s ease;
+}
+.layer-fade-enter-from,
+.layer-fade-leave-to {
+  opacity: 0;
+}
 .module-crossfade-item {
   position: absolute;
   inset: 0;

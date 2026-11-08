@@ -2,6 +2,7 @@ import $appdata from "@/helpers/AppData";
 import $window from "@/helpers/Window";
 import $electron from "@/helpers/Electron";
 import $alert from "@/helpers/Alert";
+import $layers from "@/helpers/Layers";
 
 let popup = null;
 
@@ -70,6 +71,9 @@ export default {
       popup.close();
     }
     await this.exit();
+    // Janela fechada de vez: camadas (Relógio/Bíblia "junto") não voltam
+    // sozinhas na próxima projeção
+    $layers.clearAllLayers();
     $appdata.set("popup", null);
     popup = null;
   },

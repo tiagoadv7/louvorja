@@ -69,6 +69,7 @@
 
     <template v-slot:system_buttons>
       <LScreenBtn module="cronometro_culto" />
+      <LLayerScreenBtn module="cronometro_culto" />
       <LReturnScreenBtn module="cronometro_culto" />
     </template>
 
@@ -444,6 +445,7 @@ import Screen from "../components/Screen.vue";
 import StopwatchScreen from "../components/StopwatchScreen.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
 import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
+import LLayerScreenBtn from "@/components/buttons/LayerScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
@@ -475,6 +477,7 @@ export default {
     StopwatchScreen,
     LScreenBtn,
     LReturnScreenBtn,
+    LLayerScreenBtn,
     LSelect,
     LCustomizationTools,
     LToolbar,
