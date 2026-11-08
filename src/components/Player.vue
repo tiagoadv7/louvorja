@@ -339,7 +339,20 @@
         v-if="media.config.audio"
         class="d-flex align-center justify-center pa-1"
       >
-        <div>
+        <div class="d-flex align-center">
+          <!-- Atenuar: baixa o volume aos poucos (para falar por cima) e, no
+               2º clique, volta suave ao volume de antes — coletâneas, YouTube
+               e vídeo (no vídeo é o mesmo "talkover" do módulo Mídia) -->
+          <v-btn
+            v-if="canAttenuate"
+            :disabled="media.loading"
+            icon="mdi-microphone"
+            size="x-small"
+            :variant="attenuated ? 'tonal' : 'text'"
+            :color="attenuated ? 'warning' : undefined"
+            :title="attenuated ? 'Atenuado — clique (ou T) para voltar o volume' : 'Atenuar (T) — baixa o volume aos poucos'"
+            @click="toggleAttenuate"
+          />
           <v-btn
             :disabled="media.loading"
             :icon="volume_icon"
@@ -368,6 +381,7 @@ import LScreenBtn from "@/components/buttons/Screen.vue";
 import LSlide from "@/components/Slide.vue";
 import { loadYoutubeApi } from "@/helpers/YoutubeApi";
 import { expectedTime, startFollowing } from "@/helpers/VideoClock";
+import { toggleAttenuate, clearAttenuate, isAttenuated } from "@/helpers/Attenuate";
 
 export default {
   name: "PlayerComponent",
@@ -639,6 +653,12 @@ export default {
       return this.menu_modes.filter(
         (item) => item.mode == this.media.config.mode
       )[0];
+    },
+    canAttenuate() {
+      return ["media", "web_link", "video"].includes(this.source);
+    },
+    attenuated() {
+      return isAttenuated(this.source);
     },
     volume_icon: function () {
       switch (true) {
@@ -917,7 +937,15 @@ export default {
     fullscreen(value = true) {
       this.$media.fullscreen(value);
     },
+    // Atenuar / voltar o volume (helpers/Attenuate.js — mesma lógica da tecla T)
+    toggleAttenuate() {
+      toggleAttenuate(this.source);
+    },
+    _clearAttenuate() {
+      clearAttenuate(this.source);
+    },
     toogleVolume() {
+      this._clearAttenuate();
       const from = this.media.config.volume;
       const target = from < 100 ? 100 : 0;
       this._fadeVolumeTo(from, target);
@@ -925,10 +953,8 @@ export default {
     // Mute/unmute suave (em passos, ~280ms) em vez de saltar direto pro
     // volume final — vale pra media, vídeo e coletânea (mesmo botão aqui na
     // barra, incluindo quando ela está minimizada mostrando o rodapé).
-    _fadeVolumeTo(from, target) {
+    _fadeVolumeTo(from, target, STEPS = 10, INTERVAL = 28) {
       clearInterval(this._volumeFadeInterval);
-      const STEPS = 10;
-      const INTERVAL = 28;
       const delta = (target - from) / STEPS;
       const setStep = (v) => {
         const vol = Math.round(Math.max(0, Math.min(100, v)));
@@ -949,6 +975,7 @@ export default {
       }, INTERVAL);
     },
     changeVolume() {
+      this._clearAttenuate();
       if (this.source === 'video') { this.$videoPlayer.setVolume(this.media.config.volume); return; }
       if (this.source === 'soundmaster') { this.$soundMaster.setVolume(this.media.config.volume); return; }
       if (this.source === 'web_link') { this.$webLink.setVolume(this.media.config.volume); return; }

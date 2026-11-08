@@ -464,7 +464,7 @@ export default {
       // Space → play/pause
       if (k === ' ') { e.preventDefault(); this.togglePlay(); return; }
       // T → atenuar (talkover)
-      if (k.toLowerCase() === 't') { this.toggleTalkover(); return; }
+      if (k.toLowerCase() === 't') { e.preventDefault(); this.toggleTalkover(); return; }
       // S ou Escape → stop
       if (k.toLowerCase() === 's' || k === 'Escape') { this.stopAll(); return; }
     };

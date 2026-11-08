@@ -7,7 +7,7 @@
       <div class="wl-glow" />
 
       <div class="wl-head">
-        <div class="wl-logo">LOUVOR<span>JA</span></div>
+        <div class="wl-logo">{{ logoWord }}<span>JA</span></div>
         <div class="wl-welcome">
           <span :class="{ on: lang === 'pt' }">Bem-vindo</span>
           <span class="wl-dot">•</span>
@@ -60,10 +60,11 @@
 
 <script>
 import CountryFlag from "vue-country-flag-next";
+import { appWord } from "@/helpers/AppName";
 
 const TEXTS = {
   pt: {
-    chooseLang: "Escolha o idioma em que o LouvorJA vai rodar",
+    chooseLang: "Escolha o idioma em que o Louvor JA vai rodar",
     district: "Distrito",
     districtPh: "Nome do distrito",
     church: "Igreja",
@@ -71,7 +72,7 @@ const TEXTS = {
     start: "Começar",
   },
   es: {
-    chooseLang: "Elija el idioma en que LouvorJA funcionará",
+    chooseLang: "Elija el idioma en que Loor JA funcionará",
     district: "Distrito",
     districtPh: "Nombre del distrito",
     church: "Iglesia",
@@ -97,6 +98,10 @@ export default {
     },
     tx() {
       return TEXTS[this.lang] || TEXTS.pt;
+    },
+    // Muda na hora ao clicar na bandeira: LOUVOR JA (pt) / LOOR JA (es)
+    logoWord() {
+      return appWord(this.lang);
     },
   },
 

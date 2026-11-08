@@ -221,7 +221,8 @@ const Media = {
       ["modules.media.config.progress", 0],
       ["modules.media.config.slide_progress", 0],
       ["modules.media.config.buffered", 0],
-      ["modules.media.config.volume", 100],
+      // Atenuado (botão do rodapé): a próxima música entra já baixa
+      ["modules.media.config.volume", $appdata.get("modules.media.config.attenuated") ? Math.min(20, $appdata.get("modules.media.config.attenuate_prev") ?? 100) : 100],
       ["modules.media.config.is_fading", false],
     ];
     this.setAlbumInfo(id_album, "media", data, batch);

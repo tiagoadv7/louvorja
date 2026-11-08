@@ -3,7 +3,7 @@
     <template v-slot:activator="{ props }">
       <v-btn v-bind="props" icon="mdi-information-outline" @click="open" />
     </template>
-    Sobre o Louvor JA
+    Sobre o {{ productName }}
   </v-tooltip>
 
   <!-- Mesma "janela de módulo" (Window.vue) usada pela aba Coletâneas —
@@ -24,7 +24,7 @@
   >
     <div class="about-hero">
       <v-img :src="logoUrl" class="about-logo" />
-      <div class="about-product">Louvor JA</div>
+      <div class="about-product">{{ productName }}</div>
     </div>
     <div class="about-meta">
       <div>Versão: <b>{{ currentVersion || '...' }}</b><span v-if="is_desktop"> ({{ buildInfo }}<span v-if="platformLabel"> · {{ platformLabel }}</span>)</span></div>
@@ -140,6 +140,7 @@
 
 <script>
 import Window from "@/components/Window.vue";
+import { appName } from "@/helpers/AppName";
 import { CONTRIBUTORS } from "@/config/Contributors";
 import { contributorLinks } from "@/helpers/ContributorLinks";
 
@@ -166,6 +167,10 @@ export default {
   computed: {
     is_desktop() {
       return this.$appdata.get('is_desktop');
+    },
+    // "Louvor JA" / "Loor JA" conforme o idioma
+    productName() {
+      return appName(this.$i18n?.locale?.value || this.$i18n?.locale);
     },
     buildInfo() {
       if (!this.is_desktop) return 'Web';

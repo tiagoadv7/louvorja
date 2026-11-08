@@ -56,6 +56,8 @@ import UpdateDialog    from "@/components/UpdateDialog.vue";
 import DbUpdateDialog  from "@/components/DbUpdateDialog.vue";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog.vue";
 import WelcomeDialog from "@/components/WelcomeDialog.vue";
+import { appName } from "@/helpers/AppName";
+import { toggleAttenuate, currentSource } from "@/helpers/Attenuate";
 
 export default {
   name: "App",
@@ -74,7 +76,28 @@ export default {
     _beforeUnloadHandler:   null,
   }),
 
+  computed: {
+    appLocale() {
+      return this.$i18n?.locale?.value || this.$i18n?.locale || "pt";
+    },
+  },
+
+  watch: {
+    // Nome do programa no título da janela/barra de tarefas segue o idioma
+    // ("Louvor JA" / "Loor JA") — só na janela principal
+    appLocale: {
+      immediate: true,
+      handler(locale) {
+        if (/popup|return-screen|video-pip/.test(window.location.hash)) return;
+        const name = appName(locale);
+        document.title = name;
+        try { window.electron?.windowSetTitle?.(name); } catch (_) { /* */ }
+      },
+    },
+  },
+
   mounted() {
+    this._setupAttenuateKey();
     if (!this.$electron.isElectron()) return;
     // Janelas de projeção não precisam de verificação de arquivos nem notificações
     const _hash = window.location.hash;
@@ -257,6 +280,7 @@ export default {
   },
 
   beforeUnmount() {
+    if (this._attenuateKeyHandler) window.removeEventListener("keydown", this._attenuateKeyHandler);
     this._handlers.forEach(([ch, h]) => this.$electron.off(ch, h));
     window.removeEventListener('sync-files', this._syncFilesHandler);
     window.removeEventListener('open-release-notes', this._whatsNewHandler);
@@ -266,6 +290,28 @@ export default {
   },
 
   methods: {
+    // Tecla T = atenuar o que estiver tocando (coletânea, YouTube ou vídeo),
+    // com o player aberto ou minimizado. Nunca enquanto se digita (busca,
+    // nomes, letras...), com Ctrl/Alt/Win, nem quando o SoundMaster já
+    // tratou a tecla (ele tem o próprio T, ver SoundMasterPanel.vue).
+    _setupAttenuateKey() {
+      if (/popup|return-screen|video-pip/.test(window.location.hash)) return;
+      this._attenuateKeyHandler = (e) => {
+        if (e.key !== "t" && e.key !== "T") return;
+        if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+        const t = e.target;
+        if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+        const a = document.activeElement;
+        if (a && (a.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName))) return;
+        // Depois dos outros atalhos: se alguém já usou a tecla, não faz nada
+        setTimeout(() => {
+          if (e.defaultPrevented) return;
+          const source = currentSource();
+          if (source) toggleAttenuate(source);
+        }, 0);
+      };
+      window.addEventListener("keydown", this._attenuateKeyHandler);
+    },
     handleKeydown() {
       console.log("click ");
       this.$dev.toogle();

@@ -59,7 +59,10 @@ export default {
     },
     targetVolume(v) {
       const el = this.$refs.audio;
-      if (el && !this._fade && !el.paused) el.volume = v;
+      if (!el) return;
+      if (el.paused) { if (!this._fade) el.volume = v; return; }
+      // Atenuar/voltar (talkover) ou volume: rampa suave em vez de salto
+      this.fadeTo(v, 40);
     },
     "config.stopToken"() {
       const el = this.$refs.audio;

@@ -115,6 +115,7 @@
 </template>
 
 <script>
+import { appWord } from "@/helpers/AppName";
 
 export default {
   name: "SystemBarLayout",
@@ -142,7 +143,7 @@ export default {
     },
     wordmark() {
       const locale = this.$i18n?.locale?.value || this.$i18n?.locale;
-      return locale === "es" ? ["LOOR", "JA"] : ["LOUVOR", "JA"];
+      return [appWord(locale), "JA"];
     },
     updateBadge() {
       return ['available', 'downloading', 'downloaded'].includes(this.updateStep);
