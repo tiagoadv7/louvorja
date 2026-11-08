@@ -123,6 +123,8 @@ createI18nInstance().then(async (i18n) => {
   UserData.load();
   await ModuleManager.init(i18n);
   app.mount("#app");
+  // Sinal para o vigia de tela vazia (electron/main.js#watchBlankPage)
+  window.__ljaMounted = true;
   await nextTick();
   window.electron?.appLoaded?.();
 }).catch((err) => {

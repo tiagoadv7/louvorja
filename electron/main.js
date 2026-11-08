@@ -45,6 +45,11 @@ app.commandLine.appendSwitch('disable-features', [
   'WebUSB',
   'WebBluetooth',
   'BackForwardCache',
+  // Áudio dentro do processo principal, em vez do "Audio Service" separado:
+  // nos testes, esse serviço caía tocando música (código 143) e derrubava junto
+  // a janela principal (que é quem toca o som) — a tela ficava vazia enquanto
+  // projeção e retorno (sem áudio) seguiam normais.
+  'AudioServiceOutOfProcess',
 ].join(','));
 
 app.commandLine.appendSwitch('disk-cache-size', String(64 * 1024 * 1024));
@@ -264,6 +269,50 @@ function reloadOnCrash(win, url, label) {
   });
 }
 
+// Vigia de tela vazia: a página carregou mas o app (Vue) nunca montou — a
+// janela fica só com a cor de fundo, para sempre. Acontece quando a rede do
+// Windows muda (Wi-Fi caindo/voltando, VPN, cabo) bem na hora em que a janela
+// carrega/recarrega: o Chromium cancela TODAS as requisições em andamento com
+// net::ERR_NETWORK_CHANGED — no modo dev até as do servidor local (vuetify.js,
+// store...), e aí o main.js não roda. Também cobre a página principal que nem
+// chega a carregar (did-fail-load). Recarrega sozinho, com limite.
+function watchBlankPage(win, url, label) {
+  const attempts = [];
+  let timer = null;
+  const canRetry = () => {
+    const now = Date.now();
+    while (attempts.length && now - attempts[0] > 5 * 60 * 1000) attempts.shift();
+    if (attempts.length >= 4) return false;
+    attempts.push(now);
+    return true;
+  };
+  const reload = (why, delay) => {
+    clearTimeout(timer);
+    if (win.isDestroyed()) return;
+    if (!canRetry()) { logCrash(`janela ${label}: ${why} — desisti de recarregar (muitas tentativas)`); return; }
+    logCrash(`janela ${label}: ${why} — recarregando`);
+    timer = setTimeout(() => { if (!win.isDestroyed()) win.loadURL(url); }, delay);
+  };
+  const isMounted = () => win.webContents
+    .executeJavaScript("!!window.__ljaMounted || (document.querySelector('#app')?.childElementCount || 0) > 0", true)
+    .catch(() => true); // janela recarregando/fechando: não decide nada agora
+  win.webContents.on('did-finish-load', () => {
+    clearTimeout(timer);
+    const check = async (left) => {
+      if (win.isDestroyed()) return;
+      if (await isMounted()) return;
+      if (left > 0) { timer = setTimeout(() => check(left - 1), 8000); return; }
+      reload('app não montou (tela vazia)', 300);
+    };
+    // 12 s + mais 8 s de folga (PC lento montando os módulos) antes de agir
+    timer = setTimeout(() => check(1), 12000);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, _url, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* ERR_ABORTED: navegação trocada por outra */) return;
+    reload(`falha ao carregar (${desc || code})`, 1500);
+  });
+}
+
 function getAppUrl(hash = '') {
   if (isDev) return `${DEV_URL}/${hash}`;
   return `file://${path.join(__dirname, '../dist/index.html')}${hash}`;
@@ -405,6 +454,7 @@ function createMainWindow() {
   });
 
   mainWindow.loadURL(getAppUrl());
+  watchBlankPage(mainWindow, getAppUrl(), 'principal');
   // Título fixo: em dev o Electron trocava pelo nome do binário na barra de tarefas.
   mainWindow.setTitle('Louvor JA');
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
@@ -494,6 +544,7 @@ function createUtilityWindow(moduleId) {
 
   win.loadURL(getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`));
   reloadOnCrash(win, getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`), `utilitário ${moduleId}`);
+  watchBlankPage(win, getAppUrl(`#/popup?module=${encodeURIComponent(moduleId)}&window=1`), `utilitário ${moduleId}`);
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => utilityWindows.delete(moduleId));
   utilityWindows.set(moduleId, win);
@@ -721,6 +772,7 @@ function createOutputWindow(moduleId, displayId) {
   const hash = moduleId ? `#/popup?module=${moduleId}` : '#/popup';
   outputWindow.loadURL(getAppUrl(hash));
   reloadOnCrash(outputWindow, getAppUrl(hash), 'de projeção');
+  watchBlankPage(outputWindow, getAppUrl(hash), 'de projeção');
 
   outputWindow.once('ready-to-show', () => {
     // Reforça bounds (+ fullscreen quando externo) antes de exibir — mesmo
@@ -867,6 +919,7 @@ function createReturnWindow(displayId) {
 
   returnWindow.loadURL(getAppUrl('#/return-screen'));
   reloadOnCrash(returnWindow, getAppUrl('#/return-screen'), 'de retorno');
+  watchBlankPage(returnWindow, getAppUrl('#/return-screen'), 'de retorno');
 
   returnWindow.once('ready-to-show', () => {
     // Reforça bounds + fullscreen antes de exibir — em alguns casos no Windows
@@ -1021,6 +1074,7 @@ function createPipWindow() {
 
   pipWindow.loadURL(getAppUrl('#/video-pip'));
   reloadOnCrash(pipWindow, getAppUrl('#/video-pip'), 'PiP');
+  watchBlankPage(pipWindow, getAppUrl('#/video-pip'), 'PiP');
 
   pipWindow.once('ready-to-show', () => {
     if (pipWindow && !pipWindow.isDestroyed()) pipWindow.show();
