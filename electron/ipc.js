@@ -704,6 +704,7 @@ function setupIpc(mainWindow) {
   });
 
   ipcMain.handle('db:local-save', (_, filename, data) => {
+    invalidateLocalList();
     try {
       const dir = getDbDir();
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -724,22 +725,41 @@ function setupIpc(mainWindow) {
     return Store.get('content_db_version', 0);
   });
 
-  ipcMain.handle('db:local-list', () => {
+  // Lista os JSONs da pasta db com o tamanho de cada um. A pasta passa de 15
+  // mil arquivos (capítulos da Bíblia, músicas): o statSync um por um travava
+  // o processo principal (~0,6 s, e todas as janelas junto) a cada abertura do
+  // Centro de Download. Agora é assíncrono e reaproveita o resultado enquanto
+  // a pasta não mudar (mtime da pasta — criar/apagar arquivo muda) por até 15 s.
+  let localListCache = null; // { dir, mtimeMs, at, list }
+  const invalidateLocalList = () => { localListCache = null; };
+  ipcMain.handle('db:local-list', async () => {
     try {
       const dir = getDbDir();
-      if (!fs.existsSync(dir)) return [];
-      return fs.readdirSync(dir)
-        .filter(f => f.endsWith('.json'))
-        .map(f => {
-          const fp = path.join(dir, f);
-          return { name: f.replace('.json', ''), size: fs.statSync(fp).size };
-        });
+      let dirStat;
+      try { dirStat = await fs.promises.stat(dir); } catch (_) { return []; }
+      const c = localListCache;
+      if (c && c.dir === dir && c.mtimeMs === dirStat.mtimeMs && Date.now() - c.at < 15000) return c.list;
+      const names = (await fs.promises.readdir(dir)).filter(f => f.endsWith('.json'));
+      const list = new Array(names.length);
+      let next = 0;
+      const worker = async () => {
+        while (next < names.length) {
+          const i = next++;
+          let size = 0;
+          try { size = (await fs.promises.stat(path.join(dir, names[i]))).size; } catch (_) { /* sumiu */ }
+          list[i] = { name: names[i].slice(0, -5), size };
+        }
+      };
+      await Promise.all(Array.from({ length: 32 }, worker));
+      localListCache = { dir, mtimeMs: dirStat.mtimeMs, at: Date.now(), list };
+      return list;
     } catch (e) {
       return [];
     }
   });
 
   ipcMain.handle('db:local-delete', (_, filename) => {
+    invalidateLocalList();
     try {
       const fp = path.join(getDbDir(), `${filename}.json`);
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
@@ -750,6 +770,7 @@ function setupIpc(mainWindow) {
   });
 
   ipcMain.handle('db:local-clear', () => {
+    invalidateLocalList();
     try {
       const dir = getDbDir();
       if (fs.existsSync(dir)) {
@@ -2726,6 +2747,7 @@ document.getElementById('f').onsubmit=async(e)=>{
   // Excluir / abrir a pasta de uma coletânea baixada. Só mexe dentro de config/musicas
   // (checado abaixo). Com albumId, remove também o JSON do álbum e das músicas dele.
   ipcMain.handle('library:delete-folder', async (_e, folder, albumId) => {
+    invalidateLocalList();
     if (typeof folder !== 'string' || !folder.trim()) return { ok: false };
     const base = path.resolve(path.join(getWritableConfigDir(), 'musicas'));
     const dir = path.resolve(getAutoMediaDir(folder, true));

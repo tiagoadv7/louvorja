@@ -115,15 +115,48 @@
 
             <div class="ah-toolbar">
               <b>{{ libraryAlbums.length }} {{ $t('components.download_center.lib_count') }}</b>
-              <select v-model="albumStatus" class="ah-select">
-                <option value="all">{{ $t('components.download_center.lib_status_all') }}</option>
-                <option value="downloaded">{{ $t('components.download_center.lib_status_downloaded') }}</option>
-                <option value="pending">{{ $t('components.download_center.lib_status_pending') }}</option>
-              </select>
-              <select v-model="albumSort" class="ah-select">
-                <option value="recent">{{ $t('components.download_center.lib_sort_recent') }}</option>
-                <option value="name">{{ $t('components.download_center.lib_sort_name') }}</option>
-              </select>
+              <v-menu location="bottom start" offset="6">
+                <template #activator="{ props, isActive }">
+                  <button type="button" class="ah-select" :class="{ open: isActive }" v-bind="props">
+                    <span>{{ statusOptions.find(o => o.value === albumStatus)?.label }}</span>
+                    <v-icon size="16" class="ah-select-arrow">mdi-chevron-down</v-icon>
+                  </button>
+                </template>
+                <div class="ah-menu-list">
+                  <button
+                    v-for="opt in statusOptions"
+                    :key="opt.value"
+                    type="button"
+                    class="ah-menu-item"
+                    :class="{ active: albumStatus === opt.value }"
+                    @click="albumStatus = opt.value"
+                  >
+                    <span>{{ opt.label }}</span>
+                    <v-icon v-if="albumStatus === opt.value" size="15" class="ah-menu-check">mdi-check</v-icon>
+                  </button>
+                </div>
+              </v-menu>
+              <v-menu location="bottom start" offset="6">
+                <template #activator="{ props, isActive }">
+                  <button type="button" class="ah-select" :class="{ open: isActive }" v-bind="props">
+                    <span>{{ sortOptions.find(o => o.value === albumSort)?.label }}</span>
+                    <v-icon size="16" class="ah-select-arrow">mdi-chevron-down</v-icon>
+                  </button>
+                </template>
+                <div class="ah-menu-list">
+                  <button
+                    v-for="opt in sortOptions"
+                    :key="opt.value"
+                    type="button"
+                    class="ah-menu-item"
+                    :class="{ active: albumSort === opt.value }"
+                    @click="albumSort = opt.value"
+                  >
+                    <span>{{ opt.label }}</span>
+                    <v-icon v-if="albumSort === opt.value" size="15" class="ah-menu-check">mdi-check</v-icon>
+                  </button>
+                </div>
+              </v-menu>
               <div class="ah-view">
                 <button :class="{ on: albumView === 'grid' }" @click="albumView = 'grid'"><v-icon size="16">mdi-view-grid-outline</v-icon></button>
                 <button :class="{ on: albumView === 'list' }" @click="albumView = 'list'"><v-icon size="16">mdi-view-list</v-icon></button>
@@ -603,6 +636,36 @@ export default {
       return (cat?.albums || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
 
+    // Opções dos menus de filtro/ordem (menu próprio com cantos arredondados —
+    // a lista do <select> nativo do Windows não aceita border-radius)
+    statusOptions() {
+      const t = (k) => this.$t(DC + k);
+      return [
+        { value: 'all', label: t('lib_status_all') },
+        { value: 'downloaded', label: t('lib_status_downloaded') },
+        { value: 'pending', label: t('lib_status_pending') },
+      ];
+    },
+    sortOptions() {
+      const t = (k) => this.$t(DC + k);
+      return [
+        { value: 'recent', label: t('lib_sort_recent') },
+        { value: 'name', label: t('lib_sort_name') },
+      ];
+    },
+    localFileIndex() {
+      const map = new Map();
+      for (const f of this.localFiles) map.set(f.name, f);
+      return map;
+    },
+    // Coletânea de cada álbum (id -> nome), montada uma vez por catálogo
+    albumCategoryIndex() {
+      const map = new Map();
+      for (const cat of this.categories || []) {
+        for (const a of cat.albums || []) if (!map.has(a.id_album)) map.set(a.id_album, cat.name);
+      }
+      return map;
+    },
     userFiles() {
       // Exclui arquivos gerados automaticamente pelo sistema (não são downloads do usuário)
       return this.localFiles.filter(f => !this._isSystemFile(f.name));
@@ -646,11 +709,10 @@ export default {
     },
 
     downloadedBibleSets() {
-      const sizeMap = Object.fromEntries(this.localFiles.map(f => [f.name, f.size || 0]));
-      const downloaded = new Set(this.localFiles.map(f => f.name));
+      const sizeMap = { get: (n) => this.localFileIndex.get(n)?.size || 0 };
       return this.bibleItems
-        .filter(b => b.files.some(f => downloaded.has(f)))
-        .map(b => ({ ...b, totalSize: b.files.reduce((s, f) => s + (sizeMap[f] || 0), 0) }));
+        .filter(b => b.files.some(f => this.localFileIndex.has(f)))
+        .map(b => ({ ...b, totalSize: b.files.reduce((s, f) => s + sizeMap.get(f), 0) }));
     },
 
     downloadedOthers() {
@@ -670,7 +732,7 @@ export default {
     _isSystemFile(name) {
       // Arquivos gerados automaticamente — índice de músicas/categorias por locale
       // e cache individual de músicas. Não representam downloads do usuário.
-      return /_(musics|categories)$/.test(name) || name.startsWith('music_');
+      return /_(musics|categories)$/.test(name) || name.startsWith('music_') || /^bible_\d/.test(name);
     },
 
     onToggle(open) {
@@ -689,15 +751,20 @@ export default {
     },
 
     async init() {
-      await this.loadLocalFiles();
-      this.loadStorage();
+      // Coletâneas: o catálogo (cópia local) e a lista de arquivos carregam
+      // juntos — a grade aparece sem esperar a varredura da pasta db.
+      const files = this.loadLocalFiles();
       // Tela inicial (home) também é a lista de coletâneas: abrir pelo menu não passa
       // pela navegação, então sem isso a lista ficava vazia até "Tentar de novo".
       if (this.isExplore) {
-        await this.loadCategories();
-        this.loadStorage();
+        await Promise.all([this.loadCategories(), files]);
         await this.loadDownloadedAlbumInfos();
         this.loadCollectionsCompleteStatus();
+        // Espaço em disco (soma as pastas): depois que a grade já está na tela
+        setTimeout(() => this.loadStorage(), 400);
+      } else {
+        await files;
+        this.loadStorage();
       }
       if (this.section === 'downloads') {
         await this.loadDownloadedAlbumInfos();
@@ -784,8 +851,14 @@ export default {
       }
     },
 
+    // A pasta db tem ~16 mil JSONs (capítulos da Bíblia, músicas...). Como
+    // lista reativa comum, o Vue rastreava cada item e o isDownloaded() varria
+    // tudo para cada coletânea a cada redesenho — a aba Coletâneas chegava a
+    // travar 3–4 s ao reabrir. Congelada, o Vue só observa a troca da lista
+    // inteira; as buscas usam o índice localFileIndex (Map por nome).
     async loadLocalFiles() {
-      this.localFiles = await this.$electron.dbLocalList() || [];
+      const list = (await this.$electron.dbLocalList()) || [];
+      this.localFiles = Object.freeze(list.map((f) => Object.freeze(f)));
     },
 
     async loadFolderPaths() {
@@ -1008,7 +1081,7 @@ export default {
     },
 
     isDownloaded(filename) {
-      return this.localFiles.some(f => f.name === filename);
+      return this.localFileIndex.has(filename);
     },
 
     allDownloaded(files) {
@@ -1037,8 +1110,7 @@ export default {
       return album.description || album.subtitle || '';
     },
     albumCategoryName(album) {
-      const cat = (this.categories || []).find(c => (c.albums || []).some(a => a.id_album === album.id_album));
-      return cat ? cat.name : '—';
+      return this.albumCategoryIndex.get(album.id_album) || '—';
     },
     albumSongCount(album) {
       const s = this.albumStats[album.id_album];
@@ -1084,7 +1156,7 @@ export default {
       this.hymnalStats = stats;
     },
     hymnalSize(h) {
-      return this.folderBytes(h.folder) || (this.localFiles.find(f => f.name === h.file)?.size || 0);
+      return this.folderBytes(h.folder) || (this.localFileIndex.get(h.file)?.size || 0);
     },
 
     async downloadFile(filename) {
@@ -1346,7 +1418,7 @@ export default {
 
     async deleteFiles(filenames) {
       for (const name of filenames) {
-        if (this.localFiles.some(f => f.name === name)) {
+        if (this.localFileIndex.has(name)) {
           await this.$electron.dbLocalDelete(name);
         }
       }
@@ -1530,13 +1602,56 @@ export default {
 .ah-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .ah-toolbar > b { margin-right: auto; }
 .ah-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 130px;
   background: #10253e;
   border: 1px solid #1f3550;
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: 10px;
+  padding: 6px 8px 6px 12px;
   color: #eef4ff;
   font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+.ah-select:hover { border-color: #33557a; }
+.ah-select.open { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14); }
+.ah-select-arrow { color: #9fb7d3 !important; transition: transform 0.2s; }
+.ah-select.open .ah-select-arrow { transform: rotate(180deg); }
+.ah-menu-list {
+  min-width: 160px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #0f2740;
+  border: 1px solid #2a4664;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.ah-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dceafa;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ah-menu-item span { flex: 1; }
+.ah-menu-item:hover { background: #1b3a57; }
+.ah-menu-item.active { background: #1d5275; color: #7dd3fc; }
+.ah-menu-check { color: #7dd3fc !important; }
 .ah-view { display: flex; border: 1px solid #1f3550; border-radius: 8px; overflow: hidden; }
 .ah-view button { background: #10253e; border: 0; padding: 6px 9px; color: #b9cce4; cursor: pointer; }
 .ah-view button.on { background: #0f2a40; color: var(--accent); }
