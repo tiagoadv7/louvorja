@@ -33,6 +33,12 @@
         <v-list-item-title>{{ $t('components.menu.albums') }}</v-list-item-title>
       </v-list-item>
       <v-list-item
+        prepend-icon="mdi-view-dashboard-edit-outline"
+        @click="$appdata.toogle('menu.show'); openProjectionPanel()"
+      >
+        <v-list-item-title>{{ $t('components.projection_panel.title') }}</v-list-item-title>
+      </v-list-item>
+      <v-list-item
         v-if="$electron.isElectron()"
         prepend-icon="mdi-folder-sync-outline"
         @click="$appdata.toogle('menu.show'); dispatchSyncFiles()"
@@ -113,6 +119,12 @@ export default {
       // de fechar antes de abrir o dialog, senão o scrim dele (ainda
       // fechando) bloqueia clique nos botões do dialog novo.
       setTimeout(() => { this.albumsManagerOpen = true; }, 300);
+    },
+    // Painel de camadas da projeção + multiviewer do retorno
+    // (components/ProjectionPanel.vue) — abre no mesmo lado do menu, depois
+    // que ele terminar de fechar (mesmo motivo do openAlbumsManager acima).
+    openProjectionPanel() {
+      setTimeout(() => this.$appdata.set('projection_panel.show', true), 300);
     },
     dispatchSyncFiles() {
       // Aguarda a transição de fechamento do drawer terminar antes de abrir o

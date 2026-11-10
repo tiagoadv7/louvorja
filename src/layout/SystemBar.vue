@@ -220,7 +220,8 @@ export default {
         }
       }
 
-      await this.$electron.openOutput(moduleId, null);
+      const opened = await this.$electron.openOutput(moduleId, null);
+      if (opened === false) return; // sem segundo monitor — ver 'projection-no-monitor'
       this.outputOpen = true;
       // Registra o stub de popup para que Media.close() saiba que o output está aberto,
       // mesmo quando aberto via barra do sistema (sem passar por $popup.open()).
@@ -293,10 +294,20 @@ export default {
         this.$electron.sendStateUpdate({ param: 'slide_global_bg', value: bgValue, target });
       } catch (_) {}
     });
+    // Sem segundo monitor: a projeção/retorno não abre (cobriria a tela do
+    // operador e pareceria travado) — avisa uma vez em vez de abrir.
+    const h4 = this.$electron.on("projection-no-monitor", ({ reason } = {}) => {
+      if (this.$appdata.get("alert.show")) return;
+      this.$alert.info({
+        title: "alert.no_monitor_title",
+        text: reason === "removed" ? "alert.no_monitor_removed" : "alert.no_monitor_open",
+      });
+    });
     this.outputHandlers = [
       h1 ? { channel: "output-window-closed", handler: h1 } : null,
       h2 ? { channel: "output-window-opened", handler: h2 } : null,
       h3 ? { channel: "output-ready", handler: h3 } : null,
+      h4 ? { channel: "projection-no-monitor", handler: h4 } : null,
     ].filter(Boolean);
   },
   beforeUnmount() {

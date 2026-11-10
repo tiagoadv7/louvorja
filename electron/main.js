@@ -52,9 +52,24 @@ app.commandLine.appendSwitch('disable-features', [
   'AudioServiceOutOfProcess',
 ].join(','));
 
-app.commandLine.appendSwitch('disk-cache-size', String(64 * 1024 * 1024));
+// Modo memória baixa: PC com até 8 GB de RAM (ou LJA_LOW_MEMORY=1). Usa menos
+// cache e os fundos animados ficam mais leves (ver preload.js#lowMemory e
+// components/AnimatedBackground.vue). Independente disso, o monitor de memória
+// mais abaixo (startMemoryWatch) alivia quando a memória LIVRE acaba.
+const os = require('os');
+const TOTAL_RAM_MB = Math.round(os.totalmem() / 1048576);
+const lowMemory = process.env.LJA_LOW_MEMORY === '1'
+  || (process.env.LJA_LOW_MEMORY !== '0' && TOTAL_RAM_MB <= 8.5 * 1024);
+ipcMain.on('app:low-memory', (e) => { e.returnValue = lowMemory; });
+
+app.commandLine.appendSwitch('disk-cache-size', String((lowMemory ? 32 : 64) * 1024 * 1024));
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.commandLine.appendSwitch('renderer-process-limit', '4');
+// Navegador (ou outro programa) em primeiro plano: o Chromium rebaixava a
+// prioridade das nossas janelas "de fundo" (e no Windows 11 as punha em modo
+// de eficiência/EcoQoS) — projeção e retorno travavam enquanto o operador
+// usava o Chrome. Com isto elas mantêm a prioridade normal o tempo todo.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -719,12 +734,39 @@ function resolveOutputDisplay(displayId) {
   return { target, isExternal: target.id !== primary.id };
 }
 
+// ── Sem segundo monitor: não projeta ──────────────────────────────────────────
+// Com um só monitor, a saída (sem moldura, sempre no topo) e o retorno
+// (fullscreen) abriam por cima da tela do operador e cobriam o sistema todo —
+// parecia que o computador tinha travado. Agora, sem um segundo monitor, essas
+// janelas não abrem (e, se o monitor cair com elas abertas, ficam escondidas
+// até ele voltar). Em dev continua permitido pra testar num monitor só;
+// LJA_BLOCK_SINGLE_SCREEN=1 força o bloqueio em dev e
+// LJA_ALLOW_SINGLE_SCREEN=1 libera no app instalado.
+function singleScreen() {
+  if (process.env.LJA_ALLOW_SINGLE_SCREEN === '1') return false;
+  if (isDev && process.env.LJA_BLOCK_SINGLE_SCREEN !== '1') return false;
+  try { return screen.getAllDisplays().length < 2; } catch (_) { return false; }
+}
+
+function notifyNoMonitor(kind, reason) {
+  sendToRenderer('projection-no-monitor', { kind, reason });
+}
+
 // ── Janela de saída (apresentação) ────────────────────────────────────────────
 function createOutputWindow(moduleId, displayId) {
   if (outputWindow && !outputWindow.isDestroyed()) {
+    if (singleScreen()) { notifyNoMonitor('output', 'open'); return outputWindow; }
+    if (!outputWindow.isVisible()) outputWindow.showInactive();
     outputWindow.focus();
     if (moduleId) outputWindow.webContents.send('set-module', moduleId);
     return outputWindow;
+  }
+
+  if (singleScreen()) {
+    notifyNoMonitor('output', 'open');
+    // Desfaz o estado de "projetando" que o renderer já marcou ao clicar
+    sendToRenderer('output-window-closed');
+    return null;
   }
 
   const { target, isExternal } = resolveOutputDisplay(displayId);
@@ -876,8 +918,16 @@ async function closeReturnWithOutput() {
 // ── Janela de retorno (monitor de palco) ──────────────────────────────────────
 function createReturnWindow(displayId) {
   if (returnWindow && !returnWindow.isDestroyed()) {
+    if (singleScreen()) { notifyNoMonitor('return', 'open'); return returnWindow; }
+    if (!returnWindow.isVisible()) returnWindow.showInactive();
     returnWindow.focus();
     return returnWindow;
+  }
+
+  if (singleScreen()) {
+    notifyNoMonitor('return', 'open');
+    sendToRenderer('return-window-closed');
+    return null;
   }
 
   const { target } = resolveReturnDisplay(displayId);
@@ -973,6 +1023,25 @@ function createReturnWindow(displayId) {
 // resolveReturnDisplay, com o mesmo fallback pro externo/primário) nas janelas
 // que já estiverem abertas.
 function reconcileDisplays() {
+  // Monitor de projeção desconectado com a saída/retorno abertos: em vez de
+  // jogar as janelas pro monitor do operador (cobrindo o sistema), esconde e
+  // espera o monitor voltar — aí o bloco abaixo reposiciona e mostra de novo.
+  if (singleScreen()) {
+    let hid = false;
+    for (const w of [outputWindow, returnWindow]) {
+      if (w && !w.isDestroyed() && w.isVisible()) { try { w.hide(); hid = true; } catch (_) {} }
+    }
+    if (hid) notifyNoMonitor('output', 'removed');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('displays-changed');
+      nudgeRepaint(mainWindow);
+    }
+    return;
+  }
+  for (const w of [outputWindow, returnWindow]) {
+    if (w && !w.isDestroyed() && !w.isVisible()) { try { w.showInactive(); } catch (_) {} }
+  }
+
   if (outputWindow && !outputWindow.isDestroyed()) {
     try {
       const { target, isExternal } = resolveOutputDisplay();
@@ -1136,8 +1205,7 @@ function registerIpcHandlers() {
   ipcMain.handle('window:set-title',    (_, title) => mainWindow?.setTitle(title || 'LouvorJA'));
 
   ipcMain.handle('output:open', (_, moduleId, displayId) => {
-    createOutputWindow(moduleId, displayId);
-    return true;
+    return !!createOutputWindow(moduleId, displayId);
   });
   // Fecha só a projeção principal — a tela de retorno é independente (pode
   // estar espelhando outra coisa, ou ter um módulo fixado nela via "Enviar
@@ -1171,7 +1239,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('return:open', (_, displayId) => {
-    createReturnWindow(displayId);
+    if (!createReturnWindow(displayId)) return false;
     // Lembra que o retorno deve reabrir sozinho na próxima vez que o app for
     // aberto (ver restauração em ipcMain.once('app:loaded') abaixo) — mesmo
     // padrão do "output_window_was_open" pra saída principal. Marcado aqui
@@ -1494,8 +1562,50 @@ app.on('child-process-gone', (_e, details) => {
   }, 800);
 });
 
+// Prioridade "acima do normal" para os processos do app (principal, GPU,
+// janelas): com o navegador aberto disputando CPU, o Windows passa a dar
+// preferência à projeção/áudio do Louvor JA. Reaplica de tempos em tempos
+// porque processos novos nascem (janela reaberta, GPU recriada).
+function boostProcessPriority() {
+  if (process.platform !== 'win32') return;
+  const apply = () => {
+    for (const m of app.getAppMetrics()) {
+      try { os.setPriority(m.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch (_) { /* sem permissão: segue */ }
+    }
+  };
+  apply();
+  setInterval(apply, 15000).unref?.();
+}
+
+// Monitor de memória livre: abaixo de ~700 MB (ou 8% da RAM) pede para todas
+// as janelas soltarem cache de imagens/scripts e rodarem o coletor de lixo
+// (preload.js, 'memory-pressure'). No máximo a cada 60 s; registra no
+// falhas.log no máximo a cada 10 min.
+function startMemoryWatch() {
+  let lastRelief = 0;
+  let lastLog = 0;
+  setInterval(() => {
+    const freeMb = Math.round(os.freemem() / 1048576);
+    const limit = Math.max(700, TOTAL_RAM_MB * 0.08);
+    if (freeMb >= limit) return;
+    const now = Date.now();
+    if (now - lastRelief < 60000) return;
+    lastRelief = now;
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { if (!w.isDestroyed()) w.webContents.send('memory-pressure'); } catch (_) { /* */ }
+    }
+    if (now - lastLog > 600000) {
+      lastLog = now;
+      logCrash(`memória baixa (${freeMb} MB livres de ${TOTAL_RAM_MB} MB) — aliviando caches das janelas`);
+    }
+  }, 20000).unref?.();
+}
+
 app.whenReady().then(() => {
   Store.init();
+  boostProcessPriority();
+  startMemoryWatch();
+  if (lowMemory) console.log(`[Main] Modo memória baixa (${TOTAL_RAM_MB} MB de RAM)`);
 
   session.defaultSession.clearCache();
   session.defaultSession.clearStorageData({

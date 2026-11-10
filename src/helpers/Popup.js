@@ -24,6 +24,14 @@ export default {
     if ($electron.isElectron() && !(await $electron.isOutputOpen())) {
       const screens = await $electron.getScreens();
       const hasExternal = screens.some((s) => !s.primary);
+      // App instalado: com um monitor só a janela de projeção não abre mais
+      // (electron/main.js#singleScreen — cobria o sistema e parecia travado),
+      // então nem pergunta: avisa e não projeta. Em dev continua perguntando
+      // (lá a projeção é permitida num monitor só, pra testar).
+      if (!hasExternal && !import.meta.env.DEV) {
+        $alert.info({ title: "alert.no_monitor_title", text: "alert.no_monitor_open" });
+        return;
+      }
       if (!hasExternal) {
         const confirmed = await new Promise((resolve) => {
           $alert.yesno(

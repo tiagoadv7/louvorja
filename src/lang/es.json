@@ -111,6 +111,33 @@
             "sync": "Sincronizar archivos",
             "updates": "Buscar actualizaciones"
         },
+        "projection_panel": {
+            "title": "Proyección y multiviewer",
+            "projection": "Proyección — capas",
+            "projecting": "Proyectando:",
+            "nothing_projected": "Nada proyectado ahora",
+            "projection_hint": "Superponer cubre toda la pantalla sobre lo que se proyecta; Dividir pone lo proyectado a la izquierda y este a la derecha.",
+            "main": "principal",
+            "off": "Apagado",
+            "overlay": "Superponer",
+            "share": "Dividir",
+            "multiview": "Retorno — multiviewer",
+            "return_open": "Retorno abierto",
+            "return_closed": "Retorno cerrado",
+            "open_return": "Abrir retorno",
+            "close_return": "Cerrar retorno",
+            "multiview_hint": "Marque lo que debe aparecer junto en el retorno, en mosaico. Los módulos cerrados se abren al marcar.",
+            "closed": "cerrado",
+            "tiles": "{n} marcado(s) — 2 lado a lado, 3 con la letra a la izquierda, 4 o más en cuadrícula.",
+            "clear_all": "Desmarcar todo",
+            "m_media": "Letra / Música",
+            "m_slide_editor": "Diapositivas",
+            "m_bible": "Biblia",
+            "m_clock": "Reloj",
+            "m_cronometro_culto": "Cronómetro del culto",
+            "m_video_player": "Video",
+            "m_web_link": "YouTube / Enlace"
+        },
         "download_center": {
             "title": "Biblioteca Local",
             "welcome": "Bienvenido al Centro de descargas",
@@ -348,7 +375,10 @@
         "no": "No",
         "wait": "Aguardar...",
         "cancel": "Cancelar",
-        "confirm": "Confirmar"
+        "confirm": "Confirmar",
+        "no_monitor_title": "No hay un segundo monitor conectado",
+        "no_monitor_open": "La proyección no se abrió porque solo hay un monitor. Conecte el proyector o la TV (en modo <b>Extender</b> de Windows, tecla Win+P) e intente de nuevo.",
+        "no_monitor_removed": "El monitor de proyección fue desconectado. La proyección quedó oculta para no cubrir su pantalla y vuelve sola cuando el monitor se reconecte."
     },
     "popup": {
         "close": "Cerrar Ventana",

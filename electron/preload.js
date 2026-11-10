@@ -37,6 +37,7 @@ const RECEIVE_CHANNELS = [
   'updater:state',
   'displays-changed',
   'output-display-not-found',
+  'projection-no-monitor',
   'open-slja-file',
 ];
 
@@ -226,6 +227,8 @@ contextBridge.exposeInMainWorld('electron', {
   // na tela). Sem isso a janela principal acumulava as imagens de fundo de cada
   // música tocada (~10 MB por faixa) até cair depois de horas de uso.
   clearMemoryCache: () => { try { webFrame.clearCache(); } catch (_) { /* */ } },
+  // PC com pouca RAM (ver electron/main.js#lowMemory): efeitos mais leves
+  lowMemory: (() => { try { return !!ipcRenderer.sendSync('app:low-memory'); } catch (_) { return false; } })(),
   openUtilityWindow: (moduleId) => ipcRenderer.invoke('utility:open-window', moduleId),
   appLoaded: () => ipcRenderer.send('app:loaded'),
 
@@ -241,4 +244,13 @@ contextBridge.exposeInMainWorld('electron', {
     if (handler) ipcRenderer.removeListener(channel, handler);
     else ipcRenderer.removeAllListeners(channel);
   },
+});
+
+// Memória livre acabando (electron/main.js#startMemoryWatch): solta o cache de
+// imagens/scripts do Blink, roda o coletor de lixo (--expose-gc) e avisa a
+// página (evento "lja-memory-pressure", ex.: fundos animados se aliviam).
+ipcRenderer.on('memory-pressure', () => {
+  try { webFrame.clearCache(); } catch (_) { /* */ }
+  try { if (typeof globalThis.gc === 'function') globalThis.gc(); } catch (_) { /* */ }
+  try { window.dispatchEvent(new Event('lja-memory-pressure')); } catch (_) { /* */ }
 });

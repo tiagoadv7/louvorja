@@ -2,6 +2,7 @@
   <AppSystemBar />
   <AppHeader />
   <AppMenu />
+  <ProjectionPanel />
 
   <AppModules />
   <AppAlert />
@@ -33,6 +34,7 @@ import AppSystemBar from "@/layout/SystemBar.vue";
 import AppHeader from "@/layout/Header.vue";
 import AppFooter from "@/layout/Footer.vue";
 import AppMenu from "@/layout/Menu.vue";
+import ProjectionPanel from "@/components/ProjectionPanel.vue";
 import AppModules from "@/layout/Modules.vue";
 import AppAlert from "@/layout/Alert.vue";
 import MediaChoiceDialog from "@/components/MediaChoiceDialog.vue";
@@ -47,6 +49,7 @@ export default {
     AppHeader,
     AppFooter,
     AppMenu,
+    ProjectionPanel,
     AppModules,
     AppAlert,
     MediaChoiceDialog,

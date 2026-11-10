@@ -108,6 +108,33 @@
             "sync": "Sincronizar arquivos",
             "updates": "Verificar atualizações"
         },
+        "projection_panel": {
+            "title": "Projeção e multiviewer",
+            "projection": "Projeção — camadas",
+            "projecting": "Projetando:",
+            "nothing_projected": "Nada projetado agora",
+            "projection_hint": "Sobrepor cobre a tela inteira por cima do que está projetado; Dividir coloca o que está projetado à esquerda e este à direita.",
+            "main": "principal",
+            "off": "Desligado",
+            "overlay": "Sobrepor",
+            "share": "Dividir",
+            "multiview": "Retorno — multiviewer",
+            "return_open": "Retorno aberto",
+            "return_closed": "Retorno fechado",
+            "open_return": "Abrir retorno",
+            "close_return": "Fechar retorno",
+            "multiview_hint": "Marque o que deve aparecer junto no retorno, em mosaico. Módulos fechados são abertos ao marcar.",
+            "closed": "fechado",
+            "tiles": "{n} marcado(s) — 2 lado a lado, 3 com a letra à esquerda, 4 ou mais em grade.",
+            "clear_all": "Desmarcar tudo",
+            "m_media": "Letra / Música",
+            "m_slide_editor": "Slides",
+            "m_bible": "Bíblia",
+            "m_clock": "Relógio",
+            "m_cronometro_culto": "Cronômetro do culto",
+            "m_video_player": "Vídeo",
+            "m_web_link": "YouTube / Link"
+        },
         "download_center": {
             "title": "Biblioteca Local",
             "welcome": "Bem-vindo ao Centro de Downloads",
@@ -345,7 +372,10 @@
         "no": "Não",
         "wait": "Aguarde...",
         "cancel": "Cancelar",
-        "confirm": "Confirmar"
+        "confirm": "Confirmar",
+        "no_monitor_title": "Nenhum segundo monitor conectado",
+        "no_monitor_open": "A projeção não foi aberta porque só há um monitor. Conecte o projetor ou a TV (no modo <b>Estender</b> do Windows, tecla Win+P) e tente de novo.",
+        "no_monitor_removed": "O monitor de projeção foi desconectado. A projeção ficou escondida para não cobrir sua tela e volta sozinha quando o monitor for reconectado."
     },
     "popup": {
         "close": "Fechar Janela",

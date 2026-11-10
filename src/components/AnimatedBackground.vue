@@ -209,15 +209,30 @@ export default {
     },
   },
   mounted() {
+    // PC com pouca RAM (electron/main.js#lowMemory): WebGL sem antialias e
+    // em resolução 1x. Na janela do operador (prévia, não a projeção) o
+    // efeito também anda mais devagar — é só uma miniatura.
+    this._lite = !!(typeof window !== "undefined" && window.electron?.lowMemory);
+    this._preview = !this.$appdata?.get("is_popup");
+    this._frozen = false;
     this._setup();
     this._onVisibility = () => {
-      this.$refs.root?.classList.toggle("anim-bg-host--paused", document.hidden);
+      this.$refs.root?.classList.toggle("anim-bg-host--paused", document.hidden || this._frozen);
     };
     document.addEventListener("visibilitychange", this._onVisibility);
+    // Memória livre acabando (preload.js): a prévia do operador congela o
+    // efeito; a projeção/retorno seguem animando (é o que o público vê).
+    this._onMemoryPressure = () => {
+      if (!this._preview) return;
+      this._frozen = true;
+      this._onVisibility();
+    };
+    window.addEventListener("lja-memory-pressure", this._onMemoryPressure);
   },
   beforeUnmount() {
     if (this._switchFade) this._switchFade.cancel();
     document.removeEventListener("visibilitychange", this._onVisibility);
+    window.removeEventListener("lja-memory-pressure", this._onMemoryPressure);
     this._teardown();
   },
   methods: {
@@ -283,8 +298,10 @@ export default {
       const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
       camera.position.z = 30;
 
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !this._lite, powerPreference: this._lite ? "low-power" : "default" });
+      renderer.setPixelRatio(this._lite ? 1 : Math.min(window.devicePixelRatio || 1, 1.5));
+      // ~30 fps; prévia do operador em PC com pouca RAM: ~10 fps
+      const frameMs = this._lite && this._preview ? 100 : 33;
 
       const count = 220;
       const positions = new Float32Array(count * 3);
@@ -328,7 +345,7 @@ export default {
       let lastFrame = 0;
       const tick = (now = 0) => {
         frameId = requestAnimationFrame(tick);
-        if (document.hidden || now - lastFrame < 33) return;
+        if (document.hidden || this._frozen || now - lastFrame < frameMs) return;
         lastFrame = now;
         points.rotation.y += 0.0006;
         points.rotation.x += 0.0002;
