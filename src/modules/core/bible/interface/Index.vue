@@ -692,6 +692,15 @@ export default {
       if (id_bible_book) {
         this.bible.id_bible_book = id_bible_book;
       }
+      // Livro ainda inexistente na lista: a seleção foi zerada (troca de
+      // idioma pt/es ou reabrir o painel depois de trocar) e os livros do
+      // novo idioma ainda estão carregando — o watcher de id_bible_book
+      // chamava isto com id null e quebrava em "this.book.name" (visto no
+      // falhas.log). O loadData() de quem zerou escolhe o 1º livro depois.
+      if (!this.book) {
+        this.bible.book = null;
+        return;
+      }
       this.bible.book = this.book.name;
       this.bible.verses = [];
       this.last_verse = 1;
