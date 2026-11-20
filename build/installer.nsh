@@ -31,17 +31,51 @@ Var ljaD3
 Var ljaD4
 Var ljaD5
 Var ljaD6
-Var ljaD7
-Var ljaD8
+; Página "Onde instalar" (cartões): R = bolinha, C = cartão, L = caminho, G = etiqueta
 Var ljaR1
 Var ljaR2
 Var ljaR3
 Var ljaR4
 Var ljaR5
 Var ljaR6
-Var ljaR7
-Var ljaR8
+Var ljaC1
+Var ljaC2
+Var ljaC3
+Var ljaC4
+Var ljaC5
+Var ljaC6
+Var ljaL1
+Var ljaL2
+Var ljaL3
+Var ljaL4
+Var ljaL5
+Var ljaL6
+Var ljaG1
+Var ljaG2
+Var ljaG3
+Var ljaG4
+Var ljaG5
+Var ljaG6
 Var ljaROther
+Var ljaCOther
+Var ljaLOther
+Var ljaGOther
+Var ljaDirEdit
+Var ljaDirBtn
+Var ljaWhereErr
+Var ljaPage
+Var hFontWT
+Var hFontItem
+Var hFontSmall
+; Erro de preparo da instalação, mostrado dentro da página (ver LjaShowInstallError)
+Var ljaErr
+Var ljaErrTitle
+Var ljaErrText
+Var lblErrBar
+Var lblErrTitle
+Var lblErrBody
+Var lblErrHint
+Var hFontErr
 Var ljaPrevDir   ; pasta da instalação anterior do Louvor JA (registro)
 Var ljaFinalDir  ; pasta escolhida, antes do ajuste automático do electron-builder
 Var ljaKeepDir   ; 1 = a pasta escolhida já tem o Louvor JA: instala nela mesma
@@ -49,6 +83,7 @@ Var bkADir       ; backup da pasta de destino
 Var bkAOrig
 Var bkBDir       ; backup da instalação anterior, quando for outra pasta
 Var bkBOrig
+Var ljaSafeMerge ; 1 = RestoreLegacyMerge só devolve o que FALTA (nunca substitui)
 !endif
 
 ; Recursiva: move de volta tudo que está em "$legacyBackupDir<subcaminho>" pra
@@ -103,6 +138,8 @@ Function RestoreLegacyMerge
       Goto continue
 
     collision:
+      ; Recuperando sobra de backup antigo: nunca substitui o que já existe
+      StrCmp $ljaSafeMerge "1" continue
       ; \config ou \config\... → o do backup substitui o recém-extraído
       StrCpy $R3 "$R0" 7
       StrCmp $R3 "\config" 0 notConfig
@@ -145,30 +182,109 @@ FunctionEnd
   !define MUI_HEADERIMAGE_BITMAP "${BUILD_RESOURCES_DIR}\installer-header.bmp"
 !macroend
 
-; Opções da página "Onde instalar" (usadas em LjaWherePageCreate/Leave)
-  !macro LjaWhereRadio IDX
-    ${If} $ljaN >= ${IDX}
-      StrCpy $1 $ljaD${IDX}
-      StrCpy $2 ""
-      ${If} ${FileExists} "$1\LouvorJA.exe"
-        StrCpy $2 "LouvorJA Delphi"
-      ${EndIf}
-      ${If} ${FileExists} "$1\${APP_EXECUTABLE_FILENAME}"
-        ${If} $2 != ""
-          StrCpy $2 "$2 + Louvor JA"
-        ${Else}
-          StrCpy $2 "Louvor JA"
-        ${EndIf}
-      ${EndIf}
-      IntOp $3 $3 + 15
-      ${NSD_CreateRadioButton} 4% $3u 92% 13u "$1   ($2)"
-      Pop $ljaR${IDX}
-      ${If} $1 == $INSTDIR
-        ${NSD_Check} $ljaR${IDX}
-        StrCpy $4 "1"
+; ── Página "Onde instalar": cartões no visual do app ───────────────────────
+; Cores (RRGGBB) iguais às do app (tema darkblue / Centro de Download):
+;   fundo 1B2A41 · cartão 243A5C · cartão marcado 1D5275 · destaque 7DD3FC
+;   texto secundário 9FB7D3.
+; Cada opção = cartão (fundo clicável) + bolinha + caminho + etiqueta à
+; direita. Usam $3 (posição vertical, em u) e $5 (altura da linha, em u).
+; Rótulo com fundo próprio (sem o WS_EX_TRANSPARENT do NSD_CreateLabel, que
+; às vezes deixava o texto sem desenhar por cima do cartão/painel)
+!define LJA_LABEL 'nsDialogs::CreateControl STATIC ${DEFAULT_STYLES}|${SS_NOTIFY} 0'
+
+!macro LjaWhereCard C R L G PATH TAG
+  IntOp $6 $5 - 3
+  nsDialogs::CreateControl STATIC ${DEFAULT_STYLES}|${SS_NOTIFY} 0 5% $3u 90% $6u ""
+  Pop ${C}
+  ${NSD_OnClick} ${C} LjaWhereClick
+  IntOp $7 $6 - 10
+  IntOp $7 $7 / 2
+  IntOp $7 $7 + $3
+  ${NSD_CreateRadioButton} 7% $7u 4% 10u ""
+  Pop ${R}
+  ${NSD_OnClick} ${R} LjaWhereClick
+  ${LJA_LABEL} 12% $7u 54% 10u "${PATH}"
+  Pop ${L}
+  ${NSD_AddStyle} ${L} ${SS_PATHELLIPSIS}
+  SendMessage ${L} ${WM_SETFONT} $hFontItem 1
+  ${NSD_OnClick} ${L} LjaWhereClick
+  ${LJA_LABEL} 66% $7u 27% 10u "${TAG}"
+  Pop ${G}
+  ${NSD_AddStyle} ${G} ${SS_RIGHT}
+  SendMessage ${G} ${WM_SETFONT} $hFontSmall 1
+  ${NSD_OnClick} ${G} LjaWhereClick
+  ; Cartão atrás da bolinha/textos (o fundo da página vai pro fundo no fim)
+  System::Call 'user32::SetWindowPos(p ${C}, p 1, i 0, i 0, i 0, i 0, i 0x13)'
+  IntOp $3 $3 + $5
+!macroend
+
+!macro LjaWhereRadio IDX
+  ${If} $ljaN >= ${IDX}
+    StrCpy $1 $ljaD${IDX}
+    StrCpy $2 ""
+    ${If} ${FileExists} "$1\LouvorJA.exe"
+      StrCpy $2 "LouvorJA Delphi"
+    ${EndIf}
+    ${If} ${FileExists} "$1\${APP_EXECUTABLE_FILENAME}"
+      ${If} $2 != ""
+        StrCpy $2 "Delphi + Louvor JA"
+      ${Else}
+        StrCpy $2 "Louvor JA"
       ${EndIf}
     ${EndIf}
-  !macroend
+    !insertmacro LjaWhereCard $ljaC${IDX} $ljaR${IDX} $ljaL${IDX} $ljaG${IDX} "$1" "$2"
+    ${If} $1 == $INSTDIR
+      ${NSD_Check} $ljaR${IDX}
+      StrCpy $4 "1"
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+; Cor de um cartão conforme a bolinha dele está marcada ou não
+; (SetCtlColors só aceita cores FIXAS — são lidas na compilação, uma variável
+; vira preto — por isso um ramo para cada estado)
+!macro LjaWhereTint C R L G
+  ${NSD_GetState} ${R} $0
+  ${If} $0 == ${BST_CHECKED}
+    SetCtlColors ${C} 0x7DD3FC 0x1D5275
+    SetCtlColors ${R} 0x7DD3FC 0x1D5275
+    SetCtlColors ${L} 0x7DD3FC 0x1D5275
+    SetCtlColors ${G} 0xBAE6FD 0x1D5275
+  ${Else}
+    SetCtlColors ${C} 0xFFFFFF 0x243A5C
+    SetCtlColors ${R} 0xFFFFFF 0x243A5C
+    SetCtlColors ${L} 0xFFFFFF 0x243A5C
+    SetCtlColors ${G} 0x9FB7D3 0x243A5C
+  ${EndIf}
+!macroend
+
+!macro LjaWhereTintIdx IDX
+  ${If} $ljaN >= ${IDX}
+    !insertmacro LjaWhereTint $ljaC${IDX} $ljaR${IDX} $ljaL${IDX} $ljaG${IDX}
+  ${EndIf}
+!macroend
+
+; Clique em qualquer parte do cartão IDX ($0 = controle clicado) → $1 = IDX
+!macro LjaWhereHit IDX
+  ${If} $ljaN >= ${IDX}
+    ${If} $0 == $ljaC${IDX}
+    ${OrIf} $0 == $ljaR${IDX}
+    ${OrIf} $0 == $ljaL${IDX}
+    ${OrIf} $0 == $ljaG${IDX}
+      StrCpy $1 ${IDX}
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro LjaWhereSel IDX
+  ${If} $ljaN >= ${IDX}
+    ${If} $1 == ${IDX}
+      ${NSD_SetState} $ljaR${IDX} ${BST_CHECKED}
+    ${Else}
+      ${NSD_SetState} $ljaR${IDX} ${BST_UNCHECKED}
+    ${EndIf}
+  ${EndIf}
+!macroend
 
   !macro LjaWherePick IDX
     ${If} $ljaN >= ${IDX}
@@ -283,14 +399,43 @@ FunctionEnd
 Function LjaBackupDir
   Exch $R0
   Push $R1
+  Push $R2
+  Push $R3
   StrCpy $R1 ""
   IfFileExists "$R0\*.*" 0 bdone
+  ; Sobras de uma instalação/atualização interrompida (".update-backup" e
+  ; ".update-backup-old" que ficaram para trás): antes travava aqui com
+  ; "Existem cópias de segurança..." — e a atualização automática falhava
+  ; em silêncio. Agora devolve para a pasta o que estiver FALTANDO nela
+  ; (músicas, banco, arquivos do Delphi), sem substituir nada...
+  Push "$R0.update-backup"
+  Push $R0
+  Call LjaSalvageBackup
+  Push "$R0.update-backup-old"
+  Push $R0
+  Call LjaSalvageBackup
   StrCpy $R1 "$R0.update-backup"
   IfFileExists "$R1\*.*" 0 brename
-    IfFileExists "$R0.update-backup-old\*.*" 0 +3
+    ; ...e o que sobrar (cópias repetidas) é guardado com o próximo nome
+    ; livre (.update-backup-old, -old2, -old3...). Nada é apagado.
+    StrCpy $R3 1
+    StrCpy $R2 "$R0.update-backup-old"
+    bfree:
+    IfFileExists "$R2\*.*" 0 bmove
+      IntOp $R3 $R3 + 1
+      IntCmp $R3 30 0 0 bbusy
+      StrCpy $R2 "$R0.update-backup-old$R3"
+      Goto bfree
+    bmove:
+    ClearErrors
+    Rename "$R1" "$R2"
+    IfErrors 0 brename
+      ClearErrors
+      StrCpy $R1 "ERR"
+      Goto bdone
+    bbusy:
       StrCpy $R1 "BUSY"
       Goto bdone
-    Rename "$R1" "$R0.update-backup-old"
   brename:
   ClearErrors
   Rename "$R0" "$R1"
@@ -299,8 +444,42 @@ Function LjaBackupDir
     StrCpy $R1 "ERR"
   bdone:
   StrCpy $R0 $R1
+  Pop $R3
+  Pop $R2
   Pop $R1
   Exch $R0
+FunctionEnd
+
+; Devolve de um backup antigo (pilha: backup, depois pasta no topo) só os
+; arquivos que não existem na pasta e remove as subpastas que ficarem vazias.
+Function LjaSalvageBackup
+  Exch $R5 ; pasta de destino
+  Exch
+  Exch $R4 ; backup
+  Push $R6
+  Push $R7
+  StrCpy $R6 $legacyBackupDir
+  StrCpy $R7 $legacyOrigDir
+  IfFileExists "$R4\*.*" 0 sdone
+    DetailPrint "Recuperando arquivos de uma atualização anterior interrompida ($R4)..."
+    StrCpy $legacyBackupDir $R4
+    StrCpy $legacyOrigDir $R5
+    StrCpy $ljaSafeMerge 1
+    Push ""
+    Call RestoreLegacyMerge
+    StrCpy $ljaSafeMerge 0
+    Push $R4
+    Call LjaPruneEmpty
+    ClearErrors
+    RMDir $R4
+    ClearErrors
+  sdone:
+  StrCpy $legacyBackupDir $R6
+  StrCpy $legacyOrigDir $R7
+  Pop $R7
+  Pop $R6
+  Pop $R4
+  Pop $R5
 FunctionEnd
 
 ; Devolve um backup para o lugar (merge) e limpa o que sobrar vazio.
@@ -336,9 +515,7 @@ Function LjaAddIfInstalled
     StrCmp $R0 $ljaD4 adone
     StrCmp $R0 $ljaD5 adone
     StrCmp $R0 $ljaD6 adone
-    StrCmp $R0 $ljaD7 adone
-    StrCmp $R0 $ljaD8 adone
-    IntCmp $ljaN 8 adone 0 adone
+    IntCmp $ljaN 6 adone 0 adone
     IntOp $ljaN $ljaN + 1
     StrCmp $ljaN 1 0 +2
       StrCpy $ljaD1 $R0
@@ -352,10 +529,6 @@ Function LjaAddIfInstalled
       StrCpy $ljaD5 $R0
     StrCmp $ljaN 6 0 +2
       StrCpy $ljaD6 $R0
-    StrCmp $ljaN 7 0 +2
-      StrCpy $ljaD7 $R0
-    StrCmp $ljaN 8 0 +2
-      StrCpy $ljaD8 $R0
   adone:
   Pop $R1
   Pop $R0
@@ -416,12 +589,13 @@ Function LjaScanDrives
   Pop $0
 FunctionEnd
 
-  ; ── Página "Onde instalar": instalações encontradas nos discos ────────────
-  ; Lista cada pasta com o Louvor JA (Delphi e/ou novo) em C:, D:, E:, B:...
-  ; e deixa escolher em qual instalar — ou "Outro local", que segue para a
-  ; tela de pasta normal. Sem nada encontrado, a página nem aparece.
+  ; ── Página "Onde instalar" ────────────────────────────────────────────────
+  ; Única tela de escolha da pasta (substitui a tela padrão do Windows — ver
+  ; "allowToChangeInstallationDirectory": false no package.json), no visual
+  ; do app: lista cada pasta com o Louvor JA (Delphi e/ou novo) encontrada em
+  ; C:, D:, E:... como cartões, e "Outro local" com o campo da pasta e o botão
+  ; Procurar logo abaixo. Sem nenhuma instalação encontrada, mostra só o campo.
   Page custom LjaWherePageCreate LjaWherePageLeave
-
 
   Function LjaWherePageCreate
     ; Atualização automática (sem perguntas) não mostra esta página
@@ -429,22 +603,49 @@ FunctionEnd
       Abort
     ${EndIf}
     Call LjaScanDrives
-    ${If} $ljaN == 0
-      Abort
-    ${EndIf}
 
-    !insertmacro MUI_HEADER_TEXT "Onde instalar" "O Louvor JA já está neste computador"
+    ${If} $ljaN > 0
+      !insertmacro MUI_HEADER_TEXT "Onde instalar" "O Louvor JA já está neste computador"
+    ${Else}
+      !insertmacro MUI_HEADER_TEXT "Onde instalar" "Escolha a pasta do Louvor JA"
+    ${EndIf}
 
     nsDialogs::Create 1018
-    Pop $0
-    ${If} $0 == error
+    Pop $ljaPage
+    ${If} $ljaPage == error
       Abort
     ${EndIf}
 
-    ${NSD_CreateLabel} 0 0 100% 24u "Encontramos o Louvor JA nas pastas abaixo. Escolha onde instalar esta versão.$\r$\nOs arquivos do LouvorJA Delphi e as suas músicas, capas e banco de dados são mantidos."
-    Pop $0
+    CreateFont $hFontWT "Segoe UI" "13" "700"
+    CreateFont $hFontItem "Segoe UI" "9" "400"
+    CreateFont $hFontSmall "Segoe UI" "8" "400"
 
-    StrCpy $3 14   ; posição vertical (u) da próxima opção
+    ; Fundo da página inteira (vai pro fundo da pilha no fim)
+    nsDialogs::CreateControl STATIC ${DEFAULT_STYLES} 0 0 0 100% 100% ""
+    Pop $9
+    SetCtlColors $9 0xFFFFFF 0x1B2A41
+
+    ${LJA_LABEL} 5% 6u 90% 14u "Onde instalar o Louvor JA?"
+    Pop $0
+    SetCtlColors $0 0xFFFFFF 0x1B2A41
+    SendMessage $0 ${WM_SETFONT} $hFontWT 1
+
+    ${If} $ljaN > 0
+      StrCpy $1 "Encontramos o Louvor JA nas pastas abaixo. O LouvorJA Delphi e as suas músicas, capas e banco de dados são mantidos."
+    ${Else}
+      StrCpy $1 "Escolha a pasta de instalação. Se ela já tiver o LouvorJA Delphi, os arquivos dele e as suas músicas são mantidos."
+    ${EndIf}
+    ${LJA_LABEL} 5% 21u 90% 18u "$1"
+    Pop $0
+    SetCtlColors $0 0x9FB7D3 0x1B2A41
+    SendMessage $0 ${WM_SETFONT} $hFontItem 1
+
+    ; Altura das linhas: com muitas pastas encontradas, cartões mais baixos
+    StrCpy $3 42
+    StrCpy $5 20
+    ${If} $ljaN > 3
+      StrCpy $5 14
+    ${EndIf}
     StrCpy $4 "0"  ; alguma opção já marcada?
     !insertmacro LjaWhereRadio 1
     !insertmacro LjaWhereRadio 2
@@ -452,19 +653,110 @@ FunctionEnd
     !insertmacro LjaWhereRadio 4
     !insertmacro LjaWhereRadio 5
     !insertmacro LjaWhereRadio 6
-    !insertmacro LjaWhereRadio 7
-    !insertmacro LjaWhereRadio 8
 
-    IntOp $3 $3 + 19
-    ${NSD_CreateRadioButton} 4% $3u 92% 13u "Outro local (escolher na próxima tela)"
-    Pop $ljaROther
-
-    ; Nada coincidiu com a pasta padrão: marca a primeira encontrada
-    ${If} $4 == "0"
-      ${NSD_Check} $ljaR1
+    ${If} $ljaN > 0
+      IntOp $3 $3 + 2
+      !insertmacro LjaWhereCard $ljaCOther $ljaROther $ljaLOther $ljaGOther "Outro local" "escolher a pasta abaixo"
+      ; Nada coincidiu com a pasta padrão: marca a primeira encontrada
+      ${If} $4 == "0"
+        ${NSD_Check} $ljaR1
+      ${EndIf}
     ${EndIf}
 
+    ; Campo da pasta + Procurar
+    IntOp $3 $3 + 1
+    ${NSD_CreateText} 5% $3u 68% 13u "$INSTDIR"
+    Pop $ljaDirEdit
+    SetCtlColors $ljaDirEdit 0xEEF4FF 0x10253E
+    SendMessage $ljaDirEdit ${WM_SETFONT} $hFontItem 1
+    ${NSD_CreateButton} 75% $3u 20% 13u "Procurar..."
+    Pop $ljaDirBtn
+    SendMessage $ljaDirBtn ${WM_SETFONT} $hFontItem 1
+    ${NSD_OnClick} $ljaDirBtn LjaWhereBrowse
+
+    ; Aviso (pasta vazia), escondido até precisar
+    IntOp $3 $3 + 15
+    ${LJA_LABEL} 5% $3u 90% 10u ""
+    Pop $ljaWhereErr
+    SetCtlColors $ljaWhereErr 0xFCA5A5 0x1B2A41
+    SendMessage $ljaWhereErr ${WM_SETFONT} $hFontSmall 1
+
+    System::Call 'user32::SetWindowPos(p $9, p 1, i 0, i 0, i 0, i 0, i 0x13)'
+    Call LjaWhereRefresh
     nsDialogs::Show
+  FunctionEnd
+
+  ; Pinta os cartões (marcado em azul) e só libera o campo da pasta quando
+  ; "Outro local" está marcado (ou quando não há nenhuma pasta encontrada).
+  Function LjaWhereRefresh
+    !insertmacro LjaWhereTintIdx 1
+    !insertmacro LjaWhereTintIdx 2
+    !insertmacro LjaWhereTintIdx 3
+    !insertmacro LjaWhereTintIdx 4
+    !insertmacro LjaWhereTintIdx 5
+    !insertmacro LjaWhereTintIdx 6
+    ${If} $ljaN > 0
+      !insertmacro LjaWhereTint $ljaCOther $ljaROther $ljaLOther $ljaGOther
+      ${NSD_GetState} $ljaROther $0
+      ${If} $0 == ${BST_CHECKED}
+        EnableWindow $ljaDirEdit 1
+        EnableWindow $ljaDirBtn 1
+      ${Else}
+        EnableWindow $ljaDirEdit 0
+        EnableWindow $ljaDirBtn 0
+      ${EndIf}
+    ${EndIf}
+    ; RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW
+    System::Call 'user32::RedrawWindow(p $ljaPage, p 0, p 0, i 0x185)'
+  FunctionEnd
+
+  ; Clique no cartão, na bolinha, no caminho ou na etiqueta → marca a opção
+  Function LjaWhereClick
+    Pop $0
+    StrCpy $1 ""
+    !insertmacro LjaWhereHit 1
+    !insertmacro LjaWhereHit 2
+    !insertmacro LjaWhereHit 3
+    !insertmacro LjaWhereHit 4
+    !insertmacro LjaWhereHit 5
+    !insertmacro LjaWhereHit 6
+    ${If} $ljaN > 0
+      ${If} $0 == $ljaCOther
+      ${OrIf} $0 == $ljaROther
+      ${OrIf} $0 == $ljaLOther
+      ${OrIf} $0 == $ljaGOther
+        StrCpy $1 "O"
+      ${EndIf}
+    ${EndIf}
+    ${If} $1 != ""
+      !insertmacro LjaWhereSel 1
+      !insertmacro LjaWhereSel 2
+      !insertmacro LjaWhereSel 3
+      !insertmacro LjaWhereSel 4
+      !insertmacro LjaWhereSel 5
+      !insertmacro LjaWhereSel 6
+      ${If} $ljaN > 0
+        ${If} $1 == "O"
+          ${NSD_SetState} $ljaROther ${BST_CHECKED}
+        ${Else}
+          ${NSD_SetState} $ljaROther ${BST_UNCHECKED}
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    ${NSD_SetText} $ljaWhereErr ""
+    Call LjaWhereRefresh
+  FunctionEnd
+
+  Function LjaWhereBrowse
+    Pop $0
+    ${NSD_GetText} $ljaDirEdit $1
+    nsDialogs::SelectFolderDialog "Escolha a pasta onde instalar o Louvor JA" "$1"
+    Pop $1
+    ${If} $1 != error
+    ${AndIf} $1 != ""
+      ${NSD_SetText} $ljaDirEdit "$1"
+      ${NSD_SetText} $ljaWhereErr ""
+    ${EndIf}
   FunctionEnd
 
   Function LjaWherePageLeave
@@ -474,8 +766,18 @@ FunctionEnd
     !insertmacro LjaWherePick 4
     !insertmacro LjaWherePick 5
     !insertmacro LjaWherePick 6
-    !insertmacro LjaWherePick 7
-    !insertmacro LjaWherePick 8
+    StrCpy $0 ${BST_CHECKED}
+    ${If} $ljaN > 0
+      ${NSD_GetState} $ljaROther $0
+    ${EndIf}
+    ${If} $0 == ${BST_CHECKED}
+      ${NSD_GetText} $ljaDirEdit $1
+      ${If} $1 == ""
+        ${NSD_SetText} $ljaWhereErr "Escolha a pasta onde o Louvor JA será instalado."
+        Abort
+      ${EndIf}
+      StrCpy $INSTDIR $1
+    ${EndIf}
   FunctionEnd
 !macroend
 
@@ -490,6 +792,12 @@ FunctionEnd
 ; disso. Corpos de macro só são processados no ponto onde são inseridos
 ; (aqui, dentro de assistedInstaller.nsh, já com o MUI2 carregado).
 !macro customPageAfterChangeDir
+  ; StrContains (usado em LjaDoBackups) só vem incluído pelo electron-builder
+  ; junto da tela padrão de pasta — que está desligada (ver página "Onde instalar").
+  !ifndef allowToChangeInstallationDirectory
+    !include StrContains.nsh
+  !endif
+
   Page custom FeatureSlidesPageCreate FeatureSlidesPageLeave
 
   Function FeatureSlidesPageCreate
@@ -521,6 +829,31 @@ FunctionEnd
     ${NSD_CreateLabel} 6% 50% 88% 32% ""
     Pop $lblFeatureHwnd
     SetCtlColors $lblFeatureHwnd 0xD8DEE9 0x1B2A41
+
+    ; Erro ao preparar a instalação (ver LjaShowInstallError): faixa vermelha
+    ; à esquerda + título/texto/dica, no mesmo painel — escondidos até precisar,
+    ; no lugar da caixa de mensagem padrão do Windows.
+    ${LJA_LABEL} 0 0 1% 100% ""
+    Pop $lblErrBar
+    SetCtlColors $lblErrBar 0xEF4444 0xEF4444
+    ${LJA_LABEL} 6% 8% 88% 14% ""
+    Pop $lblErrTitle
+    SetCtlColors $lblErrTitle 0xFCA5A5 0x1B2A41
+    CreateFont $hFontErr "Segoe UI" "14" "700"
+    SendMessage $lblErrTitle ${WM_SETFONT} $hFontErr 1
+    ${LJA_LABEL} 6% 26% 88% 54% ""
+    Pop $lblErrBody
+    SetCtlColors $lblErrBody 0xE5ECF6 0x1B2A41
+    CreateFont $hFontItem "Segoe UI" "10" "400"
+    SendMessage $lblErrBody ${WM_SETFONT} $hFontItem 1
+    ${LJA_LABEL} 6% 84% 88% 12% ""
+    Pop $lblErrHint
+    SetCtlColors $lblErrHint 0x7DD3FC 0x1B2A41
+    SendMessage $lblErrHint ${WM_SETFONT} $hFontItem 1
+    ShowWindow $lblErrBar ${SW_HIDE}
+    ShowWindow $lblErrTitle ${SW_HIDE}
+    ShowWindow $lblErrBody ${SW_HIDE}
+    ShowWindow $lblErrHint ${SW_HIDE}
 
     StrCpy $featureSlideIndex 0
     Call FeatureSlidesApplySlide
@@ -614,6 +947,25 @@ FunctionEnd
   Function FeatureSlidesPageLeave
     ${NSD_KillTimer} FeatureSlidesAdvance
     Call LjaDoBackups
+    ${If} $ljaErr == 1
+      Call LjaShowInstallError
+      Abort
+    ${EndIf}
+  FunctionEnd
+
+  ; Mostra o erro dentro da própria página (no visual do instalador) em vez
+  ; de uma caixa de mensagem do Windows; clicar em Instalar de novo tenta outra vez.
+  Function LjaShowInstallError
+    ShowWindow $lblTitleHwnd ${SW_HIDE}
+    ShowWindow $lblFeatureHwnd ${SW_HIDE}
+    ${NSD_SetText} $lblErrTitle "$ljaErrTitle"
+    ${NSD_SetText} $lblErrBody "$ljaErrText"
+    ${NSD_SetText} $lblErrHint "Depois disso, clique em Instalar para tentar de novo."
+    ShowWindow $lblErrBar ${SW_SHOW}
+    ShowWindow $lblErrTitle ${SW_SHOW}
+    ShowWindow $lblErrBody ${SW_SHOW}
+    ShowWindow $lblErrHint ${SW_SHOW}
+    System::Call 'user32::RedrawWindow(p $HWNDPARENT, p 0, p 0, i 0x185)'
   FunctionEnd
 
   ; ── Backup das pastas antes de instalar ─────────────────────────────────
@@ -624,6 +976,7 @@ FunctionEnd
   ; músicas, capas e banco junto. Depois da extração, customInstall devolve tudo
   ; (LjaRestoreBackup). Nada do Delphi é apagado em nenhum momento.
   Function LjaDoBackups
+    StrCpy $ljaErr 0
     ${If} $bkADir != ""
     ${OrIf} $bkBDir != ""
       Return ; já feito (voltou de página)
@@ -644,15 +997,25 @@ FunctionEnd
     StrCpy $ljaFinalDir $INSTDIR
 
     ; A) pasta de destino
-    Push $INSTDIR
-    Call LjaBackupDir
-    Pop $0
+    !ifdef LJA_HARNESS_FAKE_ERR
+      ; Só no instalador de teste visual (nunca no build real): simula arquivo
+      ; em uso sem tocar em pasta nenhuma, pra fotografar a tela de erro.
+      StrCpy $0 "ERR"
+    !else
+      Push $INSTDIR
+      Call LjaBackupDir
+      Pop $0
+    !endif
     ${If} $0 == "BUSY"
-      MessageBox MB_OK|MB_ICONSTOP "Existem cópias de segurança de uma atualização anterior em:$\r$\n$INSTDIR.update-backup$\r$\n$INSTDIR.update-backup-old$\r$\n$\r$\nNada foi apagado. Verifique essas pastas (músicas e capas podem estar nelas) e tente de novo."
-      Abort
+      StrCpy $ljaErr 1
+      StrCpy $ljaErrTitle "Há uma atualização anterior pela metade"
+      StrCpy $ljaErrText "Existem cópias de segurança de uma atualização anterior em:$\r$\n$INSTDIR.update-backup$\r$\n$INSTDIR.update-backup-old$\r$\n$\r$\nNada foi apagado. Verifique essas pastas (músicas e capas podem estar nelas)."
+      Return
     ${ElseIf} $0 == "ERR"
-      MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a instalação em:$\r$\n$INSTDIR$\r$\n$\r$\nAlgum arquivo está em uso. Feche o Louvor JA e o LouvorJA Delphi (e qualquer programa usando essa pasta) e tente de novo. Nada foi apagado."
-      Abort
+      StrCpy $ljaErr 1
+      StrCpy $ljaErrTitle "Feche o Louvor JA para continuar"
+      StrCpy $ljaErrText "Não foi possível preparar a instalação em:$\r$\n$INSTDIR$\r$\n$\r$\nAlgum arquivo está em uso. Feche o Louvor JA e o LouvorJA Delphi (e qualquer programa usando essa pasta). Nada foi apagado."
+      Return
     ${EndIf}
     StrCpy $bkADir $0
     StrCpy $bkAOrig $INSTDIR
@@ -671,8 +1034,10 @@ FunctionEnd
           Rename "$bkADir" "$bkAOrig"
           StrCpy $bkADir ""
         ${EndIf}
-        MessageBox MB_OK|MB_ICONSTOP "Não foi possível preparar a pasta da instalação anterior:$\r$\n$ljaPrevDir$\r$\n$\r$\nFeche o Louvor JA e o LouvorJA Delphi e tente de novo. Nada foi apagado."
-        Abort
+        StrCpy $ljaErr 1
+        StrCpy $ljaErrTitle "Feche o Louvor JA para continuar"
+        StrCpy $ljaErrText "Não foi possível preparar a pasta da instalação anterior:$\r$\n$ljaPrevDir$\r$\n$\r$\nFeche o Louvor JA e o LouvorJA Delphi. Nada foi apagado."
+        Return
       ${EndIf}
       StrCpy $bkBDir $0
       StrCpy $bkBOrig $ljaPrevDir
@@ -777,8 +1142,13 @@ FunctionEnd
   StrCpy $bkADir ""
   StrCpy $bkBDir ""
   StrCpy $ljaKeepDir 0
+  StrCpy $ljaErr 0
   ${If} ${Silent}
     Call LjaDoBackups
+    ${If} $ljaErr == 1
+      MessageBox MB_OK|MB_ICONSTOP "$ljaErrTitle$\r$\n$\r$\n$ljaErrText" /SD IDOK
+      Abort
+    ${EndIf}
   ${EndIf}
 !macroend
 

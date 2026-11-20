@@ -536,7 +536,8 @@ function openPackage() {
   return shell.openPath(_state.packagePath).then(
     (err) => {
       if (err) { logUpdaterError('install (manual)', new Error(err)); return { ok: false, error: err }; }
-      setTimeout(() => app.quit(), 500);
+      _installing = true;
+      forceQuitForInstall(500);
       return { ok: true };
     },
     (err) => ({ ok: false, error: String(err) })
@@ -785,6 +786,29 @@ function quitAndInstall() {
   // (isSilent=false: mostra o instalador; isForceRunAfter=true: reabre o app ao terminar)
   _installing = true;
   autoUpdater.quitAndInstall(false, true);
+  // O quitAndInstall acima já disparou o instalador e pediu app.quit() — mas
+  // esse quit podia ser cancelado (ver forceQuitForInstall), deixando o
+  // instalador aberto por cima do app ainda rodando.
+  forceQuitForInstall(400);
+}
+
+/**
+ * Fecha o app DE VERDADE para o instalador assumir. Só app.quit() não bastava:
+ * ele fecha as janelas com close(), e a janela principal tem um 'beforeunload'
+ * que bloqueia recarregar a página no app instalado (views/Main.vue) — o
+ * Electron trata isso como "cancelar o fechamento", então o instalador abria
+ * e o sistema continuava aberto. A janela de retorno (closable:false) também
+ * não fecha via close(). destroy() pula o beforeunload; app.exit() é a rede
+ * de segurança caso algo ainda segure o processo.
+ */
+function forceQuitForInstall(delayMs) {
+  setTimeout(() => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { if (!w.isDestroyed()) w.destroy(); } catch (_) {}
+    }
+    try { app.quit(); } catch (_) {}
+    setTimeout(() => { try { app.exit(0); } catch (_) {} }, 2500);
+  }, delayMs);
 }
 
 /** O usuário já pediu "Instalar e reiniciar" — o app está fechando para instalar. */
