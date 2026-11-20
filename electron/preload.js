@@ -250,7 +250,9 @@ contextBridge.exposeInMainWorld('electron', {
 // imagens/scripts do Blink, roda o coletor de lixo (--expose-gc) e avisa a
 // página (evento "lja-memory-pressure", ex.: fundos animados se aliviam).
 ipcRenderer.on('memory-pressure', () => {
-  try { webFrame.clearCache(); } catch (_) { /* */ }
+  // Sem webFrame.clearCache(): ele descartava as imagens já decodificadas
+  // (fundos, capas, slides) das janelas ABERTAS, que ficavam em branco até
+  // algo forçar um redesenho — era o "tela principal sumindo".
   try { if (typeof globalThis.gc === 'function') globalThis.gc(); } catch (_) { /* */ }
   try { window.dispatchEvent(new Event('lja-memory-pressure')); } catch (_) { /* */ }
 });

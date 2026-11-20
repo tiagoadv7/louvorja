@@ -488,6 +488,12 @@ function createMainWindow() {
     logCrash('janela principal: não responde');
   });
   mainWindow.webContents.on('responsive', () => logCrash('janela principal: voltou a responder'));
+  // Ao voltar de minimizada/escondida ou receber o foco: redesenha. A janela
+  // às vezes voltava com um quadro antigo/em branco (compositor da GPU) e só
+  // "aparecia" quando o operador mexia em algo.
+  for (const ev of ['restore', 'show', 'focus']) {
+    mainWindow.on(ev, () => nudgeRepaint(mainWindow));
+  }
 
   mainWindow.once('ready-to-show', () => {
     // setOpacity(0) ANTES do maximize: o maximize() chama show() internamente,
@@ -1555,11 +1561,13 @@ app.on('child-process-gone', (_e, details) => {
   if (details.reason === 'clean-exit') return;
   logCrash(`processo ${details.type}${details.name ? ' (' + details.name + ')' : ''} caiu: ${details.reason}, código ${details.exitCode}`);
   if (details.type !== 'GPU') return;
-  setTimeout(() => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      try { if (!w.isDestroyed()) w.webContents.invalidate(); } catch (_) { /* */ }
-    }
-  }, 800);
+  // Vários redesenhos (a GPU nova pode levar alguns segundos para subir —
+  // um só, cedo demais, às vezes não pegava e a principal seguia em branco)
+  for (const delay of [800, 2500, 6000]) {
+    setTimeout(() => {
+      for (const w of BrowserWindow.getAllWindows()) nudgeRepaint(w);
+    }, delay);
+  }
 });
 
 // Prioridade "acima do normal" para os processos do app (principal, GPU,
@@ -1586,10 +1594,14 @@ function startMemoryWatch() {
   let lastLog = 0;
   setInterval(() => {
     const freeMb = Math.round(os.freemem() / 1048576);
-    const limit = Math.max(700, TOTAL_RAM_MB * 0.08);
+    // Só memória REALMENTE no fim: no Windows a "livre" exclui o cache em
+    // espera, então ~1 GB livre num PC de 16 GB com o navegador aberto é
+    // normal. O limite antigo (8% da RAM, ~1,3 GB) disparava o tempo todo e,
+    // a cada minuto, mexia nas janelas — a principal chegava a ficar em branco.
+    const limit = Math.min(500, TOTAL_RAM_MB * 0.05);
     if (freeMb >= limit) return;
     const now = Date.now();
-    if (now - lastRelief < 60000) return;
+    if (now - lastRelief < 300000) return;
     lastRelief = now;
     for (const w of BrowserWindow.getAllWindows()) {
       try { if (!w.isDestroyed()) w.webContents.send('memory-pressure'); } catch (_) { /* */ }

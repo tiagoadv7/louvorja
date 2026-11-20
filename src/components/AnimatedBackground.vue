@@ -222,10 +222,16 @@ export default {
     document.addEventListener("visibilitychange", this._onVisibility);
     // Memória livre acabando (preload.js): a prévia do operador congela o
     // efeito; a projeção/retorno seguem animando (é o que o público vê).
+    // Pausa só por 2 min (antes ficava parado pra sempre).
     this._onMemoryPressure = () => {
       if (!this._preview) return;
       this._frozen = true;
       this._onVisibility();
+      clearTimeout(this._unfreezeTimer);
+      this._unfreezeTimer = setTimeout(() => {
+        this._frozen = false;
+        this._onVisibility();
+      }, 120000);
     };
     window.addEventListener("lja-memory-pressure", this._onMemoryPressure);
   },
@@ -233,6 +239,7 @@ export default {
     if (this._switchFade) this._switchFade.cancel();
     document.removeEventListener("visibilitychange", this._onVisibility);
     window.removeEventListener("lja-memory-pressure", this._onMemoryPressure);
+    clearTimeout(this._unfreezeTimer);
     this._teardown();
   },
   methods: {
