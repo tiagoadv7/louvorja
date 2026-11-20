@@ -3,6 +3,23 @@
 // ícones de "papel" (Web/Electron/Delphi/API), que dependem de um
 // config/Icons.js que este projeto não tem — description vira só texto.
 export const CONTRIBUTORS = [
+  // Desenvolvedor do Louvor JA (esta versão) — destaque no topo do "Sobre"
+  {
+    name: "Desenvolvedor",
+    contributors: [
+      {
+        name: "Tiago Lima",
+        description: "Desenvolvedor do Louvor JA",
+        email: "tiagolimadbvs7@gmail.com",
+        website: "https://tiagolimadev.netlify.app/",
+        github: "tiagoadv7",
+        linkedin: "tiago-lima-4a90b4118",
+        instagram: "tiagolimadbvs7",
+        whatsapp: "5548988747793",
+      },
+    ],
+  },
+
   {
     name: "Desenvolvedor da Coletânea",
     contributors: [
@@ -119,16 +136,6 @@ export const CONTRIBUTORS = [
         github: "santos-savio",
         linkedin: "saviojob",
         whatsapp: "5535991975984",
-      },
-      {
-        name: "Tiago Lima",
-        description: ["Web", "Electron", "Assets / UI"],
-        email: "tiagolimadbvs7@gmail.com",
-        website: "https://tiagolimadev.netlify.app/",
-        github: "tiagoadv7",
-        linkedin: "tiago-lima-4a90b4118",
-        instagram: "tiagolimadbvs7",
-        whatsapp: "5548988747793",
       },
       {
         name: "Victor Hugo Ventura Rodrigues",

@@ -67,6 +67,23 @@
           <v-icon size="15" color="primary">mdi-bug-outline</v-icon> Enviar Feedback
         </a>
 
+        <template v-if="appDev">
+          <div class="about-section-title about-block-sep">Desenvolvedor:</div>
+          <div class="about-collab">
+            <div class="about-collab-name">
+              {{ appDev.name }}<span v-if="appDev.description" class="about-collab-role"> - {{ roleText(appDev.description) }}</span>
+            </div>
+            <a
+              v-for="(l, i) in contributorLinks(appDev)"
+              :key="i"
+              class="about-mini-link"
+              @click="openExternal(l.url)"
+            >
+              <v-icon size="13" :color="l.color || 'primary'">{{ l.icon }}</v-icon> {{ l.label }}
+            </a>
+          </div>
+        </template>
+
         <template v-if="mainDev">
           <div class="about-section-title about-block-sep">Desenvolvedor da Coletânea:</div>
           <div class="about-collab">
@@ -147,7 +164,7 @@ import { contributorLinks } from "@/helpers/ContributorLinks";
 // Categorias mostradas como destaque na coluna da esquerda (compactas) —
 // as demais vão pra lista de "Colaboradores" na coluna direita, igual ao
 // Sobre original em Delphi (duas colunas só, sem coluna extra).
-const LEFT_CATEGORIES = ["Desenvolvedor da Coletânea", "Patrocinadores"];
+const LEFT_CATEGORIES = ["Desenvolvedor", "Desenvolvedor da Coletânea", "Patrocinadores"];
 
 export default {
   name: 'AboutDialog',
@@ -181,6 +198,10 @@ export default {
     platformLabel() {
       const map = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' };
       return map[this.osPlatform] || (this.is_desktop ? 'Desktop' : 'Navegador');
+    },
+    // Desenvolvedor do Louvor JA (destaque, acima do da Coletânea)
+    appDev() {
+      return this.contributors.find(c => c.name === 'Desenvolvedor')?.contributors[0] || null;
     },
     mainDev() {
       return this.contributors.find(c => c.name === 'Desenvolvedor da Coletânea')?.contributors[0] || null;
