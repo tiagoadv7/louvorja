@@ -25,6 +25,11 @@
           <v-icon size="18">mdi-book-open-variant</v-icon>
           <span>{{ $t('components.download_center.nav_bibles') }}</span>
         </button>
+        <button class="ah-nav" :class="{ active: section === 'database' }" @click="goTo('database')">
+          <v-icon size="18">mdi-database-sync-outline</v-icon>
+          <span>{{ $t('components.download_center.nav_database') }}</span>
+          <span v-if="db.remote > db.version && db.version" class="ah-nav-dot" />
+        </button>
         <button class="ah-nav" :class="{ active: section === 'settings' }" @click="goTo('settings')">
           <v-icon size="18">mdi-cog-outline</v-icon>
           <span>{{ $t('components.download_center.settings') }}</span>
@@ -46,6 +51,7 @@
             : section === 'settings' ? $t('components.download_center.settings')
             : section === 'hymnals' ? $t('components.download_center.nav_hymnals')
             : section === 'bibles' ? $t('components.download_center.nav_bibles')
+            : section === 'database' ? $t('components.download_center.nav_database')
             : $t('components.download_center.nav_collections') }}</b>
           <div v-if="isExplore" class="ah-search-wrap">
             <v-icon class="ah-search-icon" size="18">mdi-magnify</v-icon>
@@ -268,6 +274,69 @@
                   </button>
                 </div>
               </article>
+            </div>
+          </section>
+
+          <!-- BANCO DE DADOS: catálogo + database.db (electron/ipc.js#db:update-content) -->
+          <section v-else-if="section === 'database'">
+            <div class="ah-heading"><v-icon size="22" class="mr-2">mdi-database-sync-outline</v-icon>{{ $t('components.download_center.nav_database') }}</div>
+            <div class="ah-muted">{{ $t('components.download_center.db_desc') }}</div>
+
+            <div class="ah-panel mt-4">
+              <div class="ah-db-versions">
+                <div class="ah-db-ver">
+                  <v-icon size="22" color="#9fb7d3">mdi-database</v-icon>
+                  <div>
+                    <div class="ah-muted">{{ $t('components.db_update.current') }}</div>
+                    <b class="ah-db-num">{{ db.version ? 'v' + db.version : '—' }}</b>
+                  </div>
+                </div>
+                <v-icon color="#33b5ea">mdi-arrow-right</v-icon>
+                <div class="ah-db-ver">
+                  <v-icon size="22" color="#33b5ea">mdi-database-check</v-icon>
+                  <div>
+                    <div class="ah-muted">{{ $t('components.download_center.db_published') }}</div>
+                    <b class="ah-db-num ah-db-num--new">{{ db.remote ? 'v' + db.remote : (db.checking ? '...' : '—') }}</b>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ah-db-status">
+                <template v-if="db.state === 'done'">
+                  <div><v-icon size="18" color="success">mdi-check-circle</v-icon> {{ $t('components.db_update.done_catalog', { count: db.result.catalog }) }}</div>
+                  <div v-if="db.result.sqlite === 'updated'"><v-icon size="18" color="success">mdi-check-circle</v-icon> {{ $t('components.db_update.done_sqlite') }}</div>
+                  <div v-else-if="db.result.sqlite === 'locked'"><v-icon size="18" color="warning">mdi-alert</v-icon> {{ $t('components.db_update.done_locked') }}</div>
+                </template>
+                <div v-else-if="db.state === 'error'"><v-icon size="18" color="error">mdi-alert-circle</v-icon> {{ $t('components.db_update.error') }} <span class="ah-muted">{{ db.error }}</span></div>
+                <div v-else-if="db.state !== 'running' && db.remote && db.version >= db.remote"><v-icon size="18" color="success">mdi-check-circle</v-icon> {{ $t('components.download_center.db_up_to_date') }}</div>
+                <div v-else-if="db.state !== 'running' && db.remote > db.version"><v-icon size="18" color="#33b5ea">mdi-information</v-icon> {{ $t('components.download_center.db_available', { version: db.remote }) }}</div>
+              </div>
+
+              <div v-if="db.state === 'running'" class="ah-db-progress">
+                <div class="ah-db-progress-row">
+                  <span>{{ $t('components.db_update.step_' + db.step) }}</span>
+                  <b>{{ db.percent }}%</b>
+                </div>
+                <div class="ah-progress"><span :style="{ width: db.percent + '%' }" /></div>
+              </div>
+
+              <ul class="ah-db-list ah-muted">
+                <li>{{ $t('components.db_update.what_catalog') }}</li>
+                <li>{{ $t('components.db_update.what_sqlite') }}</li>
+                <li>{{ $t('components.db_update.what_keep') }}</li>
+              </ul>
+
+              <div class="ah-db-actions">
+                <button class="ah-btn-main" :disabled="db.state === 'running' || db.checking" @click="checkDbVersion">
+                  <v-icon size="15">mdi-refresh</v-icon> {{ $t('components.download_center.db_check') }}
+                </button>
+                <button class="ah-btn-main ah-btn-primary" :disabled="db.state === 'running'" @click="updateDb">
+                  <v-icon size="15">{{ db.state === 'running' ? 'mdi-loading mdi-spin' : 'mdi-cloud-download-outline' }}</v-icon>
+                  {{ db.state === 'running' ? $t('components.db_update.updating')
+                    : db.remote > db.version ? $t('components.db_update.update')
+                    : $t('components.download_center.db_redownload') }}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -512,6 +581,8 @@ export default {
 
   data: () => ({
     dialog:        false,
+    // Seção "Banco de dados"
+    db: { version: 0, remote: 0, checking: false, state: 'idle', step: 'catalog-download', percent: 0, result: { catalog: 0, sqlite: 'none' }, error: '' },
     section:       'home',
     loading:       false,
     storage:       null,
@@ -791,6 +862,7 @@ export default {
         this.loadDownloadedAlbumsStatus();
       }
       if (s === 'hymnals') this.loadHymnalStats();
+      if (s === 'database') this.checkDbVersion();
       if (s === 'settings') {
         await this.loadLocalFiles();
         await this.loadFolderPaths();
@@ -1443,6 +1515,48 @@ export default {
       return `${(kb / 1024).toFixed(1)} MB`;
     },
 
+    // ── Banco de dados ───────────────────────────────────────────────────
+    async checkDbVersion() {
+      this.db.checking = true;
+      try {
+        const info = await this.$electron.dbContentInfo();
+        this.db.version = info?.version || 0;
+        if (info?.updating) this.db.state = 'running';
+        this.db.remote = await this.$electron.dbRemoteVersion(import.meta.env.VITE_URL_DATABASE);
+      } finally {
+        this.db.checking = false;
+      }
+    },
+    async updateDb() {
+      if (!this._dbProgress) {
+        this._dbProgress = this.$electron.on?.('db:update-progress', ({ step, percent } = {}) => {
+          if (step) this.db.step = step;
+          if (typeof percent === 'number') this.db.percent = Math.max(this.db.percent, Math.min(100, percent));
+        });
+      }
+      Object.assign(this.db, { state: 'running', step: 'catalog-download', percent: 0, error: '' });
+      const lang = this.$userdata?.get?.('language') || 'pt';
+      const version = this.db.remote || this.db.version || 0;
+      const res = await this.$electron
+        .dbUpdateContent({ dbBaseUrl: import.meta.env.VITE_URL_DATABASE, lang, version })
+        .catch((e) => ({ ok: false, error: String(e?.message || e) }));
+      if (res?.ok) {
+        this.db.result = { catalog: res.catalog || 0, sqlite: res.sqlite || 'none' };
+        this.db.state = 'done';
+        this.db.percent = 100;
+        // Listas já carregadas nesta sessão vêm do cache — limpa para reler
+        try {
+          Object.keys(sessionStorage).filter((k) => k.startsWith('db:')).forEach((k) => sessionStorage.removeItem(k));
+        } catch (_) { /* */ }
+        window.dispatchEvent(new Event('lja-db-updated'));
+        const info = await this.$electron.dbContentInfo().catch(() => null);
+        if (info) this.db.version = info.version || this.db.version;
+      } else {
+        this.db.state = 'error';
+        this.db.error = res?.error === 'busy' ? '' : (res?.error || '');
+      }
+    },
+
     scrollTabs(delta) {
       const el = this.$refs.tabsEl;
       if (el) el.scrollLeft += delta;
@@ -1450,6 +1564,7 @@ export default {
   },
 
   beforeUnmount() {
+    if (this._dbProgress) this.$electron.off?.('db:update-progress', this._dbProgress);
     this.unsubscribeProgress();
     this.unsubscribeMissingProgress();
   },
@@ -1774,6 +1889,31 @@ export default {
   -webkit-text-fill-color: transparent;
 }
 .ah-stat strong { font-size: 22px; color: #33b5ea; }
+/* Banco de dados */
+.ah-db-versions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #1f3550;
+  border-radius: 10px;
+  background: #0f1d31;
+}
+.ah-db-ver { display: flex; align-items: center; gap: 10px; }
+.ah-db-num { font-size: 18px; }
+.ah-db-num--new { color: #33b5ea; }
+.ah-db-status { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.ah-db-status > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ah-db-progress-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #c9d8ea; }
+.ah-db-progress-row b { color: #33b5ea; }
+.ah-db-list { margin: 4px 0 0 18px; font-size: 12px; line-height: 1.6; }
+.ah-db-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.ah-btn-primary { background: #009fe3; color: #fff; border-color: #009fe3; }
+.ah-btn-primary:hover:not(:disabled) { background: #0088c4; color: #fff; }
+.ah-btn-main:disabled { opacity: 0.5; cursor: default; }
+.ah-nav-dot { width: 8px; height: 8px; border-radius: 50%; background: #33b5ea; margin-left: auto; }
+
 .ah-panel {
   background: var(--card);
   border: 1px solid #1f3550;

@@ -2389,6 +2389,144 @@ function setupIpc(mainWindow) {
     return { updated: true };
   });
 
+  // ── Atualização REAL do banco de conteúdo ────────────────────────────────
+  // Antes, "nova versão do banco" só levava ao Sincronizar arquivos (áudios e
+  // capas) — o catálogo em si (álbuns, músicas, hinários) nunca era renovado
+  // no modo offline, que lê só o que está no disco. Agora:
+  //   1. baixa o pacote do catálogo (/db/catalog-bundle, ZIP de ~4 MB) e troca
+  //      os JSON da pasta db/ — menos o conteúdo em espanhol importado
+  //      localmente (es_*, álbuns 9xxx), que a API não tem completo;
+  //   2. se o app usa o database.db (SQLite do Delphi), baixa o novo publicado
+  //      (https_db_pt / https_db_es em /params?type=env), confere que é um
+  //      SQLite válido, guarda o atual como database.db.bak e troca.
+  // Progresso em 'db:update-progress' ({ step, percent }).
+  async function downloadWithProgress(url, onProgress, timeoutMs = 600000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, { signal: ctrl.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${url}`);
+      const total = parseInt(resp.headers.get('content-length') || '0', 10);
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(Buffer.from(value));
+        received += value.length;
+        if (total > 0) onProgress(received / total);
+      }
+      return Buffer.concat(chunks);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Versão publicada do banco (só consulta) — Centro de Downloads > Banco de dados
+  ipcMain.handle('db:remote-version', async (_, { dbBaseUrl } = {}) => {
+    try {
+      const r = await fetchRemoteDbVersion(dbBaseUrl || 'https://api.louvorja.com.br/json_db');
+      return r.ok ? r.version : 0;
+    } catch (_) {
+      return 0;
+    }
+  });
+  ipcMain.handle('db:content-info', () => ({
+    version: Store.get('content_db_version', 0),
+    sqlitePath: sqliteReader.getPath() || Store.get('sqlite_db_path') || '',
+    updating: _contentUpdating,
+  }));
+
+  let _contentUpdating = false;
+  ipcMain.handle('db:update-content', async (event, { dbBaseUrl, lang, version } = {}) => {
+    if (_contentUpdating) return { ok: false, error: 'busy' };
+    _contentUpdating = true;
+    const send = (step, percent) => {
+      try { if (!event.sender.isDestroyed()) event.sender.send('db:update-progress', { step, percent }); } catch (_) { /* */ }
+    };
+    const result = { ok: false, catalog: 0, sqlite: 'none' };
+    try {
+      const origin = new URL(dbBaseUrl || 'https://api.louvorja.com.br/json_db').origin;
+
+      // 1. Catálogo (JSON)
+      send('catalog-download', 2);
+      const zipBuf = await downloadWithProgress(`${origin}/db/catalog-bundle`, (p) => send('catalog-download', 2 + Math.round(p * 18)));
+      send('catalog-extract', 20);
+      const JSZip = require('jszip');
+      const zip = await JSZip.loadAsync(zipBuf);
+      const dir = getDbDir();
+      fs.mkdirSync(dir, { recursive: true });
+      const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir && /^[^/\\_][^/\\]*\.json$/.test(n));
+      if (names.length < 10) throw new Error(`pacote do catálogo incompleto (${names.length} arquivos)`);
+      let done = 0;
+      for (const n of names) {
+        done++;
+        const key = n.replace(/\.json$/, '');
+        const dest = path.join(dir, n);
+        if (isSpanishContentFile(key) && fs.existsSync(dest)) continue;
+        const data = await zip.files[n].async('nodebuffer');
+        const tmp = `${dest}.tmp`;
+        await fs.promises.writeFile(tmp, data);
+        await fs.promises.rename(tmp, dest);
+        result.catalog++;
+        if (done % 100 === 0) send('catalog-extract', 20 + Math.round((done / names.length) * 15));
+      }
+      invalidateLocalList();
+      send('catalog-extract', 35);
+
+      // 2. Banco SQLite (só se o app estiver usando um)
+      const dbPath = sqliteReader.getPath() || Store.get('sqlite_db_path');
+      if (dbPath && fs.existsSync(dbPath)) {
+        const envText = await (await fetchWithTimeout(`${origin}/params?type=env`, {}, 15000)).text();
+        const key = lang === 'es' ? 'https_db_es' : 'https_db_pt';
+        const m = envText.match(new RegExp(`^${key}=(\\S+)`, 'm'));
+        if (m) {
+          send('sqlite-download', 36);
+          const dbBuf = await downloadWithProgress(m[1], (p) => send('sqlite-download', 36 + Math.round(p * 54)));
+          if (dbBuf.length < 1024 * 1024 || dbBuf.subarray(0, 15).toString('latin1') !== 'SQLite format 3') {
+            throw new Error('o banco baixado não é um SQLite válido');
+          }
+          send('sqlite-install', 92);
+          const tmp = `${dbPath}.download`;
+          await fs.promises.writeFile(tmp, dbBuf);
+          const wasOpen = sqliteReader.isOpen();
+          sqliteReader.close();
+          try {
+            await fs.promises.copyFile(dbPath, `${dbPath}.bak`);
+            await fs.promises.rename(tmp, dbPath);
+            result.sqlite = 'updated';
+          } catch (e) {
+            // Arquivo em uso (ex.: LouvorJA Delphi aberto) — mantém o atual
+            fs.promises.unlink(tmp).catch(() => {});
+            result.sqlite = 'locked';
+            logDbUpdateError('update-content (troca do database.db)', e);
+          }
+          if (wasOpen || result.sqlite === 'updated') {
+            await sqliteReader.open(dbPath, buildSqliteMediaDirs(dbPath));
+          }
+        }
+      }
+
+      if (typeof version === 'number' && version > 0 && result.sqlite !== 'locked') {
+        Store.set('content_db_version', version);
+      }
+      send('done', 100);
+      result.ok = true;
+      return result;
+    } catch (e) {
+      logDbUpdateError('update-content', e);
+      // Banco fechado no meio da troca: reabre o que estiver no disco
+      const p = Store.get('sqlite_db_path');
+      if (!sqliteReader.isOpen() && p && fs.existsSync(p)) {
+        await sqliteReader.open(p, buildSqliteMediaDirs(p)).catch(() => {});
+      }
+      return { ...result, ok: false, error: e.message };
+    } finally {
+      _contentUpdating = false;
+    }
+  });
+
   // ── Servidor de registro (QR Code) ────────────────────────────────────────
   let regServer    = null;
   let regPort      = 0;

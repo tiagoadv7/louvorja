@@ -93,11 +93,15 @@ export default {
   },
   async mounted() {
     await this.loadDBVersion();
+    // Banco atualizado pelo DbUpdateDialog: mostra a versão nova na hora
+    this._dbUpdated = () => this.loadDBVersion();
+    window.addEventListener('lja-db-updated', this._dbUpdated);
     this.hostname = await this.$electron.getHostname().catch(() => '');
     this.updateClock();
     this._clockTimer = setInterval(this.updateClock, 1000);
   },
   beforeUnmount() {
+    window.removeEventListener('lja-db-updated', this._dbUpdated);
     clearInterval(this._clockTimer);
   },
 };

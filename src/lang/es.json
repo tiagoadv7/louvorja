@@ -138,7 +138,9 @@
             "m_video_player": "Video",
             "m_web_link": "YouTube / Enlace",
             "m_dynamic_text": "Texto Dinámico",
-            "m_interactive_text": "Texto Interactivo"
+            "m_interactive_text": "Texto Interactivo",
+            "subtitle": "Capas de la proyección y cuadros del retorno",
+            "close": "Cerrar"
         },
         "download_center": {
             "title": "Biblioteca Local",
@@ -257,7 +259,14 @@
             "delete_text": "Los archivos descargados de {name} se borrarán de este equipo. Podrás volver a descargarlos después.",
             "delete_confirm": "Eliminar",
             "loading_catalog": "Cargando colecciones...",
-            "retry": "Reintentar"
+            "retry": "Reintentar",
+            "nav_database": "Base de datos",
+            "db_desc": "Catálogo de colecciones, músicas, letras e himnarios usado por la app (también en modo sin conexión).",
+            "db_published": "Versión publicada",
+            "db_up_to_date": "La base de datos está en la versión más reciente.",
+            "db_available": "Nueva versión disponible: v{version}",
+            "db_check": "Verificar",
+            "db_redownload": "Descargar de nuevo"
         },
         "app_update": {
             "opt_beta": "Usar versiones beta (prelanzamiento)",
@@ -303,12 +312,35 @@
             "bar_available": "Actualización {version} disponible — haz clic para ver detalles"
         },
         "db_update": {
-            "title": "Nueva versión de la base de datos",
+            "title": "Actualización de la base de datos",
             "version": "Versión {version}",
             "heading": "Nueva versión de la base de datos disponible",
             "body": "Se publicó una nueva versión de la base de datos oficial en el servidor. Sincroniza los archivos para mantener tu colección actualizada.",
             "later": "Ahora no",
-            "sync": "Sincronizar archivos"
+            "sync": "Sincronizar archivos",
+            "sub": "Hay una nueva versión de la base de datos disponible.",
+            "sub_done": "Base de datos actualizada.",
+            "current": "Versión actual",
+            "new": "Nueva versión",
+            "what": "Qué se actualizará",
+            "what_catalog": "Catálogo: colecciones, músicas, letras e himnarios",
+            "what_sqlite": "Base de LouvorJA (database.db), si está en uso — la actual queda guardada como copia",
+            "what_keep": "Sus músicas, portadas y el contenido en español importado se mantienen",
+            "step_catalog-download": "Descargando catálogo...",
+            "step_catalog-extract": "Actualizando catálogo...",
+            "step_sqlite-download": "Descargando base de datos...",
+            "step_sqlite-install": "Instalando base de datos...",
+            "step_done": "Listo",
+            "done_catalog": "{count} archivo(s) del catálogo actualizados",
+            "done_sqlite": "Base de datos (database.db) reemplazada — copia anterior en database.db.bak",
+            "done_locked": "El database.db está en uso (cierre LoorJA Delphi) — el catálogo se actualizó; la base se cambiará la próxima vez",
+            "done_hint": "Para descargar los audios y portadas nuevos, use Sincronizar archivos.",
+            "error": "No fue posible actualizar ahora. No se cambió nada en la base en uso.",
+            "update": "Actualizar ahora",
+            "updating": "Actualizando...",
+            "retry": "Intentar de nuevo",
+            "finish": "Finalizar",
+            "sync_files": "Sincronizar archivos"
         },
         "file_check": {
             "title": "Sincronizar archivos",

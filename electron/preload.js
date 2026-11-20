@@ -27,6 +27,7 @@ const RECEIVE_CHANNELS = [
   'menu:about',
   'menu:check-updates',
   'sqlite:progress',
+  'db:update-progress',
   'sqlite:auto-import',
   'sqlite:direct-ready',
   'regserver:registration',
@@ -111,6 +112,9 @@ contextBridge.exposeInMainWorld('electron', {
   sqliteCheckAutoImport: () => ipcRenderer.invoke('sqlite:check-auto-import'),
   sqliteCheckDbUpdate: (dbBaseUrl, token) => ipcRenderer.invoke('sqlite:check-db-update', { dbBaseUrl, token }),
   sqliteApplyDbUpdate: (version) => ipcRenderer.invoke('sqlite:apply-db-update', { version }),
+  dbUpdateContent: (opts) => ipcRenderer.invoke('db:update-content', opts),
+  dbRemoteVersion: (dbBaseUrl) => ipcRenderer.invoke('db:remote-version', { dbBaseUrl }),
+  dbContentInfo: () => ipcRenderer.invoke('db:content-info'),
 
   // ── SQLite direto (better-sqlite3) ───────────────────────────────────────
   sqliteOpenPath:   (dbPath) => ipcRenderer.invoke('sqlite:open-path', dbPath),

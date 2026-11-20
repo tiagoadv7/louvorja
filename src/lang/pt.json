@@ -135,7 +135,9 @@
             "m_video_player": "Vídeo",
             "m_web_link": "YouTube / Link",
             "m_dynamic_text": "Texto Dinâmico",
-            "m_interactive_text": "Texto Interativo"
+            "m_interactive_text": "Texto Interativo",
+            "subtitle": "Camadas da projeção e quadros do retorno",
+            "close": "Fechar"
         },
         "download_center": {
             "title": "Biblioteca Local",
@@ -254,7 +256,14 @@
             "delete_text": "Os arquivos baixados de {name} serão apagados deste computador. Você pode baixar de novo depois.",
             "delete_confirm": "Excluir",
             "loading_catalog": "Carregando coletâneas...",
-            "retry": "Tentar de novo"
+            "retry": "Tentar de novo",
+            "nav_database": "Banco de dados",
+            "db_desc": "Catálogo de coletâneas, músicas, letras e hinários usado pelo app (inclusive no modo offline).",
+            "db_published": "Versão publicada",
+            "db_up_to_date": "O banco de dados está na versão mais recente.",
+            "db_available": "Nova versão disponível: v{version}",
+            "db_check": "Verificar",
+            "db_redownload": "Baixar novamente"
         },
         "app_update": {
             "opt_beta": "Usar versões beta (pré-release)",
@@ -300,12 +309,35 @@
             "bar_available": "Atualização {version} disponível — clique para ver detalhes"
         },
         "db_update": {
-            "title": "Nova Versão de Banco de Dados",
+            "title": "Atualização do banco de dados",
             "version": "Versão {version}",
             "heading": "Nova versão do banco de dados disponível",
             "body": "Uma nova versão do banco de dados oficial foi publicada no servidor. Sincronize os arquivos para manter sua coletânea atualizada.",
             "later": "Agora não",
-            "sync": "Sincronizar arquivos"
+            "sync": "Sincronizar arquivos",
+            "sub": "Uma nova versão do banco de dados está disponível.",
+            "sub_done": "Banco de dados atualizado.",
+            "current": "Versão atual",
+            "new": "Nova versão",
+            "what": "O que será atualizado",
+            "what_catalog": "Catálogo: coletâneas, músicas, letras e hinários",
+            "what_sqlite": "Banco do LouvorJA (database.db), se estiver em uso — o atual fica guardado como cópia",
+            "what_keep": "Suas músicas, capas e o conteúdo em espanhol importado são mantidos",
+            "step_catalog-download": "Baixando catálogo...",
+            "step_catalog-extract": "Atualizando catálogo...",
+            "step_sqlite-download": "Baixando banco de dados...",
+            "step_sqlite-install": "Instalando banco de dados...",
+            "step_done": "Concluído",
+            "done_catalog": "{count} arquivo(s) do catálogo atualizados",
+            "done_sqlite": "Banco de dados (database.db) substituído — cópia anterior em database.db.bak",
+            "done_locked": "O database.db está em uso (feche o LouvorJA Delphi) — o catálogo foi atualizado; o banco será trocado na próxima vez",
+            "done_hint": "Para baixar os áudios e capas novos, use Sincronizar arquivos.",
+            "error": "Não foi possível atualizar agora. Nada foi alterado no banco em uso.",
+            "update": "Atualizar agora",
+            "updating": "Atualizando...",
+            "retry": "Tentar de novo",
+            "finish": "Concluir",
+            "sync_files": "Sincronizar arquivos"
         },
         "file_check": {
             "title": "Sincronizar arquivos",

@@ -193,6 +193,11 @@ export default {
     isElectron()
       ? window.electron.sqliteApplyDbUpdate(version)
       : Promise.resolve({ updated: false, reason: 'not-electron' }),
+  // Baixa e instala o catálogo + database.db novos (electron/ipc.js#db:update-content)
+  dbUpdateContent: (opts) =>
+    isElectron() ? window.electron.dbUpdateContent(opts) : Promise.resolve({ ok: false, error: 'not-electron' }),
+  dbRemoteVersion: (dbBaseUrl) => isElectron() ? window.electron.dbRemoteVersion(dbBaseUrl) : Promise.resolve(0),
+  dbContentInfo: () => isElectron() ? window.electron.dbContentInfo() : Promise.resolve({ version: 0 }),
 
   // ── SQLite direto (better-sqlite3) — sem conversão para JSON ──────────
   sqliteOpenPath: (dbPath) =>
