@@ -119,6 +119,22 @@
         </div>
       </transition>
 
+      <!-- Texto Dinâmico e Texto Interativo — mesmo esquema dos outros
+           módulos: projetados na principal, enviados sozinhos pelo botão de
+           retorno (Sobrepor) ou no multiviewer (Dividir). Reaproveitam o
+           Popup.vue do próprio módulo; o quadro (rs-text-mirror) prende o
+           "position: fixed" deles e dá a medida (cqw/cqh) do texto. -->
+      <transition name="rs-fade">
+        <div v-if="dynamicTextActive" class="rs-module-mirror rs-text-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('dynamic_text')">
+          <DynamicTextScreen />
+        </div>
+      </transition>
+      <transition name="rs-fade">
+        <div v-if="interactiveTextActive" class="rs-module-mirror rs-text-mirror" :class="{ 'rs-tile': isMulti }" :style="tileStyle('interactive_text')">
+          <InteractiveTextScreen />
+        </div>
+      </transition>
+
       <!-- Captura de tela/janela (aba "Capturar Tela" de Mídia) — mostrada em
            tela cheia aqui quando o operador liga "Mostrar no Retorno" (ver
            video_player/interface/Index.vue). Independente de popup_module:
@@ -142,11 +158,15 @@ import StopwatchScreen from '@/modules/cronometro_culto/components/StopwatchScre
 import VideoPlayerScreen from '@/modules/video_player/components/Screen.vue';
 import WebLinkScreen from '@/components/WebLinkScreen.vue';
 import BibleScreen from '@/modules/core/bible/components/Screen.vue';
+import { defineAsyncComponent } from 'vue';
+const DynamicTextScreen = defineAsyncComponent(() => import('@/modules/dynamic_text/interface/Popup.vue'));
+const InteractiveTextScreen = defineAsyncComponent(() => import('@/modules/interactive_text/interface/Popup.vue'));
 
 // Ordem dos quadros no multiviewer: a letra (o que o palco mais precisa)
 // sempre fica com o quadro maior, à esquerda.
-const TILE_ORDER = ['media', 'slide_editor', 'bible', 'clock', 'cronometro_culto', 'video_player', 'web_link'];
+const TILE_ORDER = ['media', 'slide_editor', 'bible', 'clock', 'cronometro_culto', 'dynamic_text', 'interactive_text', 'video_player', 'web_link'];
 import AnimatedBackground from '@/components/AnimatedBackground.vue';
+import $layers from '@/helpers/Layers';
 
 const isElectron = () =>
   typeof window !== 'undefined' &&
@@ -155,7 +175,7 @@ const isElectron = () =>
 
 export default {
   name: 'ReturnScreen',
-  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen, BibleScreen, AnimatedBackground },
+  components: { ClockScreen, CronometroScreen, StopwatchScreen, VideoPlayerScreen, WebLinkScreen, BibleScreen, DynamicTextScreen, InteractiveTextScreen, AnimatedBackground },
 
   data: () => ({
     stateHandler: null,
@@ -221,6 +241,14 @@ export default {
       if (this.returnPopupModule) return this.returnPopupModule === 'bible' && open;
       return this.popupModule === 'bible' && open;
     },
+    dynamicTextActiveSolo() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'dynamic_text';
+      return this.popupModule === 'dynamic_text';
+    },
+    interactiveTextActiveSolo() {
+      if (this.returnPopupModule) return this.returnPopupModule === 'interactive_text';
+      return this.popupModule === 'interactive_text';
+    },
 
     // ── Multiviewer (helpers/Layers.js, "return_multiview") ──────────────
     // O que o retorno mostraria sozinho (regra de sempre) + os módulos
@@ -234,10 +262,15 @@ export default {
         video_player: this.videoPlayerActiveSolo,
         web_link: this.webLinkActiveSolo,
         bible: this.bibleActiveSolo,
+        dynamic_text: this.dynamicTextActiveSolo,
+        interactive_text: this.interactiveTextActiveSolo,
       };
       return Object.keys(solo).find((m) => solo[m]) || null;
     },
     tiles() {
+      // "Sobrepor" no retorno (return_popup_module): tela inteira, por cima
+      // do mosaico — igual ao Sobrepor da projeção principal.
+      if (this.returnPopupModule && this.soloModule) return [this.soloModule];
       const list = (this.$appdata.get('return_multiview') || []).filter((m) => this.moduleOpen(m));
       if (this.soloModule) list.unshift(this.soloModule);
       return [...new Set(list)].sort((a, b) => TILE_ORDER.indexOf(a) - TILE_ORDER.indexOf(b));
@@ -252,6 +285,8 @@ export default {
     videoPlayerActive() { return this.isMulti ? this.tiles.includes('video_player') : this.videoPlayerActiveSolo; },
     webLinkActive() { return this.isMulti ? this.tiles.includes('web_link') : this.webLinkActiveSolo; },
     bibleActive() { return this.isMulti ? this.tiles.includes('bible') : this.bibleActiveSolo; },
+    dynamicTextActive() { return this.isMulti ? this.tiles.includes('dynamic_text') : this.dynamicTextActiveSolo; },
+    interactiveTextActive() { return this.isMulti ? this.tiles.includes('interactive_text') : this.interactiveTextActiveSolo; },
     // Tamanho real do quadro da letra (as fontes da letra são proporcionais a ele)
     slideBox() {
       const r = this.isMulti ? this.tileRect(this.tiles.indexOf(this.slideEditorActive ? 'slide_editor' : 'media')) : null;
@@ -486,30 +521,14 @@ export default {
       }
       return !!this.$appdata.get(`modules.${m}.show`) || !!this.$appdata.get(`modules.${m}.minimized`);
     },
-    // Posição (em %) do quadro i no mosaico: 2 = lado a lado; 3 = letra à
-    // esquerda inteira + 2 empilhados à direita; 4+ = grade.
+    // Mosaico compartilhado com a projeção principal (helpers/Layers.js):
+    // 2 = lado a lado; 3 = letra à esquerda inteira + 2 empilhados; 4+ = grade.
     tileRect(i) {
-      const n = this.tiles.length;
-      if (i < 0 || n < 2) return null;
-      if (n === 2) return { x: i * 50, y: 0, w: 50, h: 100 };
-      if (n === 3) return i === 0 ? { x: 0, y: 0, w: 50, h: 100 } : { x: 50, y: (i - 1) * 50, w: 50, h: 50 };
-      const cols = Math.ceil(Math.sqrt(n));
-      const rows = Math.ceil(n / cols);
-      return { x: (i % cols) * (100 / cols), y: Math.floor(i / cols) * (100 / rows), w: 100 / cols, h: 100 / rows };
+      return $layers.tileRect(i, this.tiles.length);
     },
     tileStyle(m) {
       if (!this.isMulti) return null;
-      const r = this.tileRect(this.tiles.indexOf(m));
-      if (!r) return null;
-      return {
-        position: 'absolute',
-        left: `calc(${r.x}% + 3px)`,
-        top: `calc(${r.y}% + 3px)`,
-        width: `calc(${r.w}% - 6px)`,
-        height: `calc(${r.h}% - 6px)`,
-        right: 'auto',
-        bottom: 'auto',
-      };
+      return $layers.tileStyle(this.tiles.indexOf(m), this.tiles.length);
     },
     // Captura de tela/janela — pede seu PRÓPRIO stream (id vem do appdata,
     // escolhido no operador via video_player/interface/Index.vue). Cada
@@ -832,6 +851,13 @@ export default {
   position: absolute;
   inset: 0;
   z-index: 2;
+}
+/* Texto Dinâmico/Interativo: transform prende o "position: fixed" deles
+   dentro do quadro e container-type dá a medida cqw/cqh do texto. */
+.rs-root > .rs-text-mirror {
+  transform: translateZ(0);
+  container-type: size;
+  overflow: hidden;
 }
 
 /* Captura de tela: preenche igual aos outros espelhos, fundo preto atrás

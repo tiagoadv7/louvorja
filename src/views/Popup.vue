@@ -1,6 +1,6 @@
 <template>
   <transition name="popup-fade" appear>
-    <div v-if="visible" class="popup-root">
+    <div v-if="visible" class="popup-root" :class="{ 'popup-split': isSplit }">
       <!-- Troca entre módulos (ex.: vídeo em execução → slide de uma música do
            álbum) — sem isso o <component :is> troca na hora: o módulo antigo é
            desmontado (removendo o elemento <video>/<img> da árvore) antes do
@@ -76,10 +76,13 @@
 import { defineAsyncComponent } from "vue";
 import WebLinkFrame from "@/components/WebLinkFrame.vue";
 import ImageOverlayPopup from "@/modules/image_overlay/interface/Popup.vue";
+import $layers from "@/helpers/Layers";
 
 // Componentes das camadas (helpers/Layers.js) — um por módulo, reaproveitado
 // entre recomputes (defineAsyncComponent novo a cada vez remontaria a camada).
 const layerComponents = {};
+// Quadro único (sem mosaico): tela inteira
+const FULL_TILE = { left: "0", top: "0", width: "100%", height: "100%" };
 
 const isElectron = () =>
   typeof window !== "undefined" &&
@@ -138,17 +141,23 @@ export default {
     overlayLayers() {
       return this.activeLayers.filter(([, mode]) => mode === "overlay").map(([mod]) => mod);
     },
+    // Multiviewer da principal: o que está projetado + as camadas "Dividir"
+    // num mosaico — o mesmo do retorno (helpers/Layers.js#tileRect): 2 lado a
+    // lado, 3 com o projetado à esquerda inteiro, 4 ou mais em grade.
+    tileCount() {
+      return (this.moduleComponent ? 1 : 0) + this.shareLayers.length;
+    },
     isSplit() {
-      return this.shareLayers.length > 0 && !!this.moduleComponent;
+      return this.tileCount > 1;
     },
     mainAreaStyle() {
-      return this.isSplit ? { width: "50%" } : { width: "100%" };
+      return (this.isSplit && $layers.tileStyle(0, this.tileCount)) || FULL_TILE;
     },
   },
   watch: {
     // Quadro mudou de tamanho: Relógio/Bíblia medem o próprio container no
     // "resize" da janela — avisa depois da transição terminar.
-    isSplit() {
+    tileCount() {
       [50, 450, 1100].forEach((ms) => setTimeout(() => window.dispatchEvent(new Event("resize")), ms));
     },
   },
@@ -164,14 +173,8 @@ export default {
       return layerComponents[mod];
     },
     shareLayerStyle(i) {
-      const n = this.shareLayers.length;
-      const full = !this.moduleComponent;
-      return {
-        left: full ? "0" : "50%",
-        width: full ? "100%" : "50%",
-        top: `${(100 / n) * i}%`,
-        height: `${100 / n}%`,
-      };
+      const idx = (this.moduleComponent ? 1 : 0) + i;
+      return (this.isSplit && $layers.tileStyle(idx, this.tileCount)) || FULL_TILE;
     },
     // Entradas de estado que só valem para a projeção/principal, não para o
     // utilitário desta janela: popup_module e show/minimized do próprio módulo.
@@ -403,11 +406,16 @@ export default {
    agora que a transição não usa mais mode="out-in"). */
 .popup-main {
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  transition: width 0.6s ease;
+  transition: left 0.6s ease, top 0.6s ease, width 0.6s ease, height 0.6s ease;
   overflow: hidden;
+}
+/* Mosaico: fundo preto entre os quadros (a janela é transparente) */
+.popup-root.popup-split {
+  background: #000;
+}
+.popup-split .popup-main,
+.popup-split .popup-layer:not(.popup-layer-over) {
+  border-radius: 6px;
 }
 .popup-layer {
   position: absolute;

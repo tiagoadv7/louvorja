@@ -116,7 +116,7 @@
             "projection": "Proyección — capas",
             "projecting": "Proyectando:",
             "nothing_projected": "Nada proyectado ahora",
-            "projection_hint": "Superponer cubre toda la pantalla sobre lo que se proyecta; Dividir pone lo proyectado a la izquierda y este a la derecha.",
+            "projection_hint": "Superponer cubre toda la pantalla sobre lo proyectado; Dividir arma el multiviewer: 2 lado a lado, 3 con lo proyectado a la izquierda, 4 o más en cuadrícula.",
             "main": "principal",
             "off": "Apagado",
             "overlay": "Superponer",
@@ -126,7 +126,7 @@
             "return_closed": "Retorno cerrado",
             "open_return": "Abrir retorno",
             "close_return": "Cerrar retorno",
-            "multiview_hint": "Marque lo que debe aparecer junto en el retorno, en mosaico. Los módulos cerrados se abren al marcar.",
+            "multiview_hint": "Superponer = pantalla completa en el retorno; Dividir = mosaico junto con lo que ya está. Los módulos cerrados se abren al elegir.",
             "closed": "cerrado",
             "tiles": "{n} marcado(s) — 2 lado a lado, 3 con la letra a la izquierda, 4 o más en cuadrícula.",
             "clear_all": "Desmarcar todo",
@@ -136,7 +136,9 @@
             "m_clock": "Reloj",
             "m_cronometro_culto": "Cronómetro del culto",
             "m_video_player": "Video",
-            "m_web_link": "YouTube / Enlace"
+            "m_web_link": "YouTube / Enlace",
+            "m_dynamic_text": "Texto Dinámico",
+            "m_interactive_text": "Texto Interactivo"
         },
         "download_center": {
             "title": "Biblioteca Local",
@@ -386,7 +388,7 @@
         "layer_overlay": "Superponer",
         "layer_overlay_hint": "Encima de todo; la música sigue debajo",
         "layer_share": "Dividir la pantalla",
-        "layer_share_hint": "Lado a lado con lo que se está proyectando",
+        "layer_share_hint": "Multiviewer: divide la pantalla con lo que se proyecta",
         "layer_off": "Quitar de la proyección",
         "layer_on_overlay": "Superpuesto a la proyección",
         "layer_on_share": "Dividiendo la pantalla de proyección",
@@ -394,7 +396,18 @@
         "return_remove": "Quitar del retorno",
         "return_multiview": "Multiviewer: mostrar junto en el retorno",
         "return_multiview_hint": "Divide el retorno con letra, reloj, Biblia...",
-        "return_multiview_on": "En el multiviewer del retorno"
+        "return_multiview_on": "En el multiviewer del retorno",
+        "project": "Proyectar",
+        "project_stop": "Dejar de proyectar",
+        "return_title": "En el retorno",
+        "return_overlay_hint": "Pantalla completa en el retorno, encima de lo que refleja",
+        "return_share_hint": "Multiviewer: divide el retorno con letra, reloj, Biblia...",
+        "return_on_overlay": "Superpuesto en el retorno",
+        "return_on_share": "Dividiendo el retorno (multiviewer)",
+        "project_on": "Proyectando — clic para opciones",
+        "project_or_window": "Proyectar o abrir en ventana",
+        "project_hint": "En la pantalla de proyección (monitor/proyector)",
+        "window_hint": "En una ventana aparte, con marco"
     },
     "messages": {
         "file_database_not_found": "Archivo de datos no encontrado!",

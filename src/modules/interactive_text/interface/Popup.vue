@@ -57,13 +57,14 @@ export default {
 </script>
 
 <style scoped>
+/* Ver .dt-stage em dynamic_text/interface/Popup.vue (fixed + cqw). */
 .it-stage {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4vw;
+  padding: 4cqw;
   overflow: hidden;
 }
 .it-bg-image {

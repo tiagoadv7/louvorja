@@ -6,6 +6,7 @@
     closable
     minimizable
     windowable
+    project-module="cronometro_culto"
     @open-window="$electron.openUtilityWindow('cronometro_culto')"
     @close="close()"
     @minimize="$modules.minimize(module_id)"
@@ -68,7 +69,6 @@
     </template>
 
     <template v-slot:system_buttons>
-      <LScreenBtn module="cronometro_culto" />
       <LLayerScreenBtn module="cronometro_culto" />
       <LReturnScreenBtn module="cronometro_culto" />
     </template>
@@ -443,7 +443,6 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import StopwatchScreen from "../components/StopwatchScreen.vue";
-import LScreenBtn from "@/components/buttons/Screen.vue";
 import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LLayerScreenBtn from "@/components/buttons/LayerScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
@@ -475,7 +474,6 @@ export default {
     LWindow,
     Screen,
     StopwatchScreen,
-    LScreenBtn,
     LReturnScreenBtn,
     LLayerScreenBtn,
     LSelect,

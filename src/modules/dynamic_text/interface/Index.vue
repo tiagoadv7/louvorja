@@ -6,6 +6,7 @@
     closable
     minimizable
     windowable
+    project-module="dynamic_text"
     @open-window="$electron.openUtilityWindow('dynamic_text')"
     :index="show ? 1 : 0"
     size="small"
@@ -13,7 +14,7 @@
     @minimize="$modules.minimize(module_id)"
   >
     <template v-slot:system_buttons>
-      <LScreenBtn module="dynamic_text" />
+      <LReturnScreenBtn module="dynamic_text" />
     </template>
 
     <template v-slot:customize>
@@ -112,7 +113,7 @@
 <script>
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
-import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 
 const FONT_OPTIONS = [
@@ -137,7 +138,7 @@ export default {
   name: "DynamicTextModule",
   components: {
     LWindow,
-    LScreenBtn,
+    LReturnScreenBtn,
     LCustomizationTools,
   },
   data: () => ({

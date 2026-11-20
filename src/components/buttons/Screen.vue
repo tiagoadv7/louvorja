@@ -1,16 +1,63 @@
 <template>
+  <!-- Modo "combinado" (módulos com Abrir em janela — ver components/Window.vue
+       prop projectModule): UM botão só, o de abrir em janela, com um menu
+       Projetar / Abrir em janela — em vez de dois botões parecidos lado a lado. -->
+  <v-menu v-if="combined && !is_mobile" location="bottom end">
+    <template #activator="{ props: menuProps }">
+      <v-tooltip location="bottom">
+        <template #activator="{ props: tipProps }">
+          <v-btn
+            v-bind="{ ...menuProps, ...tipProps }"
+            :class="btnClass"
+            icon="mdi-open-in-new"
+            variant="text"
+            size="small"
+            :active="is_selected"
+            :color="is_selected ? 'success' : undefined"
+          />
+        </template>
+        {{ is_selected ? $t("popup.project_on") : $t("popup.project_or_window") }}
+      </v-tooltip>
+    </template>
+    <v-list density="compact" min-width="240">
+      <v-list-item
+        :prepend-icon="is_selected ? 'mdi-projector-screen-off-outline' : 'mdi-projector-screen-outline'"
+        @click="popup()"
+      >
+        <v-list-item-title>{{ is_selected ? $t("popup.project_stop") : $t("popup.project") }}</v-list-item-title>
+        <v-list-item-subtitle>{{ $t("popup.project_hint") }}</v-list-item-subtitle>
+      </v-list-item>
+      <v-list-item prepend-icon="mdi-open-in-new" @click="$emit('open-window')">
+        <v-list-item-title>{{ $t("components.window.open_in_window") }}</v-list-item-title>
+        <v-list-item-subtitle>{{ $t("popup.window_hint") }}</v-list-item-subtitle>
+      </v-list-item>
+      <v-list-item v-if="is_popup_opened" prepend-icon="mdi-close" @click="close">
+        <v-list-item-title>{{ $t("popup.close") }}</v-list-item-title>
+      </v-list-item>
+    </v-list>
+  </v-menu>
+
   <v-btn-group
-    v-if="!is_mobile"
+    v-else-if="!is_mobile"
     :variant="variant"
     style="overflow: clip;"
   >
-    <v-btn
-      :size="size"
-      :active="is_selected"
-      icon="mdi-open-in-new"
-      :class="{ 'rotate-icon': is_selected }"
-      @click="popup()"
-    />
+    <!-- Padrão de sempre (Slides, Coletâneas, Bíblia, Vídeo...): ícone ↗ que
+         gira quando está projetando. Os módulos que também têm "Abrir em
+         janela" usam o modo combinado acima, então não fica duplicado. -->
+    <v-tooltip location="bottom">
+      <template #activator="{ props: tipProps }">
+        <v-btn
+          v-bind="tipProps"
+          :size="size"
+          :active="is_selected"
+          icon="mdi-open-in-new"
+          :class="{ 'rotate-icon': is_selected }"
+          @click="popup()"
+        />
+      </template>
+      {{ is_selected ? $t("popup.project_stop") : $t("popup.project") }}
+    </v-tooltip>
 
     <v-menu v-if="is_popup_opened" location="bottom">
       <template #activator="{ props }">
@@ -49,7 +96,11 @@ export default {
       type: String,
       default: "text",
     },
+    // Um botão só (abrir em janela + projetar) — ver template
+    combined: Boolean,
+    btnClass: { type: [String, Array, Object], default: "" },
   },
+  emits: ["open-window"],
   computed: {
     is_mobile() {
       return this.$appdata.get("is_mobile");

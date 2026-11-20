@@ -6,6 +6,7 @@
     closable
     minimizable
     windowable
+    project-module="sorteio"
     @open-window="$electron.openUtilityWindow('sorteio')"
     compact
     compact_footer
@@ -36,9 +37,6 @@
       />
     </template>
 
-    <template v-slot:system_buttons>
-      <LScreenBtn module="sorteio" />
-    </template>
 
     <!-- ===== HEADER: TABS + TOOLBAR ===== -->
     <template v-slot:header>
@@ -613,7 +611,6 @@ import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
 import RouletteWheel from "../components/RouletteWheel.vue";
-import LScreenBtn from "@/components/buttons/Screen.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 import LToolbar from "@/components/Toolbar.vue";
 import LToolbarItem from "@/components/ToolbarItem.vue";
@@ -624,7 +621,6 @@ export default {
     LWindow,
     Screen,
     RouletteWheel,
-    LScreenBtn,
     LCustomizationTools,
     LToolbar,
     LToolbarItem,

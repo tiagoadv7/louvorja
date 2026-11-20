@@ -113,7 +113,7 @@
             "projection": "Projeção — camadas",
             "projecting": "Projetando:",
             "nothing_projected": "Nada projetado agora",
-            "projection_hint": "Sobrepor cobre a tela inteira por cima do que está projetado; Dividir coloca o que está projetado à esquerda e este à direita.",
+            "projection_hint": "Sobrepor cobre a tela inteira por cima do que está projetado; Dividir monta o multiviewer: 2 lado a lado, 3 com o projetado à esquerda, 4 ou mais em grade.",
             "main": "principal",
             "off": "Desligado",
             "overlay": "Sobrepor",
@@ -123,7 +123,7 @@
             "return_closed": "Retorno fechado",
             "open_return": "Abrir retorno",
             "close_return": "Fechar retorno",
-            "multiview_hint": "Marque o que deve aparecer junto no retorno, em mosaico. Módulos fechados são abertos ao marcar.",
+            "multiview_hint": "Sobrepor = tela inteira no retorno; Dividir = mosaico junto com o que já está nele. Módulos fechados são abertos ao escolher.",
             "closed": "fechado",
             "tiles": "{n} marcado(s) — 2 lado a lado, 3 com a letra à esquerda, 4 ou mais em grade.",
             "clear_all": "Desmarcar tudo",
@@ -133,7 +133,9 @@
             "m_clock": "Relógio",
             "m_cronometro_culto": "Cronômetro do culto",
             "m_video_player": "Vídeo",
-            "m_web_link": "YouTube / Link"
+            "m_web_link": "YouTube / Link",
+            "m_dynamic_text": "Texto Dinâmico",
+            "m_interactive_text": "Texto Interativo"
         },
         "download_center": {
             "title": "Biblioteca Local",
@@ -383,7 +385,7 @@
         "layer_overlay": "Sobrepor",
         "layer_overlay_hint": "Por cima de tudo; a música continua por baixo",
         "layer_share": "Dividir a tela",
-        "layer_share_hint": "Lado a lado com o que está projetado",
+        "layer_share_hint": "Multiviewer: divide a tela com o que está projetado",
         "layer_off": "Tirar da projeção",
         "layer_on_overlay": "Sobreposto à projeção",
         "layer_on_share": "Dividindo a tela da projeção",
@@ -391,7 +393,18 @@
         "return_remove": "Remover do retorno",
         "return_multiview": "Multiviewer: mostrar junto no retorno",
         "return_multiview_hint": "Divide o retorno com letra, relógio, Bíblia...",
-        "return_multiview_on": "No multiviewer do retorno"
+        "return_multiview_on": "No multiviewer do retorno",
+        "project": "Projetar",
+        "project_stop": "Parar de projetar",
+        "return_title": "No retorno",
+        "return_overlay_hint": "Tela inteira no retorno, por cima do que ele espelha",
+        "return_share_hint": "Multiviewer: divide o retorno com letra, relógio, Bíblia...",
+        "return_on_overlay": "Sobreposto no retorno",
+        "return_on_share": "Dividindo o retorno (multiviewer)",
+        "project_on": "Projetando — clique para opções",
+        "project_or_window": "Projetar ou abrir em janela",
+        "project_hint": "Na tela de projeção (monitor/projetor)",
+        "window_hint": "Numa janela separada, com moldura"
     },
     "messages": {
         "file_database_not_found": "Arquivo de dados não encontrado!",

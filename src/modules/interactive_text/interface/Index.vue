@@ -11,6 +11,7 @@
   >
     <template v-slot:system_buttons>
       <LScreenBtn module="interactive_text" />
+      <LReturnScreenBtn module="interactive_text" />
     </template>
 
     <template v-slot:customize>
@@ -109,6 +110,7 @@
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import LScreenBtn from "@/components/buttons/Screen.vue";
+import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LCustomizationTools from "@/components/CustomizationTools.vue";
 
 const FONT_OPTIONS = [
@@ -127,6 +129,7 @@ export default {
   components: {
     LWindow,
     LScreenBtn,
+    LReturnScreenBtn,
     LCustomizationTools,
   },
   data: () => ({

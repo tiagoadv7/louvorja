@@ -74,22 +74,28 @@
       </div>
       <div class="pp-hint">{{ t("multiview_hint") }}</div>
 
-      <v-checkbox
-        v-for="m in MULTIVIEW_MODULES"
-        :key="m"
-        :model-value="multiview.includes(m)"
-        density="compact"
-        hide-details
-        color="primary"
-        class="pp-check"
-        @update:model-value="(v) => setMultiview(m, v)"
-      >
-        <template #label>
-          <v-icon size="16" class="mr-2">{{ ICONS[m] }}</v-icon>
+      <!-- Mesmas opções da projeção principal: Desligado / Sobrepor / Dividir.
+           Letra e Slides são a base do retorno (já espelhados) — só Dividir. -->
+      <div v-for="m in MULTIVIEW_MODULES" :key="m" class="pp-row">
+        <div class="pp-row-label">
+          <v-icon size="16">{{ ICONS[m] }}</v-icon>
           <span>{{ label(m) }}</span>
           <span v-if="!moduleOpen(m)" class="pp-chip pp-chip-dim">{{ t("closed") }}</span>
-        </template>
-      </v-checkbox>
+        </div>
+        <v-btn-toggle
+          :model-value="returnMode(m)"
+          density="compact"
+          variant="outlined"
+          divided
+          mandatory
+          class="pp-toggle"
+          @update:model-value="(v) => setReturn(m, v)"
+        >
+          <v-btn value="off" size="small">{{ t("off") }}</v-btn>
+          <v-btn v-if="!BASE_MODULES.includes(m)" value="overlay" size="small">{{ t("overlay") }}</v-btn>
+          <v-btn value="share" size="small">{{ t("share") }}</v-btn>
+        </v-btn-toggle>
+      </div>
       <div class="pp-hint mt-2">{{ t("tiles", { n: multiview.length }) }}</div>
     </div>
 
@@ -107,7 +113,9 @@
 import $layers from "@/helpers/Layers";
 
 const LAYER_MODULES = ["clock", "cronometro_culto", "bible"];
-const MULTIVIEW_MODULES = ["media", "slide_editor", "bible", "clock", "cronometro_culto", "video_player", "web_link"];
+const MULTIVIEW_MODULES = ["media", "slide_editor", "bible", "clock", "cronometro_culto", "dynamic_text", "interactive_text", "video_player", "web_link"];
+// Base do retorno (ele já espelha a letra/slides) — não fazem sentido "por cima"
+const BASE_MODULES = ["media", "slide_editor"];
 const ICONS = {
   media: "mdi-music-note",
   slide_editor: "mdi-presentation",
@@ -116,6 +124,8 @@ const ICONS = {
   cronometro_culto: "mdi-timer-outline",
   video_player: "mdi-video-outline",
   web_link: "mdi-youtube",
+  dynamic_text: "mdi-format-text",
+  interactive_text: "mdi-text-box-edit-outline",
 };
 
 export default {
@@ -123,6 +133,7 @@ export default {
   data: () => ({
     LAYER_MODULES,
     MULTIVIEW_MODULES,
+    BASE_MODULES,
     ICONS,
     outputOpen: false,
     returnOpen: false,
@@ -193,11 +204,14 @@ export default {
       if (m === this.mainModule) return;
       $layers.setLayer(m, mode);
     },
-    async setMultiview(m, on) {
-      const has = this.multiview.includes(m);
-      if (!!on === has) return;
+    returnMode(m) {
+      if (this.$appdata.get("return_popup_module") === m) return "overlay";
+      return this.multiview.includes(m) ? "share" : "off";
+    },
+    async setReturn(m, mode) {
+      const on = mode && mode !== "off";
       if (on) this.ensureModuleOpen(m);
-      $layers.toggleMultiview(m);
+      $layers.setReturnMode(m, on ? mode : null);
       if (on && !this.returnOpen) await this.openReturn();
       else this.$electron.invalidateOutput?.();
     },

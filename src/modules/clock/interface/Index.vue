@@ -6,6 +6,7 @@
     closable
     minimizable
     windowable
+    project-module="clock"
     @open-window="$electron.openUtilityWindow('clock')"
     @close="close()"
     @minimize="$modules.minimize(module_id)"
@@ -39,7 +40,6 @@
     </template>
 
     <template v-slot:system_buttons>
-      <LScreenBtn module="clock" />
       <LLayerScreenBtn module="clock" />
       <LReturnScreenBtn module="clock" />
     </template>
@@ -87,7 +87,6 @@
 import manifest from "../manifest.json";
 import LWindow from "@/components/Window.vue";
 import Screen from "../components/Screen.vue";
-import LScreenBtn from "@/components/buttons/Screen.vue";
 import LReturnScreenBtn from "@/components/buttons/ReturnScreen.vue";
 import LLayerScreenBtn from "@/components/buttons/LayerScreen.vue";
 import LSelect from "@/components/inputs/Select.vue";
@@ -100,7 +99,6 @@ export default {
   components: {
     LWindow,
     Screen,
-    LScreenBtn,
     LReturnScreenBtn,
     LLayerScreenBtn,
     LSelect,

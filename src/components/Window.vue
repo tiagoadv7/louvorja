@@ -57,8 +57,18 @@
               class="ms-2"
             />
 
+            <!-- Com projectModule: um botão só, com menu Projetar / Abrir em
+                 janela (components/buttons/Screen.vue, modo combinado) — sem
+                 o botão de projetar separado ao lado, que parecia duplicado. -->
+            <LScreenBtn
+              v-if="windowable && projectModule && $electron.isElectron()"
+              :module="projectModule"
+              combined
+              btn-class="ms-2"
+              @open-window="openWindow()"
+            />
             <v-btn
-              v-if="windowable && $electron.isElectron()"
+              v-else-if="windowable && $electron.isElectron()"
               class="ms-2"
               icon="mdi-open-in-new"
               variant="text"
@@ -129,6 +139,7 @@
 
 <script>
 import LCustomizationBar from "@/components/CustomizationBar.vue";
+import LScreenBtn from "@/components/buttons/Screen.vue";
 
 export default {
   name: "WindowComponent",
@@ -147,6 +158,9 @@ export default {
     closable: Boolean,
     minimizable: Boolean,
     windowable: Boolean,
+    // Módulo projetável: o botão de abrir em janela vira o menu Projetar /
+    // Abrir em janela (em vez de um botão de projetar separado)
+    projectModule: { type: String, default: "" },
     titleClass: String,
     dark: Boolean,
     index: [Boolean, Number, String],
@@ -174,6 +188,7 @@ export default {
     slotRightStyle: [String, Object],
   },
   components: {
+    LScreenBtn,
     LCustomizationBar,
   },
 

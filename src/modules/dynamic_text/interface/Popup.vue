@@ -68,7 +68,7 @@ export default {
     textStyle() {
       return {
         fontFamily: this.data.font,
-        fontSize: `clamp(24px, ${this.data.font_size}vh, 400px)`,
+        fontSize: `clamp(24px, ${this.data.font_size}cqh, 400px)`,
         color: this.data.color,
         textAlign: this.data.text_align,
       };
@@ -78,12 +78,15 @@ export default {
 </script>
 
 <style scoped>
+/* fixed + cqw/cqh: na projeção ocupa a janela inteira (sem contêiner, cq*
+   vale o mesmo que vw/vh); no quadro do retorno/multiviewer o quadro tem
+   container-type e transform, então fica preso e proporcional a ele. */
 .dt-stage {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
-  padding: 4vw;
+  padding: 4cqw;
   overflow: hidden;
 }
 .dt-bg-image {
