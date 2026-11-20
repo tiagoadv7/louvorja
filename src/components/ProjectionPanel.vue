@@ -1,22 +1,24 @@
 <template>
-  <!-- Painel lateral de testes/ajuste da projeção em camadas e do multiviewer
-       do retorno (helpers/Layers.js) — marca e desmarca tudo num lugar só,
-       sem precisar abrir cada módulo. Aberto pelo item "Projeção e
-       multiviewer" do menu lateral (layout/Menu.vue). -->
-  <v-navigation-drawer
-    v-model="show"
-    :location="$vuetify.display.width < 600 ? 'bottom' : 'left'"
-    temporary
-    width="340"
-    class="pp-drawer"
-  >
-    <div class="pp-head">
-      <v-icon size="20">mdi-view-dashboard-edit-outline</v-icon>
-      <span class="pp-title">{{ t("title") }}</span>
-      <v-spacer />
-      <v-btn icon="mdi-close" variant="text" size="small" @click="show = false" />
-    </div>
+  <!-- Janela "Projeção e multiviewer" (camadas da projeção + multiviewer do
+       retorno, helpers/Layers.js) — centralizada, no mesmo padrão das outras
+       janelas do sistema (Gerenciar Álbuns...). Aberta pelo item do menu
+       lateral (layout/Menu.vue). -->
+  <v-dialog v-model="show" max-width="880" scrollable>
+    <v-card rounded="lg" elevation="12" class="lja-glass pp-drawer" theme="lja-glass" style="overflow:hidden">
+      <div class="pp-head">
+        <v-avatar size="44" color="primary" variant="tonal" class="flex-shrink-0">
+          <v-icon size="22">mdi-view-dashboard-edit-outline</v-icon>
+        </v-avatar>
+        <div class="flex-grow-1 min-w-0">
+          <div class="text-subtitle-1 font-weight-bold">{{ t("title") }}</div>
+          <div class="text-caption text-medium-emphasis">{{ t("subtitle") }}</div>
+        </div>
+        <v-btn icon="mdi-close" size="small" variant="text" density="comfortable" @click="show = false" />
+      </div>
+      <v-divider />
 
+      <v-card-text class="pa-0">
+      <div class="pp-cols">
     <!-- ── Projeção principal ───────────────────────────────────────── -->
     <div class="pp-section">
       <div class="pp-section-title">
@@ -53,10 +55,8 @@
       </div>
     </div>
 
-    <v-divider />
-
     <!-- ── Multiviewer do retorno ───────────────────────────────────── -->
-    <div class="pp-section">
+    <div class="pp-section pp-section--return">
       <div class="pp-section-title">
         <v-icon size="16">mdi-view-grid-outline</v-icon>
         {{ t("multiview") }}
@@ -99,14 +99,17 @@
       <div class="pp-hint mt-2">{{ t("tiles", { n: multiview.length }) }}</div>
     </div>
 
-    <v-divider />
+      </div>
+      </v-card-text>
 
-    <div class="pp-section">
-      <v-btn block variant="tonal" color="error" prepend-icon="mdi-broom" @click="clearAll">
-        {{ t("clear_all") }}
-      </v-btn>
-    </div>
-  </v-navigation-drawer>
+      <v-divider />
+      <v-card-actions class="px-5 py-3" style="gap:12px">
+        <v-btn variant="text" color="error" prepend-icon="mdi-broom" @click="clearAll">{{ t("clear_all") }}</v-btn>
+        <v-spacer />
+        <v-btn color="primary" variant="flat" @click="show = false">{{ t("close") }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -242,11 +245,19 @@ export default {
 .pp-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 8px 10px 16px;
+  gap: 14px;
+  padding: 16px 18px;
 }
-.pp-title { font-weight: 600; font-size: 15px; }
-.pp-section { padding: 12px 16px; }
+/* Duas colunas: projeção à esquerda, retorno à direita (uma só em tela estreita) */
+.pp-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 760px) {
+  .pp-cols { grid-template-columns: 1fr; }
+}
+.pp-section { padding: 16px 20px; }
+.pp-section--return { border-left: 1px solid rgba(var(--v-theme-on-surface), 0.12); }
 .pp-section-title {
   display: flex;
   align-items: center;
