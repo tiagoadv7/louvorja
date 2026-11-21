@@ -5,21 +5,38 @@
   "category": "utilities",
   "icon": "mdi-dice-multiple-outline",
   "customization": {
-    "initial": { "default": null },
-    "final": { "default": null },
-    "animation_time": { "default": 1.5 },
+    "initial": {
+      "default": null
+    },
+    "final": {
+      "default": null
+    },
+    "animation_time": {
+      "default": 1.5
+    },
     "font_size": {
       "type": "font-size",
       "label": "customization.size",
-      "default": 30
+      "default": 30,
+      "max": 150
+    },
+    "label_font_size": {
+      "type": "font-size",
+      "label": "customization.label_size",
+      "default": 20,
+      "max": 120
     },
     "panel_font_size": {
       "type": "font-size",
       "label": "customization.panel_size",
       "default": 14
     },
-    "show_numbers": { "default": true },
-    "show_drawn": { "default": true },
+    "show_numbers": {
+      "default": true
+    },
+    "show_drawn": {
+      "default": true
+    },
     "font": {
       "type": "font",
       "label": "customization.font",

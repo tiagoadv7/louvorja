@@ -40,7 +40,6 @@
     </template>
 
     <template v-slot:system_buttons>
-      <LLayerScreenBtn module="clock" />
       <LReturnScreenBtn module="clock" />
     </template>
 

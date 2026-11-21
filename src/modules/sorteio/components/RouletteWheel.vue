@@ -26,15 +26,7 @@
       </transition>
     </div>
 
-    <!-- Confetti burst -->
-    <div v-if="showConfetti" class="rw-confetti-container" aria-hidden="true">
-      <div
-        v-for="i in 30"
-        :key="i"
-        class="rw-confetti-dot"
-        :style="getConfettiStyle(i)"
-      />
-    </div>
+    <!-- Confete: helpers/Confetti.js (canvas-confetti), disparado no "winner" -->
 
     <!-- Winner overlay -->
     <transition name="rw-winner">
@@ -52,6 +44,7 @@
 </template>
 
 <script>
+import $confetti from "@/helpers/Confetti";
 // Palette inspired by app-sorteos.com — vivid but not neon
 const PALETTE = [
   '#FF6B6B', // coral red
@@ -87,6 +80,7 @@ export default {
     items:          { type: Array,   default: () => [] },
     disabled:       { type: Boolean, default: false },
     showWinnerCard: { type: Boolean, default: true },
+    fontFamily:     { type: String,  default: '' },
   },
   emits: ['winner'],
 
@@ -114,6 +108,12 @@ export default {
 
   watch: {
     items() { this.$nextTick(() => this.render()); },
+    // Fonte trocada em Personalizar: redesenha (e de novo quando a fonte
+    // terminar de carregar, se for uma fonte web)
+    fontFamily() {
+      this.$nextTick(() => this.render());
+      if (document.fonts?.ready) document.fonts.ready.then(() => this.render());
+    },
   },
 
   methods: {
@@ -192,8 +192,17 @@ export default {
         ctx.rotate(midAngle);
 
         const arcLen   = segR * seg;
-        const fontSize = Math.max(9, Math.min(18, arcLen * 0.14));
-        ctx.font         = `bold ${fontSize}px "Segoe UI", Arial, sans-serif`;
+        // Tamanho proporcional à roda (antes travado em 18px — com poucos
+        // itens ficava minúsculo numa roda grande); se o texto não couber no
+        // raio, a fonte diminui antes de cortar com "…".
+        const family   = this.fontFamily || '"Segoe UI", Arial, sans-serif';
+        let fontSize   = Math.max(9, Math.min(segR * 0.12, arcLen * 0.16));
+        ctx.font       = `bold ${fontSize}px ${family}`;
+        const fitW     = ctx.measureText(text).width;
+        if (fitW > segR * 0.72) {
+          fontSize = Math.max(Math.min(fontSize, 12), fontSize * (segR * 0.72) / fitW);
+          ctx.font = `bold ${fontSize}px ${family}`;
+        }
         ctx.fillStyle    = '#ffffff';
         ctx.textAlign    = 'right';
         ctx.textBaseline = 'middle';
@@ -346,9 +355,7 @@ export default {
           this.spinning      = false;
           this.currentWinner = this.items[winnerIdx];
           this.winnerVisible = true;
-          this.showConfetti  = true;
-          if (this._confettiTimer) clearTimeout(this._confettiTimer);
-          this._confettiTimer = setTimeout(() => { this.showConfetti = false; }, 2000);
+          $confetti.burst(this.$refs.wrap);
           this.$emit('winner', this.currentWinner, winnerIdx);
           this._startPointerSettle();
           this._startIdleSpin();

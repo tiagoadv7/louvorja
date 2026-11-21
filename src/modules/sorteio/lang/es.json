@@ -73,6 +73,10 @@
     "window": "Ventana",
     "border": "Borde",
     "size": "Tamaño",
-    "panel_size": "Tamaño lateral"
-  }
+    "panel_size": "Tamaño lateral",
+    "label_size": "Tamaño del título (Sorteado)"
+  },
+  "add_first": "Agregue números o nombres a la lista para sortear",
+  "none_left_names": "Ningún nombre por sortear",
+  "none_left_numbers": "Ningún número por sortear"
 }

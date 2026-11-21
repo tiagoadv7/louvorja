@@ -69,7 +69,6 @@
     </template>
 
     <template v-slot:system_buttons>
-      <LLayerScreenBtn module="cronometro_culto" />
       <LReturnScreenBtn module="cronometro_culto" />
     </template>
 

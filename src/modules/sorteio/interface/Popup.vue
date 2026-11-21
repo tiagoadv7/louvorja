@@ -48,13 +48,20 @@
           :items="localItems"
           :disabled="true"
           :show-winner-card="false"
+          :font-family="font"
           style="width: 100%; height: 100%;"
           @winner="onWheelWinner"
         />
         <transition name="rp-winner">
           <div v-if="currentWinner" class="rp-winner-wrap">
-            <div class="rp-winner-label" :style="{ color: fontColor }">{{ winnerLabel }}</div>
+            <div class="rp-winner-label" :style="{ color: fontColor, fontSize: labelFontSizePx + 'px', fontFamily: font }">{{ winnerLabel }}</div>
             <div class="rp-winner-name" :style="winnerNameStyle">{{ currentWinner }}</div>
+          </div>
+        </transition>
+        <!-- Todos já sorteados: "Fim!" (igual aos modos Números/Nomes) -->
+        <transition name="rp-winner">
+          <div v-if="isFinished" class="rp-winner-wrap" style="width: 100%">
+            <div class="rp-winner-name" :style="winnerNameStyle">Fim!</div>
           </div>
         </transition>
       </div>
@@ -98,6 +105,7 @@ export default {
   data: () => ({
     localItems:    [],
     currentWinner: null,
+    spinning:      false,
     _lastSpinId:   0,
     _spinTimer:    null,
     _winnerTimer:  null,
@@ -134,6 +142,8 @@ export default {
       return (this.appdata.active_tab || 'numbers') === 'roulette';
     },
 
+    font() { return this.userdata.font || "Arial, sans-serif"; },
+
     fontColor() {
       return this.userdata.font_color
         || this.$vuetify?.theme?.global?.current?.colors?.['on-primary']
@@ -157,9 +167,14 @@ export default {
       return (pc * v) / 100 / 2;
     },
     panelFontSizePx() { return this.userdata.panel_font_size || 14; },
+    // "SORTEADO(A)" — mesma regra de components/Screen.vue#labelFontSizePx
+    labelFontSizePx() {
+      const v = Math.min(this.rp_width, this.rp_height) || 400;
+      return Math.max(10, ((this.userdata.label_font_size || 20) * v) / 400);
+    },
 
     winnerNameStyle() {
-      return { color: this.fontColor, fontSize: `${this.fontSizePx}px` };
+      return { color: this.fontColor, fontSize: `${this.fontSizePx}px`, fontFamily: this.font };
     },
 
     panelBorderStyle() {
@@ -171,11 +186,11 @@ export default {
     },
 
     chipStyle() {
-      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px` };
+      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px`, fontFamily: this.font };
     },
 
     chipDrawnStyle() {
-      return { background: `${this.fontColor}0a`, color: this.fontColor, opacity: 0.4, textDecoration: 'line-through', fontSize: `${this.panelFontSizePx}px` };
+      return { background: `${this.fontColor}0a`, color: this.fontColor, opacity: 0.4, textDecoration: 'line-through', fontSize: `${this.panelFontSizePx}px`, fontFamily: this.font };
     },
 
     showParticipants() {
@@ -196,6 +211,11 @@ export default {
         return this.rouletteItems.filter(i => !drawn.has(i));
       }
       return this.rouletteItems;
+    },
+
+    isFinished() {
+      return this.rouletteItems.length > 0 && this.rouletteActiveItems.length === 0
+        && !this.spinning && !this.currentWinner;
     },
 
     participantsLabel() {
@@ -233,13 +253,14 @@ export default {
       if (newId <= this._lastSpinId) return;
       this._lastSpinId = newId;
       this.currentWinner = null;
+      this.spinning = true;
 
       if (this._spinTimer) clearTimeout(this._spinTimer);
       this._spinTimer = setTimeout(() => {
         const winnerIdx = this.appdata.roulette_spin_winner_idx ?? -1;
         const spinItems = this.appdata.roulette_spin_items;
         const duration  = this.appdata.roulette_spin_duration || 7000;
-        if (winnerIdx < 0) return;
+        if (winnerIdx < 0) { this.spinning = false; return; }
 
         if (Array.isArray(spinItems) && spinItems.length > 0) {
           this.localItems = [...spinItems];
@@ -260,10 +281,14 @@ export default {
     isRoulette(val) {
       if (val) this.$nextTick(() => this.rpWindowResize());
     },
+    isActive(val) {
+      if (val) this.$nextTick(() => this.rpWindowResize());
+    },
   },
 
   methods: {
     onWheelWinner(winner) {
+      this.spinning = false;
       this.currentWinner = winner;
       if (this._winnerTimer) clearTimeout(this._winnerTimer);
       this._winnerTimer = setTimeout(() => { this.currentWinner = null; }, 3000);
@@ -272,6 +297,15 @@ export default {
     // Mesma técnica de Screen.vue#windowResize.
     rpWindowResize() {
       const el = this.$refs.wheelAreaEl;
+      // A janela do módulo muda de tamanho (maximizar, arrastar a borda)
+      // sem disparar "resize" da janela — sem isto o tamanho medido ficava
+      // velho e o vencedor/"SORTEADO(A)" saíam pequenos.
+      if (el && window.ResizeObserver && this._roEl !== el) {
+        if (!this._ro) this._ro = new ResizeObserver(() => this.rpWindowResize());
+        this._ro.disconnect();
+        this._ro.observe(el);
+        this._roEl = el;
+      }
       if (el) {
         this.rp_width = el.offsetWidth;
         this.rp_height = el.offsetHeight;
@@ -289,6 +323,7 @@ export default {
 
   beforeUnmount() {
     window.removeEventListener('resize', this.rpWindowResize);
+    if (this._ro) this._ro.disconnect();
     if (this._spinTimer)  clearTimeout(this._spinTimer);
     if (this._winnerTimer) clearTimeout(this._winnerTimer);
   },
@@ -420,6 +455,7 @@ export default {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  width: 100%; /* ver .rw-top-winner-wrap em Index.vue */
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -427,13 +463,24 @@ export default {
   pointer-events: none;
 }
 
+/* "SORTEADO(A)!": selo legível por cima das cores da roda */
 .rp-winner-label {
-  font-size: clamp(13px, 1.8vw, 22px);
-  font-weight: 700;
-  letter-spacing: 0.20em;
+  font-weight: 800;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  opacity: 0.75;
-  margin-bottom: 8px;
+  white-space: nowrap;
+  line-height: 1.1;
+  padding: 0.35em 1em 0.35em 1.18em;
+  margin-bottom: 0.45em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 2px solid rgba(255, 255, 255, 0.20);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: rp-label-pulse 2.2s ease-in-out 0.6s infinite;
+}
+@keyframes rp-label-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
 }
 
 .rp-winner-name {
@@ -444,11 +491,17 @@ export default {
   word-break: break-word;
   line-height: 1.05;
   text-shadow: 0 6px 32px rgba(0, 0, 0, 0.70);
-  background: rgba(0, 0, 0, 0.60);
+  background: rgba(0, 0, 0, 0.85);
   padding: 16px 40px;
   border-radius: 24px;
   border: 2px solid rgba(255, 255, 255, 0.20);
   white-space: nowrap;
+  /* Vencedor "vivo" na tela: pulsa e o brilho respira */
+  animation: rp-name-pulse 2.4s ease-in-out 0.6s infinite;
+}
+@keyframes rp-name-pulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255, 255, 255, 0); }
+  50%      { transform: scale(1.04); box-shadow: 0 0 36px rgba(255, 255, 255, 0.35); }
 }
 
 /* Confetti: ver comentário no template (Centro: roda) — não tem CSS/wrapper

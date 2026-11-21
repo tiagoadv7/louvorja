@@ -759,6 +759,33 @@ function notifyNoMonitor(kind, reason) {
 }
 
 // ── Janela de saída (apresentação) ────────────────────────────────────────────
+// ── Projeção fora do "Peek" do Windows ─────────────────────────────────────
+// Passar o mouse sobre as miniaturas da barra de tarefas (janelas
+// minimizadas) ativa o Aero Peek, que esconde TODAS as outras janelas — a
+// projeção sumia do telão enquanto o operador passava o mouse. O atributo DWM
+// DWMWA_EXCLUDED_FROM_PEEK (12) deixa a janela sempre visível durante o Peek
+// e DWMWA_DISALLOW_PEEK (11) impede a miniatura da própria projeção de
+// esconder as demais. Electron não expõe isso; chama a API via PowerShell
+// (uma vez por janela criada, sem bloquear nada).
+function excludeFromPeek(win) {
+  if (process.platform !== 'win32' || !win || win.isDestroyed()) return;
+  try {
+    const buf = win.getNativeWindowHandle();
+    const hwnd = buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0));
+    const script =
+      'Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;' +
+      'public static class LjaDwm{[DllImport("dwmapi.dll")]public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);}\';' +
+      `$h=[IntPtr]::new([Int64]${hwnd});$v=1;` +
+      '[void][LjaDwm]::DwmSetWindowAttribute($h,12,[ref]$v,4);[void][LjaDwm]::DwmSetWindowAttribute($h,11,[ref]$v,4)';
+    require('child_process').execFile('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { windowsHide: true, timeout: 20000 },
+      (err) => { if (err) console.warn('[peek] não foi possível excluir do Peek:', err.message); });
+  } catch (e) {
+    console.warn('[peek]', e.message);
+  }
+}
+
 function createOutputWindow(moduleId, displayId) {
   if (outputWindow && !outputWindow.isDestroyed()) {
     if (singleScreen()) { notifyNoMonitor('output', 'open'); return outputWindow; }
@@ -823,6 +850,7 @@ function createOutputWindow(moduleId, displayId) {
   watchBlankPage(outputWindow, getAppUrl(hash), 'de projeção');
 
   outputWindow.once('ready-to-show', () => {
+    excludeFromPeek(outputWindow);
     // Reforça bounds (+ fullscreen quando externo) antes de exibir — mesmo
     // motivo do createReturnWindow logo abaixo: em alguns casos no Windows a
     // opção do construtor não é suficiente sozinha e sobra uma faixa do
@@ -978,6 +1006,7 @@ function createReturnWindow(displayId) {
   watchBlankPage(returnWindow, getAppUrl('#/return-screen'), 'de retorno');
 
   returnWindow.once('ready-to-show', () => {
+    excludeFromPeek(returnWindow);
     // Reforça bounds + fullscreen antes de exibir — em alguns casos no Windows
     // a opção "fullscreen" do construtor não é suficiente por si só (a janela
     // fica só com o tamanho x/y/width/height inicial, deixando uma faixa do

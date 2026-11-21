@@ -73,6 +73,10 @@
     "window": "Janela",
     "border": "Borda",
     "size": "Tamanho",
-    "panel_size": "Tamanho lateral"
-  }
+    "panel_size": "Tamanho lateral",
+    "label_size": "Tamanho do título (Sorteado)"
+  },
+  "add_first": "Adicione números ou nomes à lista para sortear",
+  "none_left_names": "Nenhum nome a ser sorteado",
+  "none_left_numbers": "Nenhum número a ser sorteado"
 }

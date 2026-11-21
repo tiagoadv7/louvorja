@@ -30,7 +30,7 @@
           },
           {
             name: t('customization.text'),
-            items: [['font', 'font_size', 'font_color'], 'panel_font_size'],
+            items: [['font', 'font_size', 'font_color'], ['label_font_size', 'panel_font_size']],
           },
           { name: t('customization.window'), items: ['border_spacing'] },
         ]"
@@ -64,7 +64,8 @@
             color="green"
             size="small"
             variant="tonal"
-            :disabled="isAnimating"
+            :disabled="isAnimating || availableList.length === 0"
+            :title="availableList.length === 0 ? t('add_first') : ''"
             @click="draw()"
           >
             <v-icon size="22">mdi-play</v-icon>
@@ -164,7 +165,8 @@
             color="green"
             size="small"
             variant="tonal"
-            :disabled="isAnimating"
+            :disabled="isAnimating || namesAvailableList.length === 0"
+            :title="namesAvailableList.length === 0 ? t('add_first') : ''"
             @click="draw()"
           >
             <v-icon size="22">mdi-play</v-icon>
@@ -252,7 +254,7 @@
             color="green"
             size="small"
             variant="tonal"
-            :disabled="rouletteSpinning || rouletteItems.length === 0"
+            :disabled="rouletteSpinning || rouletteActiveItems.length === 0"
             @click="rouletteSpin()"
           >
             <v-icon size="22">mdi-ferris-wheel</v-icon>
@@ -347,6 +349,8 @@
          ter cantos cortados. -->
     <div class="sorteio-preview-frame">
     <!-- ===== TELA PRINCIPAL ===== -->
+    <!-- Prévia do operador mostra SEMPRE as duas listas (números do sorteio e
+         sorteados); as caixas "Números"/"Sorteados" valem só para a projeção. -->
     <Screen v-show="activeTab !== 'roulette'" ref="screen" :override-panels="true" />
 
     <!-- ===== ABA ROLETA ===== -->
@@ -427,13 +431,20 @@
             :items="rouletteActiveItems"
             :disabled="rouletteSpinning"
             :show-winner-card="false"
+            :font-family="rouletteFont"
             @spin-start="onRouletteSpinStart"
             @winner="onRouletteWinner"
           />
           <transition name="rw-top">
             <div v-if="rouletteCurrentWinner" class="rw-top-winner-wrap" :style="{ color: rouletteColor }">
-              <div class="rw-top-winner-label">{{ t('winner_label') }}</div>
+              <div class="rw-top-winner-label" :style="{ fontSize: rouletteLabelFontSizePx + 'px', fontFamily: rouletteFont }">{{ t('winner_label') }}</div>
               <div class="rw-top-winner" :style="winnerTopStyle">{{ rouletteCurrentWinner }}</div>
+            </div>
+          </transition>
+          <!-- Todos já sorteados: "Fim!" (igual aos modos Números/Nomes) -->
+          <transition name="rw-top">
+            <div v-if="rouletteFinished" class="rw-top-winner-wrap rw-fim-wrap" :style="{ color: rouletteColor }">
+              <div class="rw-top-winner rw-fim" :style="winnerTopStyle">Fim!</div>
             </div>
           </transition>
         </div>
@@ -744,6 +755,10 @@ export default {
       }
       return this.rouletteItems;
     },
+    rouletteFinished() {
+      return this.rouletteItems.length > 0 && this.rouletteActiveItems.length === 0
+        && !this.rouletteSpinning && !this.rouletteCurrentWinner;
+    },
     rouletteRemoveDrawn: {
       get() { return this.userdata.roulette_remove_drawn !== false; },
       set(v) { this.userdata.roulette_remove_drawn = v; },
@@ -775,6 +790,12 @@ export default {
       return { background: this.rouletteBg, color: this.rouletteColor };
     },
 
+    rouletteFont() { return this.userdata.font || "Arial, sans-serif"; },
+    // "SORTEADO(A)" — mesma regra de components/Screen.vue#labelFontSizePx
+    rouletteLabelFontSizePx() {
+      const v = Math.min(this.rw_width, this.rw_height) || 400;
+      return Math.max(10, ((this.userdata.label_font_size || 20) * v) / 400);
+    },
     rouletteColor() {
       return this.userdata.font_color
         || this.$vuetify?.theme?.global?.current?.colors?.['on-primary']
@@ -798,10 +819,10 @@ export default {
     },
     roulettePanelFontSizePx() { return this.userdata.panel_font_size || 14; },
     winnerTopStyle() {
-      return { color: this.rouletteColor, fontSize: `${this.rouletteFontSizePx}px` };
+      return { color: this.rouletteColor, fontSize: `${this.rouletteFontSizePx}px`, fontFamily: this.rouletteFont };
     },
     roulettePanelTextStyle() {
-      return { fontSize: `${this.roulettePanelFontSizePx}px` };
+      return { fontSize: `${this.roulettePanelFontSizePx}px`, fontFamily: this.rouletteFont };
     },
   },
   watch: {
@@ -914,6 +935,15 @@ export default {
       const isNames = this.activeTab === "names";
       const pool = [...(isNames ? this.namesAvailableList : this.availableList)];
       if (this.isAnimating) return;
+      // Lista vazia desde o começo (nada adicionado): não sorteia nem mostra
+      // "Fim!" — só avisa para adicionar (o botão já fica desativado; isto
+      // cobre o F4 e o controle remoto).
+      const drawnSoFar = isNames ? this.namesDrawnList.length : this.drawnList.length;
+      if (pool.length === 0 && drawnSoFar === 0) {
+        this.noMoreMessage = this.t("add_first");
+        this.noMoreSnack = true;
+        return;
+      }
       if (pool.length === 0) {
         this.appdata.fim = true;
         this.noMoreMessage = isNames
@@ -924,41 +954,51 @@ export default {
       }
 
       const winner = pool[Math.floor(Math.random() * pool.length)];
-      this.appdata.animating = true;
-
       const totalMs = (this.animationTime || 1.5) * 1000;
-      const startTime = Date.now();
 
-      const tick = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / totalMs, 1);
-        const interval = 12 + 100 * (progress * progress);
-        const rnd = pool[Math.floor(Math.random() * pool.length)];
-        if (isNames) {
-          this.appdata.names_current = rnd;
-        } else {
-          this.appdata.current = this.padNumber(rnd);
-        }
-        if (elapsed < totalMs) {
-          this.animTimer = setTimeout(tick, interval);
-        } else {
-          this.animTimer = null;
-          const remaining = pool.filter((n) => n !== winner);
-          if (isNames) {
-            this.appdata.names_current = winner;
-            this.appdata.names_available = remaining;
-            this.appdata.names_drawn = [winner, ...(this.appdata.names_drawn || [])];
-          } else {
-            this.appdata.current = this.padNumber(winner);
-            this.appdata.available = remaining;
-            this.appdata.drawn = [winner, ...(this.appdata.drawn || [])];
-          }
-          this.appdata.animating = false;
-          this.appdata.reveal_id = (this.appdata.reveal_id || 0) + 1;
-        }
-      };
+      // Sincronia prévia × projeção: antes, CADA número sorteado durante a
+      // animação ia para a projeção numa mensagem própria (até ~80 por
+      // segundo) e ela ficava atrasada, processando a fila. Agora vai UMA
+      // mensagem ("começou: id, horário, duração") e cada tela (prévia e
+      // projeção, components/Screen.vue) calcula a mesma sequência pelo
+      // relógio — ficam idênticas e no mesmo tempo. O resultado final também
+      // vai de uma vez só (setMultiple = uma mensagem).
+      const id = Date.now();
+      this.$appdata.setMultiple([
+        [`modules.${this.module_id}.draw_anim`, { id, start: Date.now(), duration: totalMs, mode: isNames ? "names" : "numbers" }],
+        [`modules.${this.module_id}.animating`, true],
+      ]);
 
-      this.animTimer = setTimeout(tick, 12);
+      this.animTimer = setTimeout(() => {
+        this.animTimer = null;
+        const remaining = pool.filter((n) => n !== winner);
+        const k = (key) => `modules.${this.module_id}.${key}`;
+        const entries = isNames
+          ? [
+              [k("names_current"), winner],
+              [k("names_available"), remaining],
+              [k("names_drawn"), [winner, ...(this.appdata.names_drawn || [])]],
+            ]
+          : [
+              [k("current"), this.padNumber(winner)],
+              [k("available"), remaining],
+              [k("drawn"), [winner, ...(this.appdata.drawn || [])]],
+            ];
+        entries.push([k("animating"), false]);
+        entries.push([k("draw_anim"), null]);
+        entries.push([k("reveal_id"), (this.appdata.reveal_id || 0) + 1]);
+        entries.push([k("fim"), false]);
+        this.$appdata.setMultiple(entries);
+        // Foi o último: mostra o sorteado por alguns segundos e depois "Fim!"
+        // sozinho (o botão Sortear já fica desativado, então não dava para
+        // chegar no "Fim!" clicando de novo).
+        if (remaining.length === 0) {
+          this.fimTimer = setTimeout(() => {
+            this.fimTimer = null;
+            if (!this.isAnimating) this.appdata.fim = true;
+          }, 4000);
+        }
+      }, totalMs);
     },
 
     reiniciar() {
@@ -1012,10 +1052,15 @@ export default {
     },
 
     _stopAnimation() {
+      if (this.fimTimer) {
+        clearTimeout(this.fimTimer);
+        this.fimTimer = null;
+      }
       if (this.animTimer) {
         clearTimeout(this.animTimer);
         this.animTimer = null;
       }
+      if (this.appdata.draw_anim) this.appdata.draw_anim = null;
     },
 
     // ── ROLETA ───────────────────────────────────────────────────────────
@@ -1052,6 +1097,15 @@ export default {
     // aqui (painel pequeno do operador) quanto na projeção (Popup.vue).
     rouletteWindowResize() {
       const el = this.$refs.rouletteCenterEl;
+      // A janela do módulo muda de tamanho (maximizar, arrastar a borda)
+      // sem disparar "resize" da janela — sem isto o tamanho medido ficava
+      // velho e o vencedor/"SORTEADO(A)" saíam pequenos.
+      if (el && window.ResizeObserver && this._roEl !== el) {
+        if (!this._ro) this._ro = new ResizeObserver(() => this.rouletteWindowResize());
+        this._ro.disconnect();
+        this._ro.observe(el);
+        this._roEl = el;
+      }
       if (el) {
         this.rw_width = el.offsetWidth;
         this.rw_height = el.offsetHeight;
@@ -1240,6 +1294,7 @@ export default {
   unmounted() {
     window.removeEventListener("keydown", this.handleKeydown);
     window.removeEventListener("resize", this.rouletteWindowResize);
+    if (this._ro) this._ro.disconnect();
     this._stopAnimation();
     if (this._winnerTimer) clearTimeout(this._winnerTimer);
     if (this.regRunning) this.$electron.regserverStop();
@@ -1469,19 +1524,34 @@ export default {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  /* largura da roleta toda: com left:50% o bloco encolhia para metade e
+     o título quebrava em duas linhas */
+  width: 100%;
   z-index: 15;
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
 }
+/* "SORTEADO(A)!": selo legível por cima das cores da roda (antes era texto
+   solto, transparente, que se misturava com as fatias) */
 .rw-top-winner-label {
-  font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  opacity: 0.75;
-  margin-bottom: 4px;
+  white-space: nowrap;
+  line-height: 1.1;
+  padding: 0.35em 1em 0.35em 1.18em;
+  margin-bottom: 0.45em;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.65);
+  border: 1.5px solid rgba(255,255,255,0.20);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  animation: rw-label-pulse 2.2s ease-in-out 0.6s infinite;
+}
+@keyframes rw-label-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
 }
 .rw-top-winner {
   font-size: clamp(16px, 4vh, 40px);
@@ -1492,7 +1562,7 @@ export default {
   white-space: normal;
   line-height: 1.2;
   text-shadow: 0 3px 16px rgba(0,0,0,0.9);
-  background: rgba(0,0,0,0.60);
+  background: rgba(0,0,0,0.85);
   padding: 12px 24px;
   border-radius: 16px;
   border: 1.5px solid rgba(255,255,255,0.20);
@@ -1501,4 +1571,17 @@ export default {
 .rw-top-leave-active { animation: rw-top-out 0.3s ease forwards; }
 @keyframes rw-top-in  { from { opacity:0; transform:translate(-50%,-50%) scale(0.80); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
 @keyframes rw-top-out { from { opacity:1; } to { opacity:0; } }
+/* "Fim!" numa linha só, ocupando a largura da roleta (o wrap absoluto com
+   left:50% encolhia para metade e quebrava "Fi / m!") */
+.rw-fim-wrap { width: 100%; }
+.rw-fim {
+  white-space: nowrap;
+  max-width: none;
+  padding: 12px 48px;
+  animation: rw-fim-pulse 2.2s ease-in-out 0.5s infinite;
+}
+@keyframes rw-fim-pulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50%      { transform: scale(1.05); box-shadow: 0 0 28px rgba(255,255,255,0.3); }
+}
 </style>

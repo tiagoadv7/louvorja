@@ -33,34 +33,39 @@
         >
           {{ item }}
         </span>
-      </div>
-    </div>
-
-    <!-- Centro: display do sorteado atual -->
-    <div class="sorteio-center" :style="{ padding: `${borderSpacing}px` }">
-      <div class="sorteio-result">
-        <div v-if="isRevealed" class="sorteio-winner-label" :style="{ color: fontColor }">
-          {{ winnerLabel }}
-        </div>
-        <span
-          :key="showFim ? 'fim' : revealId"
-          :style="numberStyle"
-          :class="{
-            'sorteio-animating': isAnimating,
-            'sorteio-reveal-anim': isRevealed,
-            'sorteio-fim-anim': showFim,
-          }"
-        >
-          {{ displayCurrent }}
+        <!-- Tela do operador: avisa que acabou a lista -->
+        <span v-if="overridePanels && leftPanelItems.length === 0" class="sorteio-panel__empty" :style="{ color: fontColor }">
+          {{ emptyLeftText }}
         </span>
       </div>
     </div>
 
-    <!-- Confetti — mesmo efeito usado no modo roleta (ver Popup.vue), disparado
-         a cada novo sorteado pra ficar consistente entre números/nomes/roleta. -->
-    <div v-if="showConfetti" class="sorteio-confetti-wrap" aria-hidden="true">
-      <div v-for="i in 50" :key="i" class="sorteio-confetti" :style="getConfettiStyle(i)" />
+    <!-- Centro: display do sorteado atual -->
+    <div ref="center" class="sorteio-center" :style="{ padding: `${borderSpacing}px` }">
+      <div class="sorteio-result">
+        <div v-if="isRevealed" :key="'lbl' + revealId" class="sorteio-winner-label" :style="labelStyle">
+          {{ winnerLabel }}
+        </div>
+        <!-- Depois do sorteio, o resultado continua "vivo": flutua de leve e
+             o brilho pulsa (sorteio-alive); girando, ele treme (sorteio-rolling). -->
+        <div :class="{ 'sorteio-alive': isRevealed || showFim, 'sorteio-rolling': isAnimating }">
+          <span
+            :key="showFim ? 'fim' : revealId"
+            :style="numberStyle"
+            :class="{
+              'sorteio-animating': isAnimating,
+              'sorteio-reveal-anim': isRevealed,
+              'sorteio-fim-anim': showFim,
+            }"
+          >
+            {{ displayCurrent }}
+          </span>
+        </div>
+      </div>
     </div>
+
+    <!-- Confete: helpers/Confetti.js (canvas-confetti, efeito do Preline),
+         disparado a cada novo sorteado — o canvas fica dentro desta tela. -->
 
     <!-- Painel direito -->
     <div v-if="showRightPanel" class="sorteio-panel sorteio-panel--right" :style="panelBorderStyle">
@@ -71,7 +76,7 @@
       <div class="sorteio-panel__content sorteio-panel__content--column">
         <span
           v-for="(item, i) in rightPanelItems"
-          :key="i"
+          :key="i === 0 ? 'latest-' + revealId : i"
           class="sorteio-chip"
           :class="{ 'sorteio-chip--latest': i === 0 }"
           :style="i === 0 ? chipLatestStyle : chipStyle"
@@ -88,12 +93,7 @@
 import manifest from "../manifest.json";
 import pt from "../lang/pt.json";
 import AnimatedBackground from "@/components/AnimatedBackground.vue";
-
-// Mesma paleta usada no confete da roleta (RouletteWheel.vue / Popup.vue).
-const CONFETTI_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#5B9BD5', '#FDCB6E',
-  '#A29BFE', '#FD79A8', '#0984E3', '#6C5CE7',
-];
+import $confetti from "@/helpers/Confetti";
 
 export default {
   name: "SorteioScreen",
@@ -107,8 +107,8 @@ export default {
   data: () => ({
     s_width: 0,
     s_height: 0,
-    showConfetti: false,
-    _confettiTimer: null,
+    c_width: 0,
+    rollValue: null,
   }),
   computed: {
     module_id() {
@@ -197,6 +197,8 @@ export default {
     },
     displayCurrent() {
       if (this.showFim) return "Fim!";
+      // Girando: valor calculado aqui mesmo (ver runRoll), igual em todas as telas
+      if (this.isAnimating && this.rollValue !== null) return this.rollValue;
       if (this.isNamesMode) {
         return this.appdata.names_current || "-------";
       }
@@ -226,8 +228,31 @@ export default {
       const v = Math.min(this.s_width, this.s_height);
       return (pc * v) / 100 / 2;
     },
+    // Número/nome sempre numa linha só: se não couber na largura, a fonte
+    // diminui até caber (medida com canvas, sem mexer no layout). Girando no
+    // modo Nomes, usa o maior nome da lista, para o tamanho não ficar pulando.
+    fittedFontSizePx() {
+      const base = this.fontSizePx;
+      const avail = (this.c_width - 2 * this.borderSpacing) * 0.9;
+      if (!base || avail <= 0) return base;
+      let texts = [String(this.displayCurrent ?? "")];
+      if (this.isAnimating && this.isNamesMode) {
+        texts = (this.appdata.names_available || []).map(String);
+      }
+      const w = Math.max(0, ...texts.map((t) => this.measureText(t, base)));
+      return w > avail ? Math.max(8, base * (avail / w)) : base;
+    },
     borderSpacing() { return this.userdata.border_spacing || 10; },
     panelFontSizePx() { return this.userdata.panel_font_size || 14; },
+    // Tamanho do "SORTEADO(A)" (Personalizar > Texto > Tamanho do título),
+    // proporcional à tela como o número — 20 ≈ 20 px na prévia, maior na projeção.
+    labelFontSizePx() {
+      const v = Math.min(this.s_width, this.s_height) || 400;
+      return Math.max(10, ((this.userdata.label_font_size || 20) * v) / 400);
+    },
+    labelStyle() {
+      return { color: this.fontColor, fontSize: `${this.labelFontSizePx}px`, fontFamily: this.font };
+    },
     animatedBg() { return this.userdata.animated_bg || "none"; },
     animatedBgColor() { return this.userdata.animated_bg_color || "#7aa0ff"; },
 
@@ -250,50 +275,132 @@ export default {
     },
     numberStyle() {
       return {
-        fontSize: `${this.fontSizePx}px`,
+        fontSize: `${this.fittedFontSizePx}px`,
         color: this.fontColor,
         fontWeight: "bold",
-        fontFamily: this.isNamesMode ? this.font : "monospace",
+        whiteSpace: "nowrap",
+        // Fonte escolhida em Personalizar (antes os números eram sempre
+        // monospace); tabular-nums mantém os dígitos com a mesma largura.
+        fontFamily: this.font,
+        fontVariantNumeric: "tabular-nums",
         letterSpacing: this.isNamesMode ? "normal" : "0.05em",
         userSelect: "none",
         zIndex: 1,
         position: "relative",
         textAlign: "center",
-        wordBreak: "break-word",
-        maxWidth: "100%",
-        // "maxWidth" acima não tinha efeito nenhum com o <span> ficando
-        // "display:inline" (padrão) — elemento inline ignora max-width, então
-        // um nome grande (ainda mais com "Tamanho do Texto" aumentado nas
-        // configurações) só continuava numa linha só, vazando pra fora da
-        // tela em vez de quebrar. inline-block respeita o max-width (aqui,
-        // 100% do .sorteio-result) e só então o word-break tem o que fazer.
+        maxWidth: "none",
+        // Sem quebra de linha: quem garante que cabe é fittedFontSizePx.
         display: "inline-block",
       };
     },
     chipStyle() {
-      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px` };
+      return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px`, fontFamily: this.font };
     },
     chipLatestStyle() {
-      return { background: `${this.fontColor}40`, color: this.fontColor, fontWeight: "bold", fontSize: `${this.panelFontSizePx}px` };
+      // Último sorteado em destaque: maior que os demais da lista
+      return {
+        background: `${this.fontColor}40`,
+        color: this.fontColor,
+        fontWeight: "bold",
+        fontFamily: this.font,
+        fontSize: `${Math.round(this.panelFontSizePx * 1.8)}px`,
+        padding: "0.15em 0.4em",
+        marginBottom: "4px",
+        boxShadow: `0 0 0 2px ${this.fontColor}66`,
+      };
     },
+    // "Fim!" só enquanto a lista do modo atual estiver vazia (adicionar
+    // nomes/números ou trocar de aba já volta ao normal)
     showFim() {
-      return this.appdata.fim === true;
+      return this.appdata.fim === true && this.leftPanelItems.length === 0;
+    },
+    emptyLeftText() {
+      const key = this.isNamesMode ? "none_left_names" : "none_left_numbers";
+      const i18nKey = `modules.${this.module_id}.${key}`;
+      const result = this.$t(i18nKey);
+      return result !== i18nKey ? result : (pt[key] || key);
+    },
+    drawAnim() {
+      return this.appdata.draw_anim || null;
     },
   },
   watch: {
+    // Começou um sorteio (Index.vue#draw): anima aqui, pelo relógio
+    drawAnim(anim) {
+      if (anim && anim.id) this.runRoll(anim);
+      else this.stopRoll();
+    },
     // Dispara o confete a cada novo sorteado (números/nomes), igual ao
     // "showConfetti" de RouletteWheel.vue — some sozinho depois de um tempo.
     revealId(val) {
       if (val > 0 && !this.showFim) {
-        this.showConfetti = true;
-        if (this._confettiTimer) clearTimeout(this._confettiTimer);
-        this._confettiTimer = setTimeout(() => { this.showConfetti = false; }, 2200);
+        this.$nextTick(() => $confetti.burst(this.$refs.container));
       }
     },
   },
   methods: {
+    // Mesma sequência em todas as telas: os instantes de troca seguem a mesma
+    // curva (rápido no começo, desacelerando — 12 ms + 100 ms × progresso²)
+    // e o item de cada troca vem de um sorteio "com semente" (id + índice),
+    // então prévia e projeção mostram os mesmos números ao mesmo tempo. Se
+    // uma tela recebe o aviso alguns ms depois, ela se acerta pelo horário.
+    runRoll(anim) {
+      this.stopRoll();
+      const pool = anim.mode === "names"
+        ? [...(this.appdata.names_available || [])]
+        : [...(this.appdata.available || [])];
+      if (!pool.length) return;
+      // Sobrou só 1 ou 2: a animação ficaria parada no mesmo nome/número —
+      // gira também pelos já sorteados (só visual; o sorteado sai do pool).
+      if (pool.length < 3) {
+        const drawn = anim.mode === "names" ? (this.appdata.names_drawn || []) : (this.appdata.drawn || []);
+        for (const d of drawn) if (!pool.includes(d)) pool.push(d);
+      }
+      const ticks = [];
+      for (let t = 0; t < anim.duration;) {
+        ticks.push(t);
+        const p = Math.min(t / anim.duration, 1);
+        t += 12 + 100 * p * p;
+      }
+      const pick = (i) => {
+        let x = (Math.floor(anim.id % 2147483647) + i * 2654435761) >>> 0;
+        x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+        return pool[x % pool.length];
+      };
+      const fmt = (v) => (anim.mode === "names" ? v : String(v).padStart(this.padLength, "0"));
+      let idx = -1;
+      const step = () => {
+        const elapsed = Date.now() - anim.start;
+        if (elapsed >= anim.duration) { this._rollRaf = null; return; }
+        let k = idx < 0 ? 0 : idx;
+        while (k + 1 < ticks.length && ticks[k + 1] <= elapsed) k++;
+        if (k !== idx) { idx = k; this.rollValue = fmt(pick(k)); }
+        this._rollRaf = requestAnimationFrame(step);
+      };
+      step();
+    },
+    stopRoll() {
+      if (this._rollRaf) cancelAnimationFrame(this._rollRaf);
+      this._rollRaf = null;
+      this.rollValue = null;
+    },
+    measureText(text, size) {
+      if (!text) return 0;
+      const ctx = (this._measureCtx ||= document.createElement("canvas").getContext("2d"));
+      ctx.font = `bold ${size}px ${this.font}`;
+      const spacing = this.isNamesMode ? 0 : 0.05 * size * text.length;
+      return ctx.measureText(text).width + spacing;
+    },
+    observeCenter() {
+      if (!this._ro) return;
+      this._ro.disconnect();
+      if (this.$refs.center) this._ro.observe(this.$refs.center);
+      if (this.$refs.container) this._ro.observe(this.$refs.container);
+      this.windowResize();
+    },
     windowResize() {
       const container = this.$refs.container;
+      if (this.$refs.center) this.c_width = this.$refs.center.clientWidth;
       if (container) {
         this.s_width = container.offsetWidth;
         this.s_height = container.offsetHeight;
@@ -302,31 +409,23 @@ export default {
         }
       }
     },
-    // Mesmo cálculo de Popup.vue#getConfettiStyle, pra ficar visualmente
-    // idêntico ao efeito da roleta.
-    getConfettiStyle(i) {
-      const color = CONFETTI_COLORS[(i - 1) % CONFETTI_COLORS.length];
-      const angle = ((i - 1) / 50) * 360;
-      const delay = ((i - 1) % 10) * 0.05;
-      const size  = 6 + (i % 5) * 4;
-      const dist  = 150 + (i % 4) * 70;
-      return {
-        background: color,
-        width:  size + 'px',
-        height: size + 'px',
-        '--ca':    angle + 'deg',
-        '--dist':  dist  + 'px',
-        '--delay': delay + 's',
-      };
-    },
   },
   mounted() {
+    if (this.drawAnim && this.drawAnim.id) this.runRoll(this.drawAnim);
     this.windowResize();
     window.addEventListener("resize", this.windowResize);
+    // Painéis laterais ligando/desligando mudam a largura do centro sem
+    // "resize" da janela — observa o próprio container.
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this.windowResize());
+      this.$watch(() => this.isActive, () => this.$nextTick(() => this.observeCenter()), { immediate: true });
+    }
   },
   unmounted() {
     window.removeEventListener("resize", this.windowResize);
-    if (this._confettiTimer) clearTimeout(this._confettiTimer);
+    if (this._ro) this._ro.disconnect();
+    this.stopRoll();
+    $confetti.clear(this.$refs.container);
   },
 };
 </script>
@@ -392,6 +491,13 @@ export default {
   border-radius: 2px;
 }
 
+.sorteio-panel__empty {
+  font-size: 13px;
+  opacity: 0.55;
+  font-style: italic;
+  padding: 4px 2px;
+}
+
 .sorteio-center {
   flex: 1;
   display: flex;
@@ -409,24 +515,66 @@ export default {
 }
 
 .sorteio-winner-label {
-  font-size: clamp(12px, 1.6vw, 20px);
   font-weight: 700;
   letter-spacing: 0.20em;
   text-transform: uppercase;
-  opacity: 0.75;
-  margin-bottom: 6px;
-  animation: sorteio-label-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  opacity: 0.85;
+  margin-bottom: 0.3em;
+  line-height: 1.1;
+  text-align: center;
+  /* Entra com "salto" e depois fica pulsando de leve enquanto o sorteado
+     está na tela */
+  animation:
+    sorteio-label-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    sorteio-label-pulse 2.2s ease-in-out 0.6s infinite;
 }
 @keyframes sorteio-label-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 0.75; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px) scale(0.8); }
+  to   { opacity: 0.85; transform: translateY(0) scale(1); }
+}
+@keyframes sorteio-label-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); letter-spacing: 0.20em; }
+  50%      { opacity: 1;    transform: scale(1.06); letter-spacing: 0.26em; }
+}
+
+/* Resultado "vivo" depois do sorteio: flutua e o brilho pulsa */
+.sorteio-alive {
+  animation:
+    sorteio-float 3.2s ease-in-out 0.5s infinite,
+    sorteio-glow 2.4s ease-in-out 0.5s infinite;
+}
+@keyframes sorteio-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2.5%); }
+}
+@keyframes sorteio-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0)); }
+  50%      { filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55)); }
+}
+/* Girando: tremida rápida */
+.sorteio-rolling {
+  animation: sorteio-roll 0.18s ease-in-out infinite;
+}
+@keyframes sorteio-roll {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25%      { transform: scale(1.03) rotate(-1deg); }
+  75%      { transform: scale(0.98) rotate(1deg); }
+}
+/* Último sorteado na lista: entra com destaque */
+.sorteio-chip--latest {
+  animation: sorteio-chip-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes sorteio-chip-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
 }
 
 .sorteio-chip {
   display: inline-block;
   padding: 2px 7px;
   border-radius: 4px;
-  font-family: monospace;
+  font-variant-numeric: tabular-nums;
   /* Antes: nowrap + ellipsis — um nome grande na lista lateral (ainda mais
      com "Tamanho do Texto" aumentado) cortava com "..." em vez de quebrar
      linha, escondendo o resto do nome. Números continuam curtos o bastante
@@ -464,24 +612,4 @@ export default {
   100% { transform: scale(1);    opacity: 1; }
 }
 
-/* Confetti — mesma animação de Popup.vue (modo roleta) */
-.sorteio-confetti-wrap {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.sorteio-confetti {
-  position: absolute;
-  border-radius: 50%;
-  animation: sorteio-confetti-burst 2.2s var(--delay, 0s) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-}
-@keyframes sorteio-confetti-burst {
-  0%   { transform: rotate(var(--ca)) translateY(0) scale(1);          opacity: 1; }
-  70%  { opacity: 1; }
-  100% { transform: rotate(var(--ca)) translateY(calc(-1 * var(--dist, 160px))) scale(0.3); opacity: 0; }
-}
 </style>

@@ -9,25 +9,34 @@
           <v-btn
             v-bind="{ ...menuProps, ...tipProps }"
             :class="btnClass"
-            icon="mdi-open-in-new"
+            :icon="layer_mode === 'share' ? 'mdi-view-split-vertical' : 'mdi-open-in-new'"
             variant="text"
             size="small"
             :active="is_selected"
             :color="is_selected ? 'success' : undefined"
           />
         </template>
-        {{ is_selected ? $t("popup.project_on") : $t("popup.project_or_window") }}
+        {{ layer_mode ? $t(layer_mode === "share" ? "popup.layer_on_share" : "popup.layer_on_overlay") : is_selected ? $t("popup.project_on") : $t("popup.project_or_window") }}
       </v-tooltip>
     </template>
     <v-list density="compact" min-width="240">
       <v-list-item
-        :prepend-icon="is_selected ? 'mdi-projector-screen-off-outline' : 'mdi-projector-screen-outline'"
+        :prepend-icon="is_selected ? 'mdi-close-box-outline' : 'mdi-open-in-new'"
         @click="popup()"
       >
         <v-list-item-title>{{ is_selected ? $t("popup.project_stop") : $t("popup.project") }}</v-list-item-title>
-        <v-list-item-subtitle>{{ $t("popup.project_hint") }}</v-list-item-subtitle>
+        <v-list-item-subtitle>{{ other_projected && !is_selected ? $t("popup.layer_overlay_hint") : $t("popup.project_hint") }}</v-list-item-subtitle>
       </v-list-item>
-      <v-list-item prepend-icon="mdi-open-in-new" @click="$emit('open-window')">
+      <!-- Outra coisa já projetada: também dá para dividir a tela com ela -->
+      <v-list-item
+        v-if="other_projected && layer_mode !== 'share'"
+        prepend-icon="mdi-view-split-vertical"
+        @click="setLayer('share')"
+      >
+        <v-list-item-title>{{ $t("popup.layer_share") }}</v-list-item-title>
+        <v-list-item-subtitle>{{ $t("popup.layer_share_hint") }}</v-list-item-subtitle>
+      </v-list-item>
+      <v-list-item prepend-icon="mdi-layers-outline" @click="$emit('open-window')">
         <v-list-item-title>{{ $t("components.window.open_in_window") }}</v-list-item-title>
         <v-list-item-subtitle>{{ $t("popup.window_hint") }}</v-list-item-subtitle>
       </v-list-item>
@@ -74,12 +83,13 @@
 </template>
 
 <script>
-// Módulos auxiliares (não são conteúdo principal do culto) — trocar pra eles
-// na tela de projeção precisa de confirmação, pra não substituir o que já
-// está sendo exibido (ex.: uma música) só por um clique sem querer. Vídeo
-// fica de fora mesmo compartilhando a categoria "utilities" no manifest,
-// porque é conteúdo trocado com frequência durante o culto.
-const CONFIRM_BEFORE_REPLACE = ["bible", "clock", "sorteio", "cronometro_culto"];
+import $layers from "@/helpers/Layers";
+
+// Módulos auxiliares (não são conteúdo principal do culto) — com outra coisa
+// já projetada (ex.: uma música), eles entram por cima como camada em vez de
+// substituir (antes perguntava "Substituir...?"). Vídeo fica de fora: é
+// conteúdo trocado com frequência durante o culto.
+const OVERLAY_INSTEAD_OF_REPLACE = ["bible", "clock", "sorteio", "cronometro_culto", "dynamic_text", "interactive_text"];
 
 export default {
   name: "ButtonScreenComponent",
@@ -111,8 +121,15 @@ export default {
     popup_module() {
       return this.$appdata.get("popup_module");
     },
+    // Projetado como principal OU como camada por cima/ao lado
     is_selected() {
-      return this.is_popup_opened && this.popup_module == this.module;
+      return (this.is_popup_opened && this.popup_module == this.module) || !!this.layer_mode;
+    },
+    layer_mode() {
+      return (this.$appdata.get("projection_layers") || {})[this.module] || null;
+    },
+    other_projected() {
+      return this.is_popup_opened && !!this.popup_module && this.popup_module !== this.module;
     },
   },
   methods: {
@@ -128,25 +145,32 @@ export default {
     // tocando na janela principal (VideoLocalPlayer.vue / WebLinkLocalPlayer.vue)
     // e no miniplayer, e a projeção esmaece sozinha (Popup.vue / WebLinkFrame.vue).
     popup() {
+      // Está como camada: clicar de novo tira só a camada (o principal fica)
+      if (this.layer_mode) {
+        $layers.clearLayer(this.module);
+        return;
+      }
       if (this.is_selected) {
         if (this.module === "video_player") this.$videoPlayer.detachFromOutput();
         this.$popup.close();
         return;
       }
       if (this.module === "video_player") this.$videoPlayer.attachToOutput();
-      // Já tem outra coisa sendo exibida na projeção e o módulo pra onde
-      // estamos indo é auxiliar (Bíblia/Relógio/Cronômetro/Sorteio) — confirma
-      // antes de substituir, em vez de trocar na hora sem aviso.
-      const isReplacingActiveProjection =
-        this.is_popup_opened && this.popup_module && this.popup_module !== this.module;
-      if (isReplacingActiveProjection && CONFIRM_BEFORE_REPLACE.includes(this.module)) {
-        this.$alert.yesno(
-          { text: "Substituir o que está sendo exibido na tela de projeção agora?", translate: false },
-          (btn) => { if (btn === "yes") this.$popup.open(this.module); }
-        );
+      // Já tem outra coisa projetada e este é um módulo auxiliar: em vez de
+      // perguntar se quer substituir, entra POR CIMA como camada (Sobrepor) —
+      // o que estava projetado continua por baixo e volta ao tirar a camada.
+      if (this.other_projected && OVERLAY_INSTEAD_OF_REPLACE.includes(this.module)) {
+        $layers.setLayer(this.module, "overlay");
         return;
       }
       this.$popup.open(this.module);
+    },
+    async setLayer(mode) {
+      if (!this.other_projected) {
+        await this.$popup.open(this.module);
+        return;
+      }
+      $layers.setLayer(this.module, mode);
     },
     // Item "Fechar" do menu — diferente do clique no ícone (desligamento
     // suave, mantém a janela viva), aqui é uma ação explícita de encerrar a

@@ -22,7 +22,7 @@
     <!-- ── Projeção principal ───────────────────────────────────────── -->
     <div class="pp-section">
       <div class="pp-section-title">
-        <v-icon size="16">mdi-projector-screen-outline</v-icon>
+        <v-icon size="16">mdi-open-in-new</v-icon>
         {{ t("projection") }}
       </div>
       <div class="pp-status">
