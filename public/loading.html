@@ -157,8 +157,24 @@
       color: #eef2f8;
       opacity: 0;
       transform: translateY(10px);
-      animation: letterIn .45s cubic-bezier(.22, 1, .36, 1) forwards;
-      animation-delay: calc(.38s + var(--i) * 0.045s);
+      /* Entrada em cascata + uma "onda" contínua passando pelas letras
+         enquanto carrega — o texto nunca fica parado. */
+      animation:
+        letterIn .45s cubic-bezier(.22, 1, .36, 1) calc(.38s + var(--i) * 0.045s) forwards,
+        letterWave 2.6s ease-in-out calc(1.4s + var(--i) * 0.1s) infinite;
+    }
+    /* Até a janela estar desenhando sem travar (ver o <script> no fim), a
+       entrada do nome fica parada no começo — senão ela corria durante o
+       engasgo da abertura do app e o usuário via só o texto pronto, parado. */
+    body:not(.go) .app-name,
+    body:not(.go) .app-name span,
+    body:not(.go) .app-name-bar,
+    body:not(.go) .app-name-bar::after {
+      animation-play-state: paused !important;
+    }
+    @keyframes letterWave {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
     }
     .app-name span.accent { color: #F8C800; }
     @keyframes letterIn { to { opacity: 1; transform: translateY(0); } }
@@ -296,9 +312,21 @@
     // num navegador, pra testar/ajustar o visual) não existe
     // "window.loadingBridge" -- libera na hora mesmo, sem esperar sinal
     // nenhum.
-    // As animações (cascata das letras, barra, anel) rodam desde o carregamento.
-    // A janela de loading é criada já visível (ver electron/main.js), então a
-    // entrada aparece junto com a tela, sem precisar ser reiniciada.
+    // Libera a entrada do nome só quando a janela estiver desenhando lisa
+    // (8 quadros seguidos sem engasgo) — a abertura do app costuma travar a
+    // tela por um instante logo no começo. Limite de 2,5 s para nunca ficar
+    // esperando.
+    (function () {
+      var go = function () { document.body.classList.add('go'); };
+      var smooth = 0, last = 0, started = performance.now();
+      function tick(now) {
+        if (last) smooth = (now - last) < 40 ? smooth + 1 : 0;
+        last = now;
+        if (smooth >= 8 || now - started > 2500) return go();
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
   </script>
 </body>
 </html>

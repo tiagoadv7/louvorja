@@ -137,7 +137,10 @@ class SQLiteReader {
       }
     }
 
-    const buf    = fs.readFileSync(dbPath);
+    // Leitura ASSÍNCRONA: o banco tem ~90 MB e o readFileSync travava o
+    // processo principal por 1,5 s ou mais bem na abertura do app — a janela
+    // de carregamento congelava e a animação do "LouvorJA" nem aparecia.
+    const buf    = await fs.promises.readFile(dbPath);
     this._db     = new this._SQL.Database(new Uint8Array(buf));
     this._dbPath = dbPath;
 
