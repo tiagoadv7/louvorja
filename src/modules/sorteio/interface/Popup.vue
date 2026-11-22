@@ -21,17 +21,17 @@
       <div class="rp-panel__header" :style="panelHeaderStyle">
         <v-icon size="16" class="mr-1" :color="fontColor">mdi-account-group-outline</v-icon>
         {{ participantsLabel }}
-        <span class="rp-panel__count" :style="{ color: fontColor }">{{ rouletteItems.length }}</span>
+        <span class="rp-panel__count" :style="{ color: fontColor }">{{ rouletteActiveItems.length }}</span>
       </div>
       <div class="rp-panel__content">
+        <!-- Sorteados saem da lista (igual aos modos Números/Nomes) -->
         <span
-          v-for="(item, i) in rouletteItems"
-          :key="i"
+          v-for="item in rouletteActiveItems"
+          :key="item"
           class="rp-chip"
-          :class="{ 'rp-chip--drawn': rouletteDrawn.includes(item) }"
-          :style="rouletteDrawn.includes(item) ? chipDrawnStyle : chipStyle"
+          :style="chipStyle"
         >{{ item }}</span>
-        <span v-if="rouletteItems.length === 0" class="rp-panel__empty" :style="{ color: fontColor }">—</span>
+        <span v-if="rouletteActiveItems.length === 0" class="rp-panel__empty" :style="{ color: fontColor }">—</span>
       </div>
     </div>
 
@@ -74,13 +74,15 @@
         {{ historyLabel }}
       </div>
       <div class="rp-panel__content">
+        <!-- Último sorteado em destaque (maior), igual ao modo Números -->
         <div
           v-for="(item, i) in rouletteDrawn"
-          :key="'d' + i"
+          :key="i === 0 ? 'latest-' + rouletteDrawn.length : 'd' + i"
           class="rp-history-row"
+          :class="{ 'rp-history-row--latest': i === 0 }"
         >
-          <span class="rp-history-num" :style="{ color: fontColor }">{{ i + 1 }}.</span>
-          <span class="rp-history-text" :style="chipStyle">{{ item }}</span>
+          <span v-if="i > 0" class="rp-history-num" :style="{ color: fontColor }">{{ rouletteDrawn.length - i }}.</span>
+          <span class="rp-history-text" :style="i === 0 ? chipLatestStyle : chipStyle">{{ item }}</span>
         </div>
         <span v-if="rouletteDrawn.length === 0" class="rp-panel__empty" :style="{ color: fontColor }">—</span>
       </div>
@@ -189,6 +191,18 @@ export default {
       return { background: `${this.fontColor}18`, color: this.fontColor, fontSize: `${this.panelFontSizePx}px`, fontFamily: this.font };
     },
 
+    chipLatestStyle() {
+      return {
+        background: `${this.fontColor}40`,
+        color: this.fontColor,
+        fontWeight: "bold",
+        fontFamily: this.font,
+        fontSize: `${Math.round(this.panelFontSizePx * 1.8)}px`,
+        boxShadow: `0 0 0 2px ${this.fontColor}66`,
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+      };
+    },
     chipDrawnStyle() {
       return { background: `${this.fontColor}0a`, color: this.fontColor, opacity: 0.4, textDecoration: 'line-through', fontSize: `${this.panelFontSizePx}px`, fontFamily: this.font };
     },
@@ -284,6 +298,10 @@ export default {
     isActive(val) {
       if (val) this.$nextTick(() => this.rpWindowResize());
     },
+    // Reiniciar/Limpar no operador: tira o vencedor que ficou na tela
+    rouletteDrawn(list) {
+      if (!list.length && !this.spinning) this.currentWinner = null;
+    },
   },
 
   methods: {
@@ -291,7 +309,11 @@ export default {
       this.spinning = false;
       this.currentWinner = winner;
       if (this._winnerTimer) clearTimeout(this._winnerTimer);
-      this._winnerTimer = setTimeout(() => { this.currentWinner = null; }, 3000);
+      // Igual à tela do operador: fica até o próximo giro (antes sumia em
+      // 3 s); só sai sozinho se foi o último, para mostrar o "Fim!".
+      this._winnerTimer = setTimeout(() => {
+        if (this.rouletteActiveItems.length === 0) this.currentWinner = null;
+      }, 6000);
     },
 
     // Mesma técnica de Screen.vue#windowResize.
@@ -410,6 +432,15 @@ export default {
   max-width: 100%;
 }
 
+.rp-history-row--latest {
+  margin-bottom: 4px;
+  animation: rp-latest-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes rp-latest-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
 .rp-history-row {
   display: flex;
   align-items: center;

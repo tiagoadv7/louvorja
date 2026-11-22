@@ -7,14 +7,16 @@
     :persistent="step === 'downloading'"
     @update:modelValue="v => { if (!v) close(); }"
   >
-    <v-card theme="lja-glass" rounded="0" elevation="0" class="fcd-card" style="overflow:hidden">
+    <v-card theme="lja-glass" rounded="lg" elevation="12" class="fcd-card lja-glass" style="overflow:hidden">
 
       <!-- Cabeçalho -->
       <div class="fx-top">
-        <div class="fx-logo"><v-icon size="22">mdi-folder-sync-outline</v-icon></div>
-        <div class="fx-heading">
-          <h1>{{ $t('components.file_check.title') }}</h1>
-          <p>{{ $t('components.file_check.subtitle') }}</p>
+        <v-avatar size="44" color="primary" variant="tonal" class="flex-shrink-0">
+          <v-icon size="22">mdi-folder-sync-outline</v-icon>
+        </v-avatar>
+        <div class="flex-grow-1 min-w-0">
+          <div class="text-subtitle-1 font-weight-bold">{{ $t('components.file_check.title') }}</div>
+          <div class="text-caption text-medium-emphasis">{{ $t('components.file_check.subtitle') }}</div>
         </div>
         <button v-if="step === 'downloading'" type="button" class="fx-close" :title="$t('components.file_check.continue_bg')" @click="minimizeDownload">
           <v-icon size="20">mdi-window-minimize</v-icon>
@@ -767,22 +769,15 @@ export default {
 /* ── Visual "Sincronizar arquivos" (design de referência) ──────────────── */
 .fcd-card {
   --fx-panel: #0e2238;
-  --fx-line: #29445f;
+  --fx-line: rgba(255, 255, 255, 0.10);
   --fx-text: #e8f1fb;
   --fx-muted: #9eb2c8;
-  --fx-blue: #38bdf8;
-  --fx-blue-2: #0ea5e9;
+  --fx-blue: #4fb6ec;
+  --fx-blue-2: #4fb6ec;
   --fx-green: #34d399;
   --fx-red: #fb7185;
   --fx-amber: #fbbf24;
-  --v-theme-surface: 14, 34, 56;
-  --v-theme-background: 7, 21, 37;
-  --v-theme-primary: 56, 189, 248;
-  background: var(--fx-panel) !important;
   color: var(--fx-text);
-  border: 1px solid #31516f !important;
-  border-radius: 18px !important;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6) !important;
   font-size: 14px;
   line-height: 1.45;
 }
@@ -790,8 +785,8 @@ export default {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 18px 22px;
-  background: linear-gradient(110deg, #123858, #10253c);
+  padding: 16px 18px;
+  background: transparent;
   border-bottom: 1px solid var(--fx-line);
 }
 .fx-logo {
@@ -827,7 +822,7 @@ export default {
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 22px;
-  background: #142d46;
+  background: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid var(--fx-line);
 }
 .fx-stats { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -855,7 +850,7 @@ export default {
   gap: 10px;
   flex-wrap: wrap;
   border-bottom: 1px solid var(--fx-line);
-  background: #10263d;
+  background: rgba(255, 255, 255, 0.02);
 }
 .fx-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .fx-spacer { flex: 1; }
@@ -864,7 +859,7 @@ export default {
   align-items: center;
   gap: 6px;
   border: 1px solid #466783;
-  background: #193650;
+  background: rgba(79, 182, 236, 0.10);
   color: #e4f2ff;
   padding: 8px 12px;
   border-radius: 9px;
@@ -875,7 +870,7 @@ export default {
   transition: background 0.18s, border-color 0.18s, transform 0.18s, color 0.18s;
 }
 .fx-btn .v-icon { color: inherit; }
-.fx-btn:hover { background: #244b6a; border-color: #5b91b7; transform: translateY(-1px); }
+.fx-btn:hover { background: rgba(79, 182, 236, 0.20); border-color: #4fb6ec; transform: translateY(-1px); }
 .fx-btn--primary { background: var(--fx-blue-2); border-color: var(--fx-blue); color: #032338; }
 .fx-btn--primary:hover { background: var(--fx-blue); border-color: var(--fx-blue); }
 .fx-btn--ghost { background: transparent; }
@@ -1002,7 +997,7 @@ export default {
   border-radius: 12px;
   overflow: hidden;
   margin: 0 0 10px;
-  background: #10283f;
+  background: rgba(255, 255, 255, 0.03);
 }
 .fx-album-head {
   width: 100%;
@@ -1010,13 +1005,13 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 11px 14px;
-  background: #142b43;
+  background: rgba(255, 255, 255, 0.045);
   border: 0;
   color: var(--fx-text);
   text-align: left;
   cursor: pointer;
 }
-.fx-album-head:hover { background: #18334f; }
+.fx-album-head:hover { background: rgba(255, 255, 255, 0.08); }
 .fx-chevron { color: #8fb8d6 !important; transition: transform 0.2s; }
 .fx-album.open .fx-chevron { transform: rotate(90deg); }
 .fx-album-name { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1032,12 +1027,12 @@ export default {
   gap: 10px;
   padding: 9px 10px;
   border-radius: 8px;
-  background: #1b354c;
+  background: rgba(255, 255, 255, 0.055);
   margin: 4px 0;
   min-height: 42px;
   cursor: pointer;
 }
-.fx-track:hover { background: #23445e; }
+.fx-track:hover { background: rgba(255, 255, 255, 0.09); }
 .fx-track--flat { height: 42px; margin: 0 0 4px; }
 .fx-track input { width: 17px; height: 17px; accent-color: var(--fx-blue); cursor: pointer; margin: 0; }
 .fx-file { display: flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; }
@@ -1058,7 +1053,7 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 13px 20px;
-  background: #0b1b2b;
+  background: rgba(0, 0, 0, 0.18);
   border-top: 1px solid var(--fx-line);
 }
 .fx-footer-note { font-size: 12px; color: #8da5bb; flex: 1; min-width: 0; }

@@ -632,6 +632,8 @@ function init({ channel = 'latest', autoCheck = true, autoDownload = false, useB
         return;
       }
       _setState({ status: 'downloaded', newVersion: info.version, progress: 100 });
+      // Caminho do instalador baixado — plano B do quitAndInstall() abaixo
+      _nativeInstallerPath = info.downloadedFile || null;
     });
 
     autoUpdater.on('error', (err) => {
@@ -779,17 +781,47 @@ async function downloadUpdate(win) {
  * - Download nativo: electron-updater fecha e reabre o app sozinho.
  * - Download manual: abre o instalador (NSIS) baixado, que assume o resto.
  */
+let _nativeInstallerPath = null;
+
 function quitAndInstall() {
   if (_checkedViaGithub || !autoUpdater || !autoUpdater.isUpdaterActive()) {
     return openPackage();
   }
-  // (isSilent=false: mostra o instalador; isForceRunAfter=true: reabre o app ao terminar)
   _installing = true;
-  autoUpdater.quitAndInstall(false, true);
-  // O quitAndInstall acima já disparou o instalador e pediu app.quit() — mas
-  // esse quit podia ser cancelado (ver forceQuitForInstall), deixando o
-  // instalador aberto por cima do app ainda rodando.
-  forceQuitForInstall(400);
+  // O electron-updater só abre o instalador no evento 'quit' do app. Se o
+  // fechamento for segurado (janela com beforeunload, retorno não-fechável...)
+  // ou o próprio quitAndInstall falhar, o app ficava aberto e nada instalava.
+  let quitHappened = false;
+  app.once('quit', () => { quitHappened = true; });
+  try {
+    // (isSilent=false: mostra o instalador; isForceRunAfter=true: reabre o app ao terminar)
+    autoUpdater.quitAndInstall(false, true);
+  } catch (e) {
+    logUpdaterError('quitAndInstall', e);
+  }
+  // Fecha de verdade; se o 'quit' não aconteceu até lá, abre o instalador
+  // baixado por conta própria antes de encerrar.
+  forceQuitForInstall(400, () => {
+    if (!quitHappened) launchInstaller(_nativeInstallerPath);
+  });
+  return { ok: true };
+}
+
+/** Abre o instalador (com UAC, via "start") e solta do processo do app. */
+function launchInstaller(file) {
+  if (!file || !fs.existsSync(file)) {
+    logUpdaterError('install (plano B)', new Error('instalador não encontrado: ' + file));
+    return;
+  }
+  try {
+    const { spawn } = require('child_process');
+    spawn('cmd.exe', ['/d', '/s', '/c', `start "" "${file}" --updated --force-run`], {
+      detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true,
+    }).unref();
+  } catch (e) {
+    logUpdaterError('install (plano B)', e);
+    shell.openPath(file);
+  }
 }
 
 /**
@@ -801,13 +833,16 @@ function quitAndInstall() {
  * não fecha via close(). destroy() pula o beforeunload; app.exit() é a rede
  * de segurança caso algo ainda segure o processo.
  */
-function forceQuitForInstall(delayMs) {
+function forceQuitForInstall(delayMs, beforeExit) {
   setTimeout(() => {
     for (const w of BrowserWindow.getAllWindows()) {
       try { if (!w.isDestroyed()) w.destroy(); } catch (_) {}
     }
     try { app.quit(); } catch (_) {}
-    setTimeout(() => { try { app.exit(0); } catch (_) {} }, 2500);
+    setTimeout(() => {
+      try { if (beforeExit) beforeExit(); } catch (_) {}
+      try { app.exit(0); } catch (_) {}
+    }, 2500);
   }, delayMs);
 }
 

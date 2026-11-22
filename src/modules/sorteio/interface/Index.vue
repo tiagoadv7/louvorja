@@ -375,21 +375,24 @@
         <div class="roulette-panel__header">
           <v-icon size="14" class="mr-1">mdi-account-group-outline</v-icon>
           {{ t("roulette_participants") }}
-          <span class="roulette-panel__count">{{ rouletteItems.length }}</span>
+          <span class="roulette-panel__count">{{ rouletteActiveItems.length }}</span>
         </div>
         <div class="roulette-panel__content">
+          <!-- Como nos modos Números/Nomes: quem já foi sorteado SAI da lista
+               (antes ficava riscado). Com "Remover sorteados" desligado, todos
+               continuam valendo e aparecem normalmente. -->
           <div
-            v-for="(item, idx) in rouletteItems"
-            :key="idx"
+            v-for="item in rouletteActiveItems"
+            :key="item"
             class="roulette-item-row"
-            :class="{ 'roulette-item-drawn': rouletteDrawn.includes(item) }"
           >
             <span class="roulette-item-text" :style="roulettePanelTextStyle">{{ item }}</span>
-            <v-btn icon size="x-small" variant="text" color="error" @click="rouletteRemoveItem(idx)">
+            <v-btn icon size="x-small" variant="text" color="error" @click="rouletteRemoveItemByValue(item)">
               <v-icon size="14">mdi-close</v-icon>
             </v-btn>
           </div>
           <div v-if="rouletteItems.length === 0" class="roulette-panel__empty">{{ t("roulette_empty") }}</div>
+          <div v-else-if="rouletteActiveItems.length === 0" class="roulette-panel__empty">{{ t("none_left_names") }}</div>
         </div>
         <!-- QR mini quando ativo -->
         <div v-if="regRunning" class="roulette-qr-mini">
@@ -457,13 +460,15 @@
           {{ t("roulette_history") }}
         </div>
         <div class="roulette-panel__content">
+          <!-- Último sorteado em destaque (maior), igual ao modo Números -->
           <div
             v-for="(item, idx) in rouletteDrawn"
-            :key="'d' + idx"
+            :key="idx === 0 ? 'latest-' + rouletteDrawn.length : 'd' + idx"
             class="roulette-item-row roulette-item-history"
+            :class="{ 'roulette-item-latest': idx === 0 }"
           >
-            <span class="roulette-item-num">{{ idx + 1 }}.</span>
-            <span class="roulette-item-text" :style="roulettePanelTextStyle">{{ item }}</span>
+            <span v-if="idx > 0" class="roulette-item-num">{{ rouletteDrawn.length - idx }}.</span>
+            <span class="roulette-item-text" :style="idx === 0 ? rouletteLatestStyle : roulettePanelTextStyle">{{ item }}</span>
           </div>
           <div v-if="rouletteDrawn.length === 0" class="roulette-panel__empty">-</div>
         </div>
@@ -821,6 +826,13 @@ export default {
     winnerTopStyle() {
       return { color: this.rouletteColor, fontSize: `${this.rouletteFontSizePx}px`, fontFamily: this.rouletteFont };
     },
+    rouletteLatestStyle() {
+      return {
+        fontSize: `${Math.round(this.roulettePanelFontSizePx * 1.8)}px`,
+        fontFamily: this.rouletteFont,
+        fontWeight: "bold",
+      };
+    },
     roulettePanelTextStyle() {
       return { fontSize: `${this.roulettePanelFontSizePx}px`, fontFamily: this.rouletteFont };
     },
@@ -1082,6 +1094,9 @@ export default {
       this.rouletteInput = "";
     },
 
+    rouletteRemoveItemByValue(item) {
+      this.appdata.roulette_items = this.rouletteItems.filter((i) => i !== item);
+    },
     rouletteRemoveItem(idx) {
       const items = [...this.rouletteItems];
       items.splice(idx, 1);
@@ -1120,7 +1135,11 @@ export default {
       this.rouletteCurrentWinner = winner;
       this.appdata.roulette_drawn = [winner, ...this.rouletteDrawn];
       if (this._winnerTimer) clearTimeout(this._winnerTimer);
-      this._winnerTimer = setTimeout(() => { this.rouletteCurrentWinner = null; }, 8000);
+      // O vencedor fica na tela até o próximo giro (antes sumia em 8 s). Só
+      // sai sozinho se foi o último, para dar lugar ao "Fim!".
+      this._winnerTimer = setTimeout(() => {
+        if (this.rouletteActiveItems.length === 0) this.rouletteCurrentWinner = null;
+      }, 6000);
     },
 
     rouletteReset() {
@@ -1451,6 +1470,21 @@ export default {
 }
 .roulette-item-drawn { opacity: 0.4; text-decoration: line-through; }
 .roulette-item-history { opacity: 0.8; }
+.roulette-item-latest {
+  opacity: 1;
+  padding: 0.25em 0.5em;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+  animation: roulette-latest-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.roulette-item-latest .roulette-item-text { white-space: normal; overflow-wrap: anywhere; }
+@keyframes roulette-latest-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
 .roulette-item-text {
   flex: 1;
   overflow: hidden;
